@@ -211,6 +211,16 @@ public enum CupsParsers {
         mediaTypeKeys.first { optionKeys.contains($0) }
     }
 
+    /// Media type from a captured `key=value key=value` options string.
+    /// Prefers `MediaType`, then `EPIJ_Medi` (docs/11 §tests).
+    public static func extractMediaType(fromOptionsString options: String) -> String? {
+        let pairs = lpoptions(options)
+        if let v = pairs.first(where: { $0.key == "MediaType" })?.value {
+            return v
+        }
+        return pairs.first(where: { $0.key == "EPIJ_Medi" })?.value
+    }
+
     /// Driver "no colour adjustment" key=value for `lpoptions -l` keys
     /// (docs/11 layer ④): Canon `CNIJIntent2=4` else `CNIJIntent=4`;
     /// Epson `EPIJ_CCor=0` when the key exists else `EPIJ_CMat=3`;
