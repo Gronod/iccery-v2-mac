@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Root layout: 270 pt sidebar + main stage area with the notification
@@ -28,6 +29,13 @@ struct RootView: View {
         }
         .frame(minWidth: 1100, minHeight: 700)
         .background(Theme.background)
+        // #151: re-probe artefacts when the window regains focus —
+        // files deleted in Finder must re-lock stages.
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: NSWindow.didBecomeKeyNotification
+            )
+        ) { _ in model.windowDidBecomeKey() }
         .sheet(isPresented: $showingSettings) {
             SettingsView()
         }

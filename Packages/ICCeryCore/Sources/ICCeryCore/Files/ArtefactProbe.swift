@@ -12,6 +12,20 @@ public struct StageArtefacts: Sendable, Equatable {
     public var stage4Complete = false
     /// Absolute path of the profile file when present.
     public var profilePath: URL?
+
+    public init(
+        stage1Complete: Bool = false,
+        stage2Complete: Bool = false,
+        stage3Complete: Bool = false,
+        stage4Complete: Bool = false,
+        profilePath: URL? = nil
+    ) {
+        self.stage1Complete = stage1Complete
+        self.stage2Complete = stage2Complete
+        self.stage3Complete = stage3Complete
+        self.stage4Complete = stage4Complete
+        self.profilePath = profilePath
+    }
 }
 
 /// Filesystem probing for wizard artefacts (docs/02 §Working directory,
