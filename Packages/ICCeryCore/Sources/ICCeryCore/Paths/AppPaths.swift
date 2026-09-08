@@ -14,19 +14,40 @@ public enum AppPaths {
     }
 
     /// `~/Library/Application Support/com.gronod.iccery2`
+    ///
+    /// DEBUG only: `ICCERY_TEST_ROOT` redirects app data so UI tests run
+    /// against an isolated root and never touch the developer's state.
     public static var appDataDir: URL {
-        FileManager.default
+        #if DEBUG
+        if let root = testRoot {
+            return root.appendingPathComponent("AppData", isDirectory: true)
+        }
+        #endif
+        return FileManager.default
             .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent(bundleIdentifier, isDirectory: true)
     }
 
     /// `~/Library/Logs/com.gronod.iccery2`
     public static var logDir: URL {
-        FileManager.default
+        #if DEBUG
+        if let root = testRoot {
+            return root.appendingPathComponent("Logs", isDirectory: true)
+        }
+        #endif
+        return FileManager.default
             .urls(for: .libraryDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Logs", isDirectory: true)
             .appendingPathComponent(bundleIdentifier, isDirectory: true)
     }
+
+    #if DEBUG
+    private static var testRoot: URL? {
+        guard let raw = ProcessInfo.processInfo.environment["ICCERY_TEST_ROOT"],
+              !raw.isEmpty else { return nil }
+        return URL(fileURLWithPath: raw, isDirectory: true)
+    }
+    #endif
 
     /// `~/Library/Logs/com.gronod.iccery2/iccery.log`
     public static var logFile: URL {
