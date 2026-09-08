@@ -5,19 +5,21 @@ import SwiftUI
 @main
 struct ICCeryApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @State private var model = WizardViewModel()
+    @State private var workflow: TargetWorkflowViewModel
 
     init() {
+        let environment = AppEnvironment.live()
+        _workflow = State(initialValue: TargetWorkflowViewModel(environment: environment))
         try? AppPaths.ensureDirectories()
         // Log level is runtime state — apply persisted settings at
         // startup (#158); the Settings sheet re-applies on save.
-        LogSink.shared.applySettings(SettingsStore().load())
+        LogSink.shared.applySettings(environment.settingsStore.load())
     }
 
     var body: some Scene {
         // Single fixed window (docs/21 §Shell: 1280×800, min 1100×700).
         Window("ICCery", id: "main") {
-            RootView(model: model)
+            RootView(workflow: workflow)
                 .frame(minWidth: 1100, minHeight: 700)
                 .preferredColorScheme(.dark)
         }

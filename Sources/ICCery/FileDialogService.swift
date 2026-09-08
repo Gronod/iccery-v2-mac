@@ -80,6 +80,23 @@ final class FileDialogService {
              message: "Choose a calibration file (.cal)")
     }
 
+    /// `btnImportPreset` — open a `.json` preset file.
+    func selectPresetFile(startingAt start: URL? = nil) -> URL? {
+        open(extensions: ["json"], startingAt: start,
+             message: "Import a profiling preset (.json)")
+    }
+
+    /// `btnExportActivePreset` — save a `.json` preset file.
+    func selectPresetSavePath(name: String, startingAt start: URL? = nil) -> URL? {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "\(name).json"
+        panel.allowedContentTypes = utTypes(["json"])
+        panel.allowsOtherFileTypes = false
+        panel.directoryURL = start
+        panel.message = "Export this preset as JSON"
+        return run(panel)
+    }
+
     // MARK: - Internals (private — not a shared public picker API)
 
     private func open(

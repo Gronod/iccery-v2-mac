@@ -1,0 +1,13 @@
+#!/bin/sh
+# Mock targen for Milestone2UITests. Emits a fake .ti1 next to the
+# basename (last argv) in the process working directory. Exit code is
+# overridable via ICCERY_MOCK_TARGEN_EXIT.
+last=""
+for arg in "$@"; do last="$arg"; done
+echo "targen mock: generating $last"
+if [ "${ICCERY_MOCK_TARGEN_EXIT:-0}" -ne 0 ]; then
+  echo "mock targen failure" >&2
+  exit "$ICCERY_MOCK_TARGEN_EXIT"
+fi
+touch "$last.ti1"
+exit 0

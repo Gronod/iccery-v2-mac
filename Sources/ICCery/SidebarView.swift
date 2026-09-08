@@ -4,9 +4,11 @@ import ICCeryCore
 /// 270 pt sidebar (docs/21 §Shell): logo, settings/about buttons, preset
 /// select, Calibrate Printer + status chip, and the 1–5 stepper.
 struct SidebarView: View {
-    @Bindable var model: WizardViewModel
+    @Bindable var workflow: TargetWorkflowViewModel
     var onOpenSettings: () -> Void
     var onOpenAbout: () -> Void
+
+    private var model: WizardViewModel { workflow.wizard }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -31,15 +33,37 @@ struct SidebarView: View {
 
             Divider().overlay(Theme.border)
 
-            // Preset select (`#presetSelect`). Disabled until the preset
-            // engine lands in issue #11.
-            Picker("Preset", selection: .constant("none")) {
+            // Preset select (`#presetSelect`) — issue #11. Selection
+            // applies the preset immediately; names render via Text only.
+            Picker("Preset", selection: Binding(
+                get: { workflow.selectedPresetID },
+                set: { id in
+                    if id == "none" {
+                        workflow.selectedPresetID = "none"
+                    } else if let preset = workflow.presets.first(where: { $0.id == id }) {
+                        workflow.applyPreset(preset)
+                    }
+                }
+            )) {
                 Text("No preset").tag("none")
+                ForEach(workflow.presets) { preset in
+                    Text(preset.name).tag(preset.id)
+                }
             }
             .pickerStyle(.menu)
-            .disabled(true)
+            .accessibilityIdentifier("presetSelect")
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
+
+            HStack(spacing: 8) {
+                Button("Save") { workflow.showingSavePreset = true }
+                    .accessibilityIdentifier("btnSavePresetModal")
+                Button("Manage") { workflow.showingManagePresets = true }
+                    .accessibilityIdentifier("btnOpenPresetsDialog")
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 8)
 
             // Calibrate Printer (`#btnCalibratePrinter`). Disabled until
             // Stage 0 lands in issue #29; `#calStatusChip` likewise.
