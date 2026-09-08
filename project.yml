@@ -81,12 +81,29 @@ targets:
         SWIFT_VERSION: "6.0"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
 
+  ICCeryUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    deploymentTarget: "14.0"
+    sources:
+      - path: Tests/ICCeryUITests
+    dependencies:
+      - target: ICCery
+    settings:
+      base:
+        TEST_TARGET_NAME: ICCery
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGN_IDENTITY: "-"
+        SWIFT_VERSION: "6.0"
+        MACOSX_DEPLOYMENT_TARGET: "14.0"
+
 schemes:
   ICCery:
     build:
       targets:
         ICCery: all
         ICCeryCoreTests: [test]
+        ICCeryUITests: [test]
     run:
       config: Debug
     test:
@@ -94,3 +111,4 @@ schemes:
       gatherCoverageData: false
       targets:
         - ICCeryCoreTests
+        - ICCeryUITests

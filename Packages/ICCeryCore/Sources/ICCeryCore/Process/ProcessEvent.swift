@@ -34,3 +34,18 @@ public enum ProcessError: Error, Equatable, Sendable {
     /// stdin write failed (pipe closed / process gone).
     case stdinFailed(String)
 }
+
+extension ProcessError: LocalizedError {
+    public var errorDescription: String? {
+        switch self {
+        case .duplicateID(let id):
+            return "Process already running: \(id)"
+        case .unknownID(let id):
+            return "Unknown process: \(id)"
+        case .spawnFailed(let detail):
+            return "Could not launch \(detail)"
+        case .stdinFailed(let detail):
+            return "stdin failed: \(detail)"
+        }
+    }
+}

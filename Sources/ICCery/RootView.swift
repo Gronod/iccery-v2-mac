@@ -1,17 +1,20 @@
 import AppKit
 import SwiftUI
+import ICCeryCore
 
 /// Root layout: 270 pt sidebar + main stage area with the notification
 /// banner pinned to the top (docs/21 §Shell).
 struct RootView: View {
-    @Bindable var model: WizardViewModel
+    @Bindable var workflow: TargetWorkflowViewModel
     @State private var showingSettings = false
     @State private var showingAbout = false
+
+    private var model: WizardViewModel { workflow.wizard }
 
     var body: some View {
         HStack(spacing: 0) {
             SidebarView(
-                model: model,
+                workflow: workflow,
                 onOpenSettings: { showingSettings = true },
                 onOpenAbout: { showingAbout = true }
             )
@@ -24,7 +27,7 @@ struct RootView: View {
                 if let notice = model.notice {
                     NoticeBanner(notice: notice, onClose: model.dismissNotice)
                 }
-                StagePlaceholderView(stage: model.stage)
+                stageContent
             }
         }
         .frame(minWidth: 1100, minHeight: 700)
@@ -39,10 +42,44 @@ struct RootView: View {
         .sheet(isPresented: $showingSettings) {
             SettingsView()
         }
+        .sheet(isPresented: $workflow.showingSavePreset) {
+            SavePresetDialog(workflow: workflow)
+        }
+        .sheet(isPresented: $workflow.showingManagePresets) {
+            ManagePresetsDialog(workflow: workflow)
+        }
         .alert("ICCery 2.0.0", isPresented: $showingAbout) {
             Button("OK") {}
         } message: {
             Text("Native macOS printer profiling workstation.\nFull About dialog lands in issue #31.")
+        }
+    }
+
+    @ViewBuilder
+    private var stageContent: some View {
+        switch model.stage {
+        case .generate:
+            Stage1View(workflow: workflow)
+        case .layOutPrint:
+            Stage2View(workflow: workflow)
+        case .measure:
+            // Stage 3 stays a shell until M4, but a .ti2 resume still
+            // lands here — show the persisted state (#8, issue #140).
+            VStack(spacing: 16) {
+                if workflow.resumedFromTi2 {
+                    Label("Resumed from .ti2", systemImage: "arrow.uturn.right")
+                        .font(.callout)
+                        .foregroundStyle(Theme.accent)
+                        .accessibilityIdentifier("stage3LoadedTargetBanner")
+                }
+                Text(model.basename)
+                    .font(.title3)
+                    .foregroundStyle(Theme.text)
+                    .accessibilityIdentifier("stage3TargetBasename")
+                StagePlaceholderView(stage: model.stage)
+            }
+        default:
+            StagePlaceholderView(stage: model.stage)
         }
     }
 }

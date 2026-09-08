@@ -1,0 +1,14 @@
+#!/bin/sh
+# Mock printtarg for Milestone2UITests. Writes one 2x2 TIFF, a pretty
+# manifest on stdout, and a fake .ti2 next to the basename (last argv).
+# Exit code is overridable via ICCERY_MOCK_PRINTTARG_EXIT.
+last=""
+for arg in "$@"; do last="$arg"; done
+if [ "${ICCERY_MOCK_PRINTTARG_EXIT:-0}" -ne 0 ]; then
+  echo "mock printtarg failure" >&2
+  exit "$ICCERY_MOCK_PRINTTARG_EXIT"
+fi
+echo 'SUkqAAgAAAAKAAABAwABAAAAAgAAAAEBAwABAAAAAgAAAAIBAwABAAAACAAAAAMBAwABAAAAAQAAAAYBAwABAAAAAQAAABEBBAABAAAAhgAAABUBAwABAAAAAQAAABYBAwABAAAAAgAAABcBBAABAAAABAAAABwBAwABAAAAAQAAAAAAAAA8eLTw' | /usr/bin/base64 -D > "page1.tif"
+printf '{\n  "event": "manifest",\n  "pages": [\n    {"filename": "page1.tif", "patches": 4, "width_mm": 210, "height_mm": 297}\n  ]\n}\n'
+touch "$last.ti2"
+exit 0

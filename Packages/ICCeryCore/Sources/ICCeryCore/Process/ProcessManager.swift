@@ -30,35 +30,52 @@ public actor ProcessManager {
 
     // MARK: - Event bus (multicast)
 
-    private var subscribers: [UUID: AsyncStream<ProcessEvent>.Continuation] = [:]
+    /// Lock-protected subscriber table. Registration is *synchronous*
+    /// inside `events()` so a caller can subscribe, then spawn, without
+    /// racing the child's first output or exit event.
+    private final class SubscriberBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var map: [UUID: AsyncStream<ProcessEvent>.Continuation] = [:]
 
-    /// Subscribe to the event bus. Each call returns an independent
-    /// stream; every event is delivered to every live subscriber.
-    public nonisolated func events() -> AsyncStream<ProcessEvent> {
-        AsyncStream { continuation in
-            let token = UUID()
-            Task { await self.addSubscriber(continuation, token: token) }
-            continuation.onTermination = { _ in
-                Task { await self.removeSubscriber(token) }
+        func add(_ continuation: AsyncStream<ProcessEvent>.Continuation, token: UUID) {
+            lock.lock()
+            map[token] = continuation
+            lock.unlock()
+        }
+
+        func remove(_ token: UUID) {
+            lock.lock()
+            map.removeValue(forKey: token)
+            lock.unlock()
+        }
+
+        func yield(_ event: ProcessEvent) {
+            lock.lock()
+            let continuations = Array(map.values)
+            lock.unlock()
+            for continuation in continuations {
+                continuation.yield(event)
             }
         }
     }
 
-    private func addSubscriber(
-        _ continuation: AsyncStream<ProcessEvent>.Continuation,
-        token: UUID
-    ) {
-        subscribers[token] = continuation
-    }
+    private nonisolated let subscriberBox = SubscriberBox()
 
-    private func removeSubscriber(_ token: UUID) {
-        subscribers.removeValue(forKey: token)
-    }
-
-    private func emit(_ event: ProcessEvent) {
-        for continuation in subscribers.values {
-            continuation.yield(event)
+    /// Subscribe to the event bus. Each call returns an independent
+    /// stream; every event is delivered to every live subscriber.
+    /// The subscriber is registered before `events()` returns — callers
+    /// may spawn immediately after subscribing without losing events.
+    public nonisolated func events() -> AsyncStream<ProcessEvent> {
+        let box = subscriberBox
+        let token = UUID()
+        return AsyncStream { continuation in
+            box.add(continuation, token: token)
+            continuation.onTermination = { _ in box.remove(token) }
         }
+    }
+
+    private nonisolated func emit(_ event: ProcessEvent) {
+        subscriberBox.yield(event)
     }
 
     // MARK: - Child registry
