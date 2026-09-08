@@ -7,6 +7,13 @@ struct ICCeryApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model = WizardViewModel()
 
+    init() {
+        try? AppPaths.ensureDirectories()
+        // Log level is runtime state — apply persisted settings at
+        // startup (#158); the Settings sheet re-applies on save.
+        LogSink.shared.applySettings(SettingsStore().load())
+    }
+
     var body: some Scene {
         // Single fixed window (docs/21 §Shell: 1280×800, min 1100×700).
         Window("ICCery", id: "main") {
