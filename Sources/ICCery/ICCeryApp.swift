@@ -1,4 +1,5 @@
 import AppKit
+import ICCeryCore
 import SwiftUI
 
 @main
@@ -19,15 +20,24 @@ struct ICCeryApp: App {
     }
 }
 
-/// AppDelegate: quit when the single window closes, and give later
-/// milestones a hook to `killAll` Argyll children before teardown
-/// (#147/#149 — wired once ProcessManager exists in #2).
+/// AppDelegate: quit when the single window closes, and `killAll` Argyll
+/// children before teardown (#147/#149). Termination is deferred until
+/// `killAll` has signaled every child so `chartread` can park an XY head
+/// when the UI already sent `q\n`.
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var terminationRequested = false
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
     }
 
-    func applicationWillTerminate(_ notification: Notification) {
-        // Issue #2+: ProcessManager.shared.killAll()
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard !terminationRequested else { return .terminateNow }
+        terminationRequested = true
+        Task {
+            await ProcessManager.shared.killAll()
+            NSApplication.shared.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 }

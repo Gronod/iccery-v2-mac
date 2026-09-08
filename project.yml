@@ -19,9 +19,25 @@ targets:
       - path: Resources
         excludes:
           - ICCery.entitlements
+          - Argyll
+      - path: Resources/Argyll
+        type: folder
     dependencies:
       - package: ICCeryCore
         product: ICCeryCore
+    postBuildScripts:
+      - name: Copy Argyll sidecars
+        script: |
+          set -e
+          SRC="${SRCROOT}/Vendor/Argyll"
+          DEST="${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/Argyll"
+          if [ -d "$SRC" ]; then
+            mkdir -p "$DEST"
+            rsync -a "$SRC/" "$DEST/"
+          else
+            echo "note: Vendor/Argyll absent — run scripts/fetch-argyll.sh"
+          fi
+        basedOnDependencyAnalysis: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.gronod.iccery2

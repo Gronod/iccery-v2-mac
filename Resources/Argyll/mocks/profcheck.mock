@@ -1,0 +1,12 @@
+#!/bin/bash
+# Mock script for profcheck
+# Simulates real ArgyllCMS profcheck -v -k -s -u output
+
+echo "profcheck: Checking profile accuracy..."
+echo "No of test patches = 52"
+sleep 1
+cat << 'EOF'
+{"event": "report", "peak_de2000": 2.41, "avg_de2000": 0.85, "rms": 1.02}
+EOF
+echo "Profile check complete, errors(CIEDE2000): max. = 2.41, avg. = 0.85, RMS = 1.02"
+exit 0
