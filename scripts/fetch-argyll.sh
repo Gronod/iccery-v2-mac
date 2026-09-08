@@ -110,6 +110,28 @@ find "$DEST" -type f -exec chmod 0755 {} +
 # Downloads carry com.apple.quarantine; the app cannot spawn quarantined tools.
 xattr -dr com.apple.quarantine "$DEST" 2>/dev/null || true
 
+# Ad-hoc sign every Mach-O (#165: unsigned arm64 → "Killed: 9"), then
+# verify — an unsigned sidecar fails the script.
+for f in "$DEST"/*; do
+    [ -f "$f" ] || continue
+    if file -b "$f" | grep -q 'Mach-O'; then
+        codesign -f -s - "$f" 2>/dev/null || true
+    fi
+done
+UNSIGNED=""
+for f in "$DEST"/*; do
+    [ -f "$f" ] || continue
+    if file -b "$f" | grep -q 'Mach-O'; then
+        if ! codesign -dvv "$f" >/dev/null 2>&1; then
+            UNSIGNED="$UNSIGNED $f"
+        fi
+    fi
+done
+if [ -n "$UNSIGNED" ]; then
+    echo "error: unsigned binaries remain:$UNSIGNED" >&2
+    exit 1
+fi
+
 if [ ! -x "$DEST/$MARKER" ]; then
     echo "error: marker binary $MARKER missing after extraction" >&2
     exit 1
