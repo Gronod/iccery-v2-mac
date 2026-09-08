@@ -33,6 +33,9 @@ enum PrintPanelError: LocalizedError {
 @MainActor
 struct PrintPanelService {
 
+    /// The suppression engine — injectable for tests.
+    var suppressor = ColorSyncSuppressor()
+
     /// Resolves the display name (off-panel `lpoptions` fetch) and runs
     /// the modal panel. Returns `nil` when the user cancels.
     func showProperties(
@@ -47,14 +50,20 @@ struct PrintPanelService {
         #endif
         let display = displayName
             ?? (try? await cupsService.displayName(for: queue))
-        return try runNativePanel(queue: queue, displayName: display)
+        // Layer ④ needs the queue's option keys (lpoptions -l) to pick
+        // the driver colour-bypass before the panel opens.
+        let optionKeys = (try? await cupsService.optionKeys(for: queue))
+            ?? []
+        return try runNativePanel(
+            queue: queue, displayName: display, optionKeys: optionKeys)
     }
 
     // MARK: - Panel
 
     private func runNativePanel(
         queue: String,
-        displayName: String?
+        displayName: String?,
+        optionKeys: Set<String>
     ) throws -> PrintPropertiesResult? {
         let printInfo = NSPrintInfo()
         var pmPrinter: PMPrinter?
@@ -97,8 +106,21 @@ struct PrintPanelService {
             }
         }
 
-        // Colour-suppression layers ②–⑤ land in issue 14 here, between
-        // binding and runModal.
+        // ②–⑤ ColourSync suppression — only on the PM path: the SPI
+        // and PMPrintSettingsSetValue need a session with a current
+        // printer to attach to.
+        var settings = unsafeBitCast(
+            printInfo.pmPrintSettings(), to: PMPrintSettings.self)
+        var driverBypass: (key: String, value: String)?
+        if boundViaPM {
+            let session = unsafeBitCast(
+                printInfo.pmPrintSession(), to: PMPrintSession.self)
+            suppressor.applySPIMode(to: session)                    // ②
+            suppressor.applyLockedKeys(to: settings)                // ③
+            driverBypass = suppressor.applyDriverBypass(            // ④
+                to: settings, optionKeys: optionKeys)
+            suppressor.mirror(into: printInfo, driverBypass: driverBypass) // ⑤
+        }
 
         let panel = NSPrintPanel()
         panel.options = [
@@ -109,9 +131,21 @@ struct PrintPanelService {
         panel.defaultButtonTitle = "Use Settings"
 
         let response = panel.runModal(with: printInfo)
-        // Layer ⑥ capture (PMPrintSettingsToOptions) lands in issue 14.
         guard response == NSApplication.ModalResponse.OK.rawValue else {
             return nil
+        }
+
+        // ⑥ Capture the user's choices — filtered replay options plus
+        // the media type they picked. Re-fetch the settings handle so
+        // we read back what the modal wrote.
+        var cupsOptions: String?
+        var mediaType: String?
+        if boundViaPM {
+            settings = unsafeBitCast(
+                printInfo.pmPrintSettings(), to: PMPrintSettings.self)
+            let captured = suppressor.captureOptions(from: settings)
+            cupsOptions = captured.cupsOptions
+            mediaType = captured.mediaType
         }
         return PrintPropertiesResult(
             selectedPrinter: boundViaPM
@@ -120,7 +154,10 @@ struct PrintPanelService {
                         printInfo.pmPrintSession(), to: PMPrintSession.self),
                     fallback: queue)
                 : nil,
-            options: PrintOptions(ppdUncorrectedPassthrough: true))
+            options: PrintOptions(
+                mediaType: mediaType,
+                ppdUncorrectedPassthrough: true,
+                cupsOptions: cupsOptions))
     }
 
     // MARK: - PM helpers
