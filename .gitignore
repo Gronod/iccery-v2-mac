@@ -13,7 +13,10 @@ DerivedData/
 Package.resolved
 
 # Fetched Argyll sidecars (release artefacts, not git blobs — #127)
-Resources/argyll/
+Vendor/Argyll/
+
+# XcodeGen output (regenerate with `make gen`)
+ICCery.xcodeproj/
 
 # macOS
 .DS_Store
