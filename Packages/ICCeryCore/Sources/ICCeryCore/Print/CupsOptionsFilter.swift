@@ -31,10 +31,13 @@ public enum CupsOptionsFilter {
         "Duplex", "sides",
     ]
 
-    /// Keys we always drop regardless of the relevant list.
+    /// Keys we always drop regardless of the relevant list. `raw` is
+    /// included — a captured `raw=…` would re-enable CUPS raw mode and
+    /// bypass the raster filter that honours `AP_ApplicationColorMatching`
+    /// (#92).
     public static let alwaysDropped: Set<String> = [
         "collate", "copies", "pserrorhandler-requested", "job-sheets",
-        "AP_ColorMatchingMode", "AP.ColorMatchingMode",
+        "AP_ColorMatchingMode", "AP.ColorMatchingMode", "raw",
     ]
 
     /// A `key=value` pair survives when the key is non-empty, the value
