@@ -60,8 +60,8 @@ struct SidebarView: View {
                     StepperRow(
                         stage: stage,
                         isActive: model.stage == stage,
-                        // Only Stage 1 until artefact gating lands in #4.
-                        isEnabled: stage == .generate
+                        // Artefact gating (issue #4) — disk is truth.
+                        isEnabled: model.isUnlocked(stage)
                     ) {
                         model.go(to: stage)
                     }
