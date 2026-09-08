@@ -29,15 +29,7 @@ struct RootView: View {
         .frame(minWidth: 1100, minHeight: 700)
         .background(Theme.background)
         .sheet(isPresented: $showingSettings) {
-            // Full settings dialog lands in issue #5.
-            VStack(spacing: 12) {
-                Text("Settings").font(.headline)
-                Text("Implemented in issue #5.")
-                    .foregroundStyle(.secondary)
-                Button("Close") { showingSettings = false }
-            }
-            .padding(24)
-            .frame(width: 420)
+            SettingsView()
         }
         .alert("ICCery 2.0.0", isPresented: $showingAbout) {
             Button("OK") {}

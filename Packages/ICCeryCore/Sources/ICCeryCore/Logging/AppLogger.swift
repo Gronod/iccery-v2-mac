@@ -15,6 +15,7 @@ public enum LogLevel: String, Codable, Sendable, CaseIterable {
         }
     }
 
+    /// Lower rank = more severe. `shouldLog` keeps `rank <= min`.
     var rank: Int {
         switch self {
         case .error: return 0
@@ -26,16 +27,19 @@ public enum LogLevel: String, Codable, Sendable, CaseIterable {
     }
 }
 
-/// Central logger. For M1 PR2 this writes to `os.Logger` only;
-/// issue #5 adds the rolling file sink and runtime `setLevel`.
+/// Central logger: `os.Logger` + rolling file sink (`LogSink`), level
+/// gated at write time so a settings save takes effect immediately
+/// (#158).
 public struct AppLogger: Sendable {
     public static let shared = AppLogger(category: "app")
 
     private let osLog: Logger
+    private let sink: LogSink
     public let category: String
 
-    public init(category: String) {
+    public init(category: String, sink: LogSink = .shared) {
         self.category = category
+        self.sink = sink
         self.osLog = Logger(
             subsystem: AppPaths.bundleIdentifier,
             category: category
@@ -44,7 +48,10 @@ public struct AppLogger: Sendable {
 
     public func log(_ level: LogLevel, _ message: @autoclosure () -> String) {
         let text = LogSanitizer.sanitize(message())
-        osLog.log(level: level.osType, "\(text, privacy: .public)")
+        if level.rank <= sink.level.rank {
+            osLog.log(level: level.osType, "\(text, privacy: .public)")
+        }
+        sink.write(level: level, category: category, message: text)
     }
 
     public func error(_ message: @autoclosure () -> String) { log(.error, message()) }
