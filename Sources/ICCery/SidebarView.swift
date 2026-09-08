@@ -31,21 +31,24 @@ struct SidebarView: View {
 
             Divider().overlay(Theme.border)
 
-            // Preset select (`#presetSelect`). Preset engine lands in #11.
+            // Preset select (`#presetSelect`). Disabled until the preset
+            // engine lands in issue #11.
             Picker("Preset", selection: .constant("none")) {
                 Text("No preset").tag("none")
             }
             .pickerStyle(.menu)
+            .disabled(true)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
 
-            // Calibrate Printer (`#btnCalibratePrinter`); `#calStatusChip`
-            // is hidden until the calibration library lands in #29.
+            // Calibrate Printer (`#btnCalibratePrinter`). Disabled until
+            // Stage 0 lands in issue #29; `#calStatusChip` likewise.
             Button(action: { model.enterCalibration() }) {
                 Label("Calibrate Printer", systemImage: "slider.horizontal.3")
                     .frame(maxWidth: .infinity)
             }
             .controlSize(.large)
+            .disabled(true)
             .padding(.horizontal, 12)
 
             Divider().overlay(Theme.border)
@@ -56,7 +59,9 @@ struct SidebarView: View {
                 ForEach(WizardStage.stepperStages, id: \.self) { stage in
                     StepperRow(
                         stage: stage,
-                        isActive: model.stage == stage
+                        isActive: model.stage == stage,
+                        // Only Stage 1 until artefact gating lands in #4.
+                        isEnabled: stage == .generate
                     ) {
                         model.go(to: stage)
                     }
@@ -74,6 +79,7 @@ struct SidebarView: View {
 private struct StepperRow: View {
     let stage: WizardStage
     let isActive: Bool
+    let isEnabled: Bool
     let action: () -> Void
 
     var body: some View {
@@ -97,6 +103,8 @@ private struct StepperRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.45)
         .background(
             RoundedRectangle(cornerRadius: Theme.Metrics.cornerMedium)
                 .fill(isActive ? Theme.accent.opacity(0.15) : .clear)
