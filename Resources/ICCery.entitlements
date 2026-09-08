@@ -4,5 +4,7 @@
 <dict>
 	<!-- App Sandbox intentionally absent: ICCery must spawn Argyll tools,
 	     read/write user-chosen working directories, and talk to lp/CUPS. -->
+	<key>com.apple.security.device.usb</key>
+	<true/>
 </dict>
 </plist>
