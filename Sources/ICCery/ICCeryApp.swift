@@ -1,0 +1,50 @@
+import AppKit
+import ICCeryCore
+import SwiftUI
+
+@main
+struct ICCeryApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @State private var model = WizardViewModel()
+
+    init() {
+        try? AppPaths.ensureDirectories()
+        // Log level is runtime state — apply persisted settings at
+        // startup (#158); the Settings sheet re-applies on save.
+        LogSink.shared.applySettings(SettingsStore().load())
+    }
+
+    var body: some Scene {
+        // Single fixed window (docs/21 §Shell: 1280×800, min 1100×700).
+        Window("ICCery", id: "main") {
+            RootView(model: model)
+                .frame(minWidth: 1100, minHeight: 700)
+                .preferredColorScheme(.dark)
+        }
+        .defaultSize(width: 1280, height: 800)
+        .windowResizability(.contentMinSize)
+        .defaultPosition(.center)
+    }
+}
+
+/// AppDelegate: quit when the single window closes, and `killAll` Argyll
+/// children before teardown (#147/#149). Termination is deferred until
+/// `killAll` has signaled every child so `chartread` can park an XY head
+/// when the UI already sent `q\n`.
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var terminationRequested = false
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        true
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard !terminationRequested else { return .terminateNow }
+        terminationRequested = true
+        Task {
+            await ProcessManager.shared.killAll()
+            NSApplication.shared.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+}
