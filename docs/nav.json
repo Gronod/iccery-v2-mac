@@ -1,0 +1,137 @@
+[
+  {
+    "slug": "README",
+    "file": "README.md",
+    "title": "ICCery Rewrite Specification"
+  },
+  {
+    "slug": "01-overview",
+    "file": "01-overview.md",
+    "title": "01 \u2014 Product overview"
+  },
+  {
+    "slug": "02-architecture",
+    "file": "02-architecture.md",
+    "title": "02 \u2014 Architecture"
+  },
+  {
+    "slug": "03-ipc-and-process-manager",
+    "file": "03-ipc-and-process-manager.md",
+    "title": "03 \u2014 IPC and process manager"
+  },
+  {
+    "slug": "04-argyll-binaries",
+    "file": "04-argyll-binaries.md",
+    "title": "04 \u2014 Argyll binary invocations"
+  },
+  {
+    "slug": "05-argyll-fork",
+    "file": "05-argyll-fork.md",
+    "title": "05 \u2014 Gronod ArgyllCMS fork protocols"
+  },
+  {
+    "slug": "06-wizard-and-artefacts",
+    "file": "06-wizard-and-artefacts.md",
+    "title": "06 \u2014 Wizard, artefact gating, resume"
+  },
+  {
+    "slug": "07-stage0-calibration",
+    "file": "07-stage0-calibration.md",
+    "title": "07 \u2014 Stage 0: printer calibration (`printcal` / `applycal`) (#224)"
+  },
+  {
+    "slug": "08-stage1-targen",
+    "file": "08-stage1-targen.md",
+    "title": "08 \u2014 Stage 1: `targen`"
+  },
+  {
+    "slug": "09-stage2-printtarg",
+    "file": "09-stage2-printtarg.md",
+    "title": "09 \u2014 Stage 2: `printtarg` and target layout"
+  },
+  {
+    "slug": "10-print-system",
+    "file": "10-print-system.md",
+    "title": "10 \u2014 Print system (shared types & UI)"
+  },
+  {
+    "slug": "11-print-macos",
+    "file": "11-print-macos.md",
+    "title": "11 \u2014 macOS printing and ColorSync suppression"
+  },
+  {
+    "slug": "12-print-windows",
+    "file": "12-print-windows.md",
+    "title": "12 \u2014 Windows GDI raw printing"
+  },
+  {
+    "slug": "13-print-linux",
+    "file": "13-print-linux.md",
+    "title": "13 \u2014 Linux CUPS printing"
+  },
+  {
+    "slug": "14-iccery-cpu-targetprint",
+    "file": "14-iccery-cpu-targetprint.md",
+    "title": "14 \u2014 ICCery-CPU / TargetPrint (macOS companion)"
+  },
+  {
+    "slug": "15-stage3-chartread",
+    "file": "15-stage3-chartread.md",
+    "title": "15 \u2014 Stage 3: `chartread`, averaging, swatch grid"
+  },
+  {
+    "slug": "16-stage4-colprof",
+    "file": "16-stage4-colprof.md",
+    "title": "16 \u2014 Stage 4: `colprof` (#7, #56, #176)"
+  },
+  {
+    "slug": "17-stage5-verification",
+    "file": "17-stage5-verification.md",
+    "title": "17 \u2014 Stage 5: verification, drift, install"
+  },
+  {
+    "slug": "18-gamut-viewer",
+    "file": "18-gamut-viewer.md",
+    "title": "18 \u2014 3D gamut viewer"
+  },
+  {
+    "slug": "19-profile-install",
+    "file": "19-profile-install.md",
+    "title": "19 \u2014 System profile installation (#223)"
+  },
+  {
+    "slug": "20-cgats-interop",
+    "file": "20-cgats-interop.md",
+    "title": "20 \u2014 CGATS dataset interop (#94, #211)"
+  },
+  {
+    "slug": "21-ui-reference",
+    "file": "21-ui-reference.md",
+    "title": "21 \u2014 UI reference"
+  },
+  {
+    "slug": "22-settings-presets",
+    "file": "22-settings-presets.md",
+    "title": "22 \u2014 Settings and presets"
+  },
+  {
+    "slug": "23-assets",
+    "file": "23-assets.md",
+    "title": "23 \u2014 Graphical assets"
+  },
+  {
+    "slug": "24-issues-invariants",
+    "file": "24-issues-invariants.md",
+    "title": "24 \u2014 Issue tickets and rewrite invariants"
+  },
+  {
+    "slug": "25-rewrite-notes",
+    "file": "25-rewrite-notes.md",
+    "title": "25 \u2014 Rewrite notes and idiosyncrasies"
+  },
+  {
+    "slug": "26-v2-mac-ticket-plan",
+    "file": "26-v2-mac-ticket-plan.md",
+    "title": "26 \u2014 v2 Mac Gitea ticket plan (reviewed)"
+  }
+]

@@ -1,0 +1,19 @@
+# Xcode
+*.xcuserstate
+xcuserdata/
+DerivedData/
+*.xccheckout
+*.moved-aside
+*.xcscmblueprint
+*.xccrashreport
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# Fetched Argyll sidecars (release artefacts, not git blobs — #127)
+Resources/argyll/
+
+# macOS
+.DS_Store
