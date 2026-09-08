@@ -139,6 +139,27 @@ public struct CupsService: Sendable {
         Set(try await optionListings(for: queue).map(\.key))
     }
 
+    // MARK: - Spool (issue 15)
+
+    /// `lp -d <queue> … <tiff>` — spool one target page unmanaged.
+    /// Never uses `-o raw` (#92). `page` disambiguates the process id
+    /// when several pages are spooled in sequence.
+    public func printTarget(
+        queue: String,
+        tiffPath: String,
+        options: PrintOptions,
+        page: Int = 0
+    ) async throws {
+        guard FileManager.default.fileExists(atPath: tiffPath) else {
+            throw CupsError.tiffMissing(tiffPath)
+        }
+        let optionKeys = (try? await self.optionKeys(for: queue)) ?? []
+        let argv = try LpArgs.build(
+            queue: queue, tiffPath: tiffPath,
+            options: options, optionKeys: optionKeys)
+        try await run("lp", argv, id: ProcessID.lp(queue, page: page))
+    }
+
     // MARK: - PPD
 
     private func loadPPD(for queue: String) -> String? {
