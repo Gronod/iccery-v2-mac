@@ -4,6 +4,7 @@ import Foundation
 public enum CupsError: LocalizedError, Equatable {
     case toolFailed(tool: String, code: Int32, stderr: String)
     case tiffMissing(String)
+    case noPrinterSelected
 
     public var errorDescription: String? {
         switch self {
@@ -14,6 +15,8 @@ public enum CupsError: LocalizedError, Equatable {
                 : "\(tool) failed (\(code)): \(detail)"
         case .tiffMissing(let path):
             return "Target TIFF does not exist: \(path)"
+        case .noPrinterSelected:
+            return "No printer selected."
         }
     }
 }

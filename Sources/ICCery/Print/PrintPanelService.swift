@@ -48,8 +48,9 @@ struct PrintPanelService {
             return UITestHooks.printPanelResult(forQueue: queue)
         }
         #endif
-        let display = displayName
-            ?? (try? await cupsService.displayName(for: queue))
+        // `??` rhs is a non-async @autoclosure — fetch first.
+        let fetched = try? await cupsService.displayName(for: queue)
+        let display = displayName ?? fetched
         // Layer ④ needs the queue's option keys (lpoptions -l) to pick
         // the driver colour-bypass before the panel opens.
         let optionKeys = (try? await cupsService.optionKeys(for: queue))
@@ -81,7 +82,7 @@ struct PrintPanelService {
 
             let status = PMSessionSetCurrentPMPrinter(session, printer)
             if status != 0 {
-                PMRelease(pmObject(printer))
+                PMRelease(Self.pmObject(printer))
                 throw PrintPanelError.sessionBindingFailed(status)
             }
             // Warn-only: defaults keep the panel consistent with the
@@ -102,7 +103,7 @@ struct PrintPanelService {
         }
         defer {
             if let printer = pmPrinter {
-                PMRelease(pmObject(printer))
+                PMRelease(Self.pmObject(printer))
             }
         }
 
@@ -128,7 +129,7 @@ struct PrintPanelService {
             .showsOrientation, .showsScaling, .showsPrintSelection,
             .showsPageSetupAccessory, .showsPreview,
         ]
-        panel.defaultButtonTitle = "Use Settings"
+        panel.setDefaultButtonTitle("Use Settings")
 
         let response = panel.runModal(with: printInfo)
         guard response == NSApplication.ModalResponse.OK.rawValue else {

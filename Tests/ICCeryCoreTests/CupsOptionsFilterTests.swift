@@ -52,7 +52,9 @@ struct CupsOptionsFilterTests {
 }
 
 /// Issue 14 — the dlsym attempt order and first-success semantics.
-/// A fake resolver records every call; no private symbols are touched.
+/// `@convention(c)` closures can't capture, so recording goes through
+/// a file-scope recorder keyed by global state; no private symbols are
+/// touched.
 @Suite("ColorSyncSuppressor")
 @MainActor
 struct ColorSyncSuppressorTests {
@@ -62,21 +64,27 @@ struct ColorSyncSuppressorTests {
         unsafeBitCast(UnsafeMutableRawPointer(bitPattern: 0xdead)!, to: PMPrintSession.self)
     }
 
-    private func suppressor(
-        succeeding symbol: String? = nil,
-        mode: String = "AP_ApplicationColorMatching",
-        calls: UnsafeMutablePointer<[(String, String)]>
-    ) -> ColorSyncSuppressor {
+    /// Call log — static since `@convention(c)` can't capture. The
+    /// resolver sets `currentSymbol` right before each call, so the C
+    /// function records (symbol, mode) without capturing `name`.
+    private static var recorded: [(String, String)] = []
+    private static var currentSymbol = ""
+    private static var succeeding: (String, String)?
+    private static var missing: Set<String> = []
+
+    private func makeSuppressor() -> ColorSyncSuppressor {
         var s = ColorSyncSuppressor()
         s.log = { _ in }
         s.modeResolver = { name in
-            // Missing symbol → nil (older macOS path).
-            if name == "PMSessionSetColorMatchingModeLock" && symbol == nil {
-                return nil
-            }
+            if Self.missing.contains(name) { return nil }
+            Self.currentSymbol = name
             return { _, modeArg in
-                calls.pointee.append((name, modeArg as String))
-                return (name == symbol && (modeArg as String) == mode) ? 0 : 1
+                Self.recorded.append((Self.currentSymbol, modeArg as String))
+                if let ok = Self.succeeding,
+                   Self.currentSymbol == ok.0, (modeArg as String) == ok.1 {
+                    return 0
+                }
+                return 1
             }
         }
         return s
@@ -84,68 +92,53 @@ struct ColorSyncSuppressorTests {
 
     @Test("Attempt order: Lock → Mode → NoLock, AP_ prefix first")
     func attemptOrder() {
-        let calls = UnsafeMutablePointer<[(String, String)]>.allocate(capacity: 1)
-        calls.initialize(to: [])
-        defer { calls.deallocate() }
-
-        let s = suppressor(succeeding: nil, calls: calls)
+        Self.recorded = []
+        Self.succeeding = nil
+        Self.missing = ["PMSessionSetColorMatchingModeLock"]
+        let s = makeSuppressor()
         #expect(s.applySPIMode(to: fakeSession) == false)
-        #expect(calls.pointee == ColorMatchingAttempts.attempts
-            .map { ($0.symbol, $0.mode) }
-            .filter { $0.0 != "PMSessionSetColorMatchingModeLock" })
+        // Lock is unresolvable → skipped; the rest plays out in order.
+        #expect(Self.recorded.map { "\($0.0)|\($0.1)" }
+            == ColorMatchingAttempts.attempts
+                .filter { $0.symbol != "PMSessionSetColorMatchingModeLock" }
+                .map { "\($0.symbol)|\($0.mode)" })
     }
 
-    @Test("First zero wins — later symbols not called")
+    @Test("First zero wins — later symbols/modes not called")
     func firstZeroWins() {
-        let calls = UnsafeMutablePointer<[(String, String)]>.allocate(capacity: 1)
-        calls.initialize(to: [])
-        defer { calls.deallocate() }
-
-        let s = suppressor(
-            succeeding: "PMSessionSetColorMatchingMode", calls: calls)
+        Self.recorded = []
+        Self.succeeding = ("PMSessionSetColorMatchingModeLock",
+                           "AP_ApplicationColorMatching")
+        Self.missing = []
+        let s = makeSuppressor()
         #expect(s.applySPIMode(to: fakeSession))
-        // Lock symbol missing → skipped; Mode tried AP_ then plain? No —
-        // Mode succeeds on the first mode → 2 calls total.
-        #expect(calls.pointee == [
-            ("PMSessionSetColorMatchingMode", "AP_ApplicationColorMatching"),
+        #expect(Self.recorded.map { "\($0.0)|\($0.1)" } == [
+            "PMSessionSetColorMatchingModeLock|AP_ApplicationColorMatching",
         ])
-        // NoLock never attempted.
-        #expect(!calls.pointee.contains { $0.0 == "PMSessionSetColorMatchingModeNoLock" })
     }
 
     @Test("Mode fallback: AP_ rejected → ApplicationColorMatching tried")
     func modeFallback() {
-        let calls = UnsafeMutablePointer<[(String, String)]>.allocate(capacity: 1)
-        calls.initialize(to: [])
-        defer { calls.deallocate() }
-
-        var s = suppressor(
-            succeeding: "PMSessionSetColorMatchingModeLock",
-            mode: "ApplicationColorMatching",
-            calls: calls)
-        // Make the Lock symbol resolvable this time.
-        let record: (String) -> ColorMatchingModeFunction? = { name in
-            { _, modeArg in
-                calls.pointee.append((name, modeArg as String))
-                return (modeArg as String) == "ApplicationColorMatching" ? 0 : 1
-            }
-        }
-        s.modeResolver = record
+        Self.recorded = []
+        Self.succeeding = ("PMSessionSetColorMatchingModeLock",
+                           "ApplicationColorMatching")
+        Self.missing = []
+        let s = makeSuppressor()
         #expect(s.applySPIMode(to: fakeSession))
-        #expect(calls.pointee.first
-            == ("PMSessionSetColorMatchingModeLock", "AP_ApplicationColorMatching"))
-        #expect(calls.pointee.last
-            == ("PMSessionSetColorMatchingModeLock", "ApplicationColorMatching"))
+        #expect(Self.recorded[0].0 == "PMSessionSetColorMatchingModeLock")
+        #expect(Self.recorded[0].1 == "AP_ApplicationColorMatching")
+        #expect(Self.recorded[1].0 == "PMSessionSetColorMatchingModeLock")
+        #expect(Self.recorded[1].1 == "ApplicationColorMatching")
+        #expect(Self.recorded.count == 2)
     }
 
     @Test("All symbols missing → false, no calls")
     func allMissing() {
-        let calls = UnsafeMutablePointer<[(String, String)]>.allocate(capacity: 1)
-        calls.initialize(to: [])
-        defer { calls.deallocate() }
-        var s = suppressor(succeeding: nil, calls: calls)
-        s.modeResolver = { _ in nil }
+        Self.recorded = []
+        Self.succeeding = nil
+        Self.missing = Set(ColorMatchingAttempts.symbols)
+        let s = makeSuppressor()
         #expect(s.applySPIMode(to: fakeSession) == false)
-        #expect(calls.pointee.isEmpty)
+        #expect(Self.recorded.isEmpty)
     }
 }
