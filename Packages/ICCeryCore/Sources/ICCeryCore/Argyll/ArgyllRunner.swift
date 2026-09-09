@@ -87,6 +87,7 @@ public struct ArgyllRunner: Sendable {
         let binaryURL = binaryResolver.resolve("targen")
         let processId = ProcessID.targen(cleanBasename)
 
+        await ensureNotRunning(id: processId)
         let events = processManager.events()
         try await processManager.runStreaming(
             id: processId,
@@ -121,6 +122,7 @@ public struct ArgyllRunner: Sendable {
         let binaryURL = binaryResolver.resolve("printtarg")
         let processId = ProcessID.printtarg(cleanBasename)
 
+        await ensureNotRunning(id: processId)
         let events = processManager.events()
         try await processManager.runStreaming(
             id: processId,
@@ -169,6 +171,19 @@ public struct ArgyllRunner: Sendable {
 
     // MARK: - Shared collection
 
+    /// Cancels any previous child with the same id and waits for it to
+    /// finalize, so `runStreaming` / `runCaptured` never sees a
+    /// `duplicateID` from a leftover process (#50, #52).
+    private func ensureNotRunning(id: String) async {
+        guard await processManager.isRunning(id) else { return }
+        await processManager.kill(id: id)
+        var attempts = 0
+        while await processManager.isRunning(id), attempts < 30 {
+            try? await Task.sleep(for: .milliseconds(100))
+            attempts += 1
+        }
+    }
+
     private struct CollectedRun {
         var exitCode: Int32?
         var stdout: String
@@ -179,10 +194,15 @@ public struct ArgyllRunner: Sendable {
     /// Drains the event stream until this child's `exit` event.
     /// stdout is accumulated both per-line (logs) and verbatim (for
     /// the manifest parse — the pretty JSON needs its newlines).
+    ///
+    /// When `flushPartialLines` is `true`, a background `Task` flushes
+    /// unterminated output every 500 ms so tools like `colprof` that
+    /// print dots without newlines still produce log batches.
     private func collect(
         id processId: String,
         events: AsyncStream<ProcessEvent>,
-        onLogBatch: (@Sendable ([String]) -> Void)?
+        onLogBatch: (@Sendable ([String]) -> Void)?,
+        flushPartialLines: Bool = false
     ) async -> CollectedRun {
         var lines: [String] = []
         var stdout = ""
@@ -196,6 +216,17 @@ public struct ArgyllRunner: Sendable {
             let out = batch
             batch.removeAll(keepingCapacity: true)
             onLogBatch?(out)
+        }
+
+        var dotFlushTask: Task<Void, Never>?
+        if flushPartialLines {
+            dotFlushTask = Task { [processManager] in
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .milliseconds(500))
+                    if Task.isCancelled { break }
+                    await processManager.flushPartialLine(id: processId)
+                }
+            }
         }
 
         for await event in events {
@@ -229,6 +260,12 @@ public struct ArgyllRunner: Sendable {
                 break
             }
         }
+
+        dotFlushTask?.cancel()
+        if let dotFlushTask {
+            _ = await dotFlushTask.value
+        }
+
         return CollectedRun(exitCode: exitCode, stdout: stdout, stderr: stderr, lines: lines)
     }
 
@@ -242,6 +279,7 @@ public struct ArgyllRunner: Sendable {
         let binaryURL = binaryResolver.resolve("instlist")
         let processId = ProcessID.instlist
 
+        await ensureNotRunning(id: processId)
         let events = processManager.events()
         try await processManager.runStreaming(
             id: processId,
@@ -301,6 +339,7 @@ public struct ArgyllRunner: Sendable {
         let binaryURL = binaryResolver.resolve("average")
         let processId = ProcessID.average(config.basename)
 
+        await ensureNotRunning(id: processId)
         let events = processManager.events()
         try await processManager.runStreaming(
             id: processId,
@@ -335,6 +374,7 @@ public struct ArgyllRunner: Sendable {
         let binaryURL = binaryResolver.resolve("colprof")
         let processId = ProcessID.colprof(cleanBasename)
 
+        await ensureNotRunning(id: processId)
         let events = processManager.events()
         try await processManager.runStreaming(
             id: processId,
@@ -342,7 +382,12 @@ public struct ArgyllRunner: Sendable {
             arguments: args,
             workingDirectory: cwd
         )
-        let run = await collect(id: processId, events: events, onLogBatch: onLogBatch)
+        let run = await collect(
+            id: processId,
+            events: events,
+            onLogBatch: onLogBatch,
+            flushPartialLines: true
+        )
 
         guard run.exitCode == 0 else {
             throw ArgyllRunnerError.colprofFailed(
@@ -368,10 +413,13 @@ public struct ArgyllRunner: Sendable {
     ///
     /// Runs `applycal` captured and performs an in-place replace via
     /// `{input}.applycal.tmp` then `replaceItemAt`. On failure the tmp
-    /// file is removed and the original is left untouched.
+    /// file is removed and the original is left untouched. The UI must
+    /// never request `unapply` (#52).
     public func runApplycal(
         config: ApplycalConfig
     ) async throws -> URL {
+        assert(!config.unapply, "runApplycal does not support unapply")
+
         let inputURL = config.inputProfileURL
         let cwd = inputURL.deletingLastPathComponent()
         let binaryURL = binaryResolver.resolve("applycal")
@@ -382,6 +430,8 @@ public struct ArgyllRunner: Sendable {
 
         // Remove any stale tmp from a previous crash.
         try? fm.removeItem(at: tmpURL)
+
+        await ensureNotRunning(id: processId)
 
         let outputConfig = ApplycalConfig(
             calibrationPath: config.calibrationPath,
@@ -398,8 +448,11 @@ public struct ArgyllRunner: Sendable {
             workingDirectory: cwd
         )
 
-        guard result.exitCode == 0 else {
+        guard result.exitCode == 0, !Task.isCancelled else {
             try? fm.removeItem(at: tmpURL)
+            if Task.isCancelled {
+                throw CancellationError()
+            }
             throw ArgyllRunnerError.applycalFailed(
                 result.stderr.isEmpty
                     ? "applycal exited with code \(result.exitCode)"
@@ -410,6 +463,15 @@ public struct ArgyllRunner: Sendable {
         guard fm.fileExists(atPath: tmpURL.path) else {
             throw ArgyllRunnerError.applycalFailed(
                 "applycal did not create temp profile"
+            )
+        }
+
+        let attrs = try? fm.attributesOfItem(atPath: tmpURL.path)
+        let size = attrs?[.size] as? UInt64 ?? 0
+        guard size >= 128 else {
+            try? fm.removeItem(at: tmpURL)
+            throw ArgyllRunnerError.applycalFailed(
+                "calibrated profile is too small (\(size) bytes)"
             )
         }
 
@@ -441,6 +503,7 @@ public struct ArgyllRunner: Sendable {
         let binaryURL = binaryResolver.resolve("iccgamut")
         let processId = ProcessID.iccgamut(stem: stem)
 
+        await ensureNotRunning(id: processId)
         let events = processManager.events()
         try await processManager.runStreaming(
             id: processId,
@@ -480,6 +543,7 @@ public struct ArgyllRunner: Sendable {
         let binaryURL = binaryResolver.resolve("profcheck")
         let processId = ProcessID.profcheck(ti3Path: ti3Path)
 
+        await ensureNotRunning(id: processId)
         let events = processManager.events()
         try await processManager.runStreaming(
             id: processId,
@@ -547,10 +611,20 @@ public struct ArgyllRunner: Sendable {
         let binaryURL = binaryResolver.resolve("chartread")
         let processId = ProcessID.chartread(cleanBasename)
         let processManager = self.processManager
+        let isXY = config.isXY
 
         return AsyncStream { continuation in
             let task = Task {
+                await ensureNotRunning(id: processId)
                 let events = processManager.events()
+
+                // Register the XY parking hook before spawning.
+                await processManager.setPreKillHook(id: processId) { [processManager] in
+                    if isXY {
+                        try? await processManager.sendStdin(id: processId, bytes: ChartreadInput.quit.bytes)
+                        try? await Task.sleep(for: .milliseconds(500))
+                    }
+                }
 
                 do {
                     try await processManager.runStreaming(
@@ -582,20 +656,22 @@ public struct ArgyllRunner: Sendable {
 
                     switch event {
                     case .stdout(_, let line):
-                        let classified = ChartreadClassifier.classify(line: line, previousState: state)
+                        let previous = state
+                        let classified = ChartreadClassifier.classify(line: line, previousState: previous)
                         state = classified.state
+
                         if classified.isRemoveSheetNotice {
                             continuation.yield(.removeSheetNotice)
                         }
-                        if classified.sheetNumber != nil || classified.alignmentPatch != nil {
-                            continuation.yield(.prompt(classified))
-                        } else if state != previousOrContinuationState(state, classified) {
-                            // Only emit prompt when the state meaningfully changes.
-                            continuation.yield(.prompt(classified))
-                        } else if state == .tablePlaceSheet || state == .tableAlign {
-                            // Continuation lines in table states are still prompts.
-                            continuation.yield(.prompt(classified))
-                        } else if classified.requestedWarningKey != nil {
+
+                        let shouldPrompt =
+                            classified.sheetNumber != nil
+                            || classified.alignmentPatch != nil
+                            || classified.requestedWarningKey != nil
+                            || classified.state != previous
+                            || classified.isTableContinuation
+
+                        if shouldPrompt {
                             continuation.yield(.prompt(classified))
                         }
 
@@ -632,6 +708,11 @@ public struct ArgyllRunner: Sendable {
                     }
                 }
 
+                if Task.isCancelled {
+                    continuation.finish()
+                    return
+                }
+
                 let canonical = cwd.appendingPathComponent("\(cleanBasename).ti3")
                 if let code = exitCode, code == 0 {
                     if FileManager.default.fileExists(atPath: canonical.path) {
@@ -647,13 +728,11 @@ public struct ArgyllRunner: Sendable {
 
             continuation.onTermination = { _ in
                 task.cancel()
+                Task {
+                    await processManager.kill(id: processId)
+                }
             }
         }
-    }
-
-    private func previousOrContinuationState(_ state: ChartreadState, _ classified: ChartreadClassifyResult) -> ChartreadState {
-        if classified.isTableContinuation { return .promptContinue }
-        return state
     }
 
     /// Send an exact input sequence to the running `chartread` child.
@@ -665,17 +744,14 @@ public struct ArgyllRunner: Sendable {
 
     /// Terminate a running `chartread` child.
     ///
-    /// For XY tables, sends `q\n` first and waits ~500 ms so the head parks.
+    /// The actual XY parking is handled by the pre-kill hook registered in
+    /// `runChartread`.
     public func cancelChartread(basename: String, isXY: Bool = false) {
         let cleanBasename = try? PathSecurity.sanitizeBasename(basename)
         guard let cleanBasename else { return }
         let processId = ProcessID.chartread(cleanBasename)
 
         Task {
-            if isXY {
-                try? await processManager.sendStdin(id: processId, bytes: ChartreadInput.quit.bytes)
-                try? await Task.sleep(for: .milliseconds(500))
-            }
             await processManager.kill(id: processId)
         }
     }

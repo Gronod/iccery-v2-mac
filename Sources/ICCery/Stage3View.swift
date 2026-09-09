@@ -210,7 +210,9 @@ struct Stage3View: View {
                         .accessibilityIdentifier("btnCalibrate")
                 case .awaitingStrip:
                     Button("Trigger") { model.calibrate() }
-                        .accessibilityIdentifier("btnCalibrate")
+                        .accessibilityIdentifier("btnTrigger")
+                    Button("Done & Save") { model.doneAndSave() }
+                        .accessibilityIdentifier("btnDoneReadEarly")
                 case .tablePlaceSheet, .tableAlign, .promptContinue, .warning:
                     Button(continueTitle) { model.accept() }
                         .accessibilityIdentifier("btnAccept")
@@ -222,16 +224,6 @@ struct Stage3View: View {
                         .accessibilityIdentifier("btnDoneRead")
                 default:
                     EmptyView()
-                }
-
-                if model.chartreadState == .awaitingStrip || model.chartreadState == .allStripsRead {
-                    Button("Done & Save") { model.doneAndSave() }
-                        .accessibilityIdentifier("btnDoneRead")
-                }
-
-                if model.chartreadState == .error {
-                    Button("Retry") { model.retry() }
-                        .accessibilityIdentifier("btnRetry")
                 }
 
                 Button("Cancel") { model.cancelRead() }
@@ -374,7 +366,7 @@ struct Stage3View: View {
                     Button("Finish & Average") {
                         model.finishAndAverage()
                     }
-                    .disabled(!model.isFinished || model.isFinishing)
+                    .disabled(!model.canFinish || model.isFinishing)
                     .accessibilityIdentifier("btnFinishAndAverage")
                 }
 
@@ -386,6 +378,7 @@ struct Stage3View: View {
             }
             .padding(16)
             .background(Theme.panel)
+            .accessibilityElement(children: .contain)
             .accessibilityIdentifier("chartreadAveragingPanel")
         }
     }

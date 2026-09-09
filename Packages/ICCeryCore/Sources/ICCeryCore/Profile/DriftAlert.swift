@@ -2,30 +2,38 @@ import Foundation
 
 /// Computes a consecutive-breach warning from verification history.
 ///
-/// A drift alert triggers when there are at least two `poor` records on
-/// distinct calendar days, or two `poor` records at least one hour apart.
+/// A drift alert triggers when the most recent chronologically consecutive
+/// poor records form a run of at least two, and the first and last of that
+/// run are on distinct UTC days or at least one hour apart.
 public enum DriftAlert {
 
     /// Returns an alert message, or `nil` when no consecutive breach exists.
     public static func compute(from records: [VerificationRecord]) -> String? {
-        let poor = records
-            .filter { $0.status == .poor }
-            .sorted { $0.timestamp < $1.timestamp }
+        // Work in chronological order.
+        let chronological = records.sorted { $0.timestamp < $1.timestamp }
 
-        guard poor.count >= 2 else { return nil }
-
-        for i in 0..<poor.count {
-            for j in (i + 1)..<poor.count {
-                let a = poor[i]
-                let b = poor[j]
-
-                let sameDay = Calendar.utc.isDate(a.timestamp, inSameDayAs: b.timestamp)
-                let oneHour = b.timestamp.timeIntervalSince(a.timestamp) >= 3600
-
-                if !sameDay || oneHour {
-                    return "Drift alert: poor results between \(a.id) and \(b.id)."
-                }
+        // Build the longest suffix of consecutive `.poor` records.
+        // Non-poor records break the run, so we stop at the first non-poor
+        // encountered from the end.
+        var run: [VerificationRecord] = []
+        for record in chronological.reversed() {
+            if record.status == .poor {
+                run.insert(record, at: 0)
+            } else {
+                break
             }
+        }
+
+        guard run.count >= 2 else { return nil }
+
+        let first = run.first!
+        let last = run.last!
+
+        let sameDay = Calendar.utc.isDate(first.timestamp, inSameDayAs: last.timestamp)
+        let oneHour = last.timestamp.timeIntervalSince(first.timestamp) >= 3600
+
+        if !sameDay || oneHour {
+            return "Drift alert: poor results between \(first.id) and \(last.id)."
         }
 
         return nil

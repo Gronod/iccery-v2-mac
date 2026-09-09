@@ -57,10 +57,12 @@ public actor VerificationHistoryStore {
 
     /// Appends a record, trims to capacity, and writes atomically.
     ///
-    /// Returns the trimmed list, or `nil` if a write error occurs so the
-    /// caller can surface the failure without replacing the in-memory list.
+    /// Loads the existing history first and propagates any load error so an
+    /// unparseable file is never overwritten.
     @discardableResult
     public func append(_ record: VerificationRecord) throws -> [VerificationRecord] {
+        try load()
+
         var updated = records
         updated.append(record)
         if updated.count > capacity {

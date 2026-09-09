@@ -81,6 +81,15 @@ final class ProfileWorkflowViewModel {
     init(wizard: WizardViewModel, environment: AppEnvironment) {
         self.wizard = wizard
         self.environment = environment
+        restoreCreatedProfileURL()
+    }
+
+    /// Restores `createdProfileURL` from the wizard artefacts or by probing
+    /// the working directory for an existing `.icc`/`.icm` (#52).
+    func restoreCreatedProfileURL() {
+        let cwd = wizard.effectiveWorkingDirectory ?? PathSecurity.resolveSafeCwd(nil)
+        createdProfileURL = wizard.artefacts.profilePath
+            ?? ArtefactProbe.resolveProfile(basename: wizard.basename, cwd: cwd)
     }
 
     // MARK: - Derived
@@ -206,6 +215,7 @@ final class ProfileWorkflowViewModel {
                         calibrationPath: self.calibrationFile,
                         inputProfileURL: url
                     )
+                    assert(!applyConfig.unapply, "applycal unapply is not supported in v2.0")
                     finalProfileURL = try await runner.runApplycal(config: applyConfig)
                     self.colprofLog.append("Calibration embedded: \(self.calibrationFile)")
                 }
@@ -256,7 +266,15 @@ final class ProfileWorkflowViewModel {
     // MARK: - Stage 5: verify profile
 
     var knownPrinters: [String] {
-        Array(Set(verificationHistory.map { $0.printerName })).sorted()
+        var names = Set<String>()
+        for record in verificationHistory {
+            if record.printerName.isEmpty {
+                names.insert("Unknown")
+            } else {
+                names.insert(record.printerName)
+            }
+        }
+        return Array(names).sorted()
     }
 
     func loadHistory() {
@@ -333,10 +351,11 @@ final class ProfileWorkflowViewModel {
 
         let timestamp = Date()
         let id = "vr-\(Int(timestamp.timeIntervalSince1970))-\(Self.nextSeq())"
+        let printerName = wizard.printerName?.isEmpty == false ? wizard.printerName! : "Unknown"
         return VerificationRecord(
             id: id,
             profileName: createdProfileURL?.lastPathComponent ?? wizard.basename,
-            printerName: wizard.printerName ?? "",
+            printerName: printerName,
             avgDE: avg,
             maxDE: max,
             rmsDE: rms,
@@ -381,24 +400,32 @@ final class ProfileWorkflowViewModel {
             openColorPanel: settings.openColorPanelAfterInstall
         )
 
-        let destURL = installDestination(for: sourceURL, options: options)
-        let collision = FileManager.default.fileExists(atPath: destURL.path)
+        do {
+            let config = InstallProfileConfig(sourceURL: sourceURL, options: options)
+            let destURL = try ProfileInstaller.resolveDestinationURL(for: config)
+            let collision = FileManager.default.fileExists(atPath: destURL.path)
 
-        if collision && settings.askBeforeOverwriteProfile {
-            pendingInstallOptions = options
-            installCollisionMessage = "A profile named \(destURL.lastPathComponent) already exists."
-            showingInstallCollision = true
-            return
+            if collision && settings.askBeforeOverwriteProfile {
+                pendingInstallOptions = options
+                installCollisionMessage = "A profile named \(destURL.lastPathComponent) already exists."
+                showingInstallCollision = true
+                return
+            }
+
+            runInstall(sourceURL: sourceURL, options: options)
+        } catch {
+            wizard.showNotice(
+                "Install failed: \(error.localizedDescription)",
+                kind: .error
+            )
         }
-
-        runInstall(sourceURL: sourceURL, options: options)
     }
 
     func resolveInstallCollision(policy: ProfileCollisionPolicy) {
         showingInstallCollision = false
         guard let sourceURL = createdProfileURL,
               var options = pendingInstallOptions else { return }
-        options.collisionPolicy = policy
+
         if policy == .cancel {
             installResult = InstallProfileResult(
                 destPath: "",
@@ -410,20 +437,12 @@ final class ProfileWorkflowViewModel {
             )
             return
         }
-        runInstall(sourceURL: sourceURL, options: options)
-    }
 
-    private func installDestination(for sourceURL: URL, options: InstallProfileOptions) -> URL {
-        let stem = sourceURL.deletingPathExtension().lastPathComponent
-        let fm = FileManager.default
-        let destDir: URL
-        if options.preferSystem {
-            destDir = URL(fileURLWithPath: "/Library/ColorSync/Profiles")
-        } else {
-            destDir = fm.homeDirectoryForCurrentUser
-                .appendingPathComponent("Library/ColorSync/Profiles")
+        options.collisionPolicy = policy
+        if policy == .overwrite {
+            options.forceOverwrite = true
         }
-        return destDir.appendingPathComponent("\(stem).icc")
+        runInstall(sourceURL: sourceURL, options: options)
     }
 
     private func runInstall(sourceURL: URL, options: InstallProfileOptions) {

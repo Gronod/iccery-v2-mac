@@ -21,7 +21,10 @@ struct Stage5View: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.background)
-        .onAppear { model.loadHistory() }
+        .onAppear {
+            model.restoreCreatedProfileURL()
+            model.loadHistory()
+        }
         .alert("Install profile", isPresented: $model.showingInstallCollision) {
             Button("Overwrite", role: .destructive) {
                 model.resolveInstallCollision(policy: .overwrite)
@@ -70,7 +73,7 @@ struct Stage5View: View {
                     .accessibilityIdentifier("driftAlert")
             }
 
-            if let warning = model.profcheckWarning, !warning.isEmpty, model.driftAlert == nil {
+            if let warning = model.profcheckWarning, !warning.isEmpty {
                 Text("⚠ \(warning)")
                     .font(.caption)
                     .padding(.horizontal, 8)

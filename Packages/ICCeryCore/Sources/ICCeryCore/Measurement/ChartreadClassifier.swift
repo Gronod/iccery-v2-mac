@@ -153,7 +153,7 @@ public enum ChartreadClassifier {
         let phrases = [
             "'d' if/when done", "d to finish/save", "all strips/patches read",
             "all strips read", "all patches read", "done reading",
-            "'d' to save", "press d to", "hit 'd'"
+            "'d' to save", "press d to", "hit 'd'", "d to finish", "d to save"
         ]
         if phrases.contains(where: { text.contains($0) }) {
             return ChartreadClassifyResult(state: .allStripsRead)
@@ -163,20 +163,28 @@ public enum ChartreadClassifier {
 
     // 7. Warnings / prompts needing a key.
     private static func warning(text: String, previous: ChartreadState) -> ChartreadClassifyResult? {
+        let lower = text
         let warningSignals = [
-            "(warning)", "use it anyway", "seem to have read strip pass",
-            "unexpected response", "seem to have read", "misread",
-            "try again", "do you want to"
+            "(warning)", "use it anyway", "seem to have read strip",
+            "unexpected response", "try again", "do you want to",
+            "abort ? - are you sure", "are you sure"
         ]
-        guard warningSignals.contains(where: { text.contains($0) }) else { return nil }
+
+        let isWarningPrompt =
+            warningSignals.contains(where: { lower.contains($0) })
+            || lower.contains("(y/n)")
+            || lower.contains("'y' or 'n'")
+            || lower.contains("?")
+
+        guard isWarningPrompt else { return nil }
 
         var key: String?
-        if text.contains("(y/n)") || text.contains("'y' or 'n'") {
+        if lower.contains("(y/n)") || lower.contains("'y' or 'n'") {
             // Default to asking the user; no automatic key.
             key = nil
-        } else if text.contains("'y'") || text.contains("press y") || text.contains("hit 'y'") {
+        } else if lower.contains("'y'") || lower.contains("press y") || lower.contains("hit 'y'") {
             key = "y"
-        } else if text.contains("'n'") || text.contains("press n") || text.contains("hit 'n'") {
+        } else if lower.contains("'n'") || lower.contains("press n") || lower.contains("hit 'n'") {
             key = "n"
         }
 
@@ -195,12 +203,14 @@ public enum ChartreadClassifier {
               !hasLocate
         else { return nil }
 
-        if lowercased.contains("hit any key to continue")
-            || lowercased.contains("hit space to continue")
-            || lowercased.contains("calibration")
-            || lowercased.contains("calibrate")
+        if lowercased.contains("calibrat")
+            || lowercased.contains("white reference")
             || lowercased.contains("white tile")
-            || lowercased.contains("standard tile") {
+            || lowercased.contains("standard tile")
+            || lowercased.contains("reference")
+            || lowercased.contains("tile")
+            || lowercased.contains("hit any key to continue")
+            || lowercased.contains("hit space to continue") {
             return ChartreadClassifyResult(state: .calibrating)
         }
         return nil
@@ -209,11 +219,29 @@ public enum ChartreadClassifier {
     // 9. Awaiting strip.
     private static func awaitingStrip(text: String, previous: ChartreadState) -> ChartreadClassifyResult? {
         let lowercased = text.lowercased()
+
+        // These are explicit, multi-word prompts; we deliberately do NOT
+        // match bare "read strip" so that error lines like
+        // "failed to read strip" or "error reading strip" fall through to
+        // the error matcher.
         let phrases = [
-            "hit ... read ... strip", "ready to read", "read ... strip ... key",
-            "hit any key to read", "ready to read strip", "hit a key to read",
-            "press any key to read", "read strip"
+            "ready to read",
+            "hit any key to read",
+            "hit a key to read",
+            "hit space to read",
+            "hit [space] to read",
+            "press any key to read",
+            "press space to read",
+            "trigger instrument",
+            "start reading",
+            "read next strip"
         ]
+
+        // Also permit "hit X to read strip Y" or "ready to read strip Z".
+        if lowercased.range(of: #"(hit|press).+to\s+read\s+strip"#, options: .regularExpression) != nil {
+            return ChartreadClassifyResult(state: .awaitingStrip)
+        }
+
         guard phrases.contains(where: { lowercased.contains($0) }) else { return nil }
         return ChartreadClassifyResult(state: .awaitingStrip)
     }
@@ -228,16 +256,27 @@ public enum ChartreadClassifier {
 
     // 11. Error.
     private static func error(text: String, previous: ChartreadState) -> ChartreadClassifyResult? {
-        let phrases = ["error", "too fast", "too slow", "misread", "failed to read", "failed"]
-        // Avoid false positives inside harmless words by matching full words where possible.
-        let lower = text
-        guard phrases.contains(where: { phrase in
-            lower.contains(phrase) && !lower.contains("no error")
-        }) else { return nil }
+        let lower = text.lowercased()
 
-        if lower.contains("misread") || lower.contains("failed to read") || lower.contains("error") {
+        // Avoid false positives from confirmation prompts and "no error" status.
+        guard !lower.contains("no error") else { return nil }
+        guard !lower.contains("(y/n)")
+              && !lower.contains("'y' or 'n'")
+              && !lower.contains("?")
+        else { return nil }
+
+        let phraseMatches = ["failed to read", "error reading", "too fast", "too slow", "misread"]
+        for phrase in phraseMatches {
+            if lower.contains(phrase) {
+                return ChartreadClassifyResult(state: .error)
+            }
+        }
+
+        // Whole-word "error" only — bare "failed" alone is not enough.
+        if lower.range(of: #"\berror\b"#, options: .regularExpression) != nil {
             return ChartreadClassifyResult(state: .error)
         }
+
         return nil
     }
 }
