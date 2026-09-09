@@ -63,21 +63,7 @@ struct RootView: View {
         case .layOutPrint:
             Stage2View(workflow: workflow)
         case .measure:
-            // Stage 3 stays a shell until M4, but a .ti2 resume still
-            // lands here — show the persisted state (#8, issue #140).
-            VStack(spacing: 16) {
-                if workflow.resumedFromTi2 {
-                    Label("Resumed from .ti2", systemImage: "arrow.uturn.right")
-                        .font(.callout)
-                        .foregroundStyle(Theme.accent)
-                        .accessibilityIdentifier("stage3LoadedTargetBanner")
-                }
-                Text(model.basename)
-                    .font(.title3)
-                    .foregroundStyle(Theme.text)
-                    .accessibilityIdentifier("stage3TargetBasename")
-                StagePlaceholderView(stage: model.stage)
-            }
+            Stage3View(model: workflow.measurement)
         default:
             StagePlaceholderView(stage: model.stage)
         }

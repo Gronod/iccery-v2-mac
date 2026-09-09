@@ -230,11 +230,10 @@ struct Stage2View: View {
                         .foregroundStyle(workflow.printNoticeIsError
                                          ? .red : .secondary)
                         .accessibilityIdentifier("printNotificationText")
+                        .accessibilityValue(notice)
                 }
                 Spacer()
             }
-            .accessibilityElement(children: .contain)
-            .accessibilityIdentifier("printNotification")
 
             // Printer row: select + status + refresh + Preferences.
             HStack(spacing: 10) {

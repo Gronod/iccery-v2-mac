@@ -119,9 +119,17 @@ final class TargetWorkflowViewModel {
     var savePresetName = ""
     var savePresetDesc = ""
 
+    /// Stage 3 measurement workflow, owned at the app level so it persists
+    /// across stage switches and can observe settings changes.
+    var measurement: MeasurementWorkflowViewModel
+
     init(environment: AppEnvironment = .live()) {
         self.environment = environment
         self.wizard = WizardViewModel(stateStore: environment.stateStore)
+        self.measurement = MeasurementWorkflowViewModel(
+            wizard: wizard,
+            environment: environment
+        )
         reloadPresets()
     }
 
@@ -249,6 +257,7 @@ final class TargetWorkflowViewModel {
             wizard.setTarget(basename: stem, workingDirectory: dir)
             wizard.refreshGating()
             resumedFromTi2 = false
+            measurement.resumedFromTi2 = false
             wizard.go(to: .layOutPrint)
         case "ti2":
             let header = Ti2Header.parse(url)
@@ -261,6 +270,7 @@ final class TargetWorkflowViewModel {
             wizard.setTarget(basename: stem, workingDirectory: dir)
             wizard.refreshGating()
             resumedFromTi2 = true
+            measurement.resumedFromTi2 = true
             wizard.showNotice("Resumed from .ti2", kind: .info, autoHideAfter: nil)
             wizard.go(to: .measure)
         default:
@@ -411,8 +421,6 @@ final class TargetWorkflowViewModel {
         }
     }
 
-    /// `#btnPrintAll` — spool every gallery TIFF, sequentially. Stops on
-    /// the first failure so the user sees which page failed.
     /// `#btnPrintAll` — spool every gallery TIFF, sequentially. Stops on
     /// the first failure so the user sees which page failed.
     func printAllPages() {
