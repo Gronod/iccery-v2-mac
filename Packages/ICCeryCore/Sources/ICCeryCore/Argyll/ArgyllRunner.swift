@@ -9,6 +9,7 @@ public enum ArgyllRunnerError: LocalizedError, Equatable, Sendable {
     case chartreadFailed(String)
     case averageFailed(String)
     case colprofFailed(String)
+    case printcalFailed(String)
     case applycalFailed(String)
     case iccgamutFailed(String)
     case profcheckFailed(String)
@@ -30,6 +31,8 @@ public enum ArgyllRunnerError: LocalizedError, Equatable, Sendable {
             return "Averaging failed: \(reason)"
         case .colprofFailed(let reason):
             return "Profile creation failed: \(reason)"
+        case .printcalFailed(let reason):
+            return "Calibration curve computation failed: \(reason)"
         case .applycalFailed(let reason):
             return "Apply calibration failed: \(reason)"
         case .iccgamutFailed(let reason):
@@ -754,6 +757,82 @@ public struct ArgyllRunner: Sendable {
         Task {
             await processManager.kill(id: processId)
         }
+    }
+
+    // MARK: - Stage 0 calibration
+
+    /// Generates a calibration wedge `.ti1`.
+    public func runCalibrationTargen(
+        config: CalibrationTargenConfig,
+        onLogBatch: (@Sendable ([String]) -> Void)? = nil
+    ) async throws -> URL {
+        let args = try CalibrationTargenArgs.build(config: config)
+        let cwd = PathSecurity.resolveSafeCwd(config.workingDirectory)
+        let calBasename = config.basename.hasPrefix("CAL_") ? config.basename : "CAL_\(config.basename)"
+        let cleanBasename = try PathSecurity.sanitizeBasename(calBasename)
+        let binaryURL = binaryResolver.resolve("targen")
+        let processId = ProcessID.targen(cleanBasename)
+
+        await ensureNotRunning(id: processId)
+        let events = processManager.events()
+        try await processManager.runStreaming(
+            id: processId,
+            binary: binaryURL,
+            arguments: args,
+            workingDirectory: cwd
+        )
+        let run = await collect(id: processId, events: events, onLogBatch: onLogBatch)
+
+        guard run.exitCode == 0 else {
+            throw ArgyllRunnerError.processFailed(code: run.exitCode ?? -1, logs: run.lines)
+        }
+
+        let ti1URL = cwd.appendingPathComponent("\(cleanBasename).ti1")
+        guard FileManager.default.fileExists(atPath: ti1URL.path) else {
+            throw ArgyllRunnerError.missingArtefact(ti1URL.path)
+        }
+        return ti1URL
+    }
+
+    /// Computes a `.cal` curve from a measured `CAL_*.ti3`.
+    ///
+    /// `printcal` is captured (not streamed) and is exempt from the `-u`
+    /// JSON policy.
+    public func runPrintcal(
+        config: PrintcalConfig,
+        onLogBatch: (@Sendable ([String]) -> Void)? = nil
+    ) async throws -> URL {
+        let args = try PrintcalArgs.build(config: config)
+        let cwd = PathSecurity.resolveSafeCwd(config.workingDirectory)
+        let binaryURL = binaryResolver.resolve("printcal")
+        let calBasename = config.ti3Basename.hasPrefix("CAL_") ? config.ti3Basename : "CAL_\(config.ti3Basename)"
+        let processId = ProcessID.printcal(calBasename)
+
+        await ensureNotRunning(id: processId)
+        let result = try await processManager.runCaptured(
+            id: processId,
+            binary: binaryURL,
+            arguments: args,
+            workingDirectory: cwd
+        )
+
+        if let onLogBatch = onLogBatch, !result.stdout.isEmpty {
+            onLogBatch(result.stdout.components(separatedBy: .newlines))
+        }
+
+        guard result.exitCode == 0 else {
+            throw ArgyllRunnerError.printcalFailed(
+                result.stderr.isEmpty
+                    ? "printcal exited with code \(result.exitCode)"
+                    : result.stderr
+            )
+        }
+
+        let calURL = config.outputURL
+        guard FileManager.default.fileExists(atPath: calURL.path) else {
+            throw ArgyllRunnerError.missingArtefact(calURL.path)
+        }
+        return calURL
     }
 }
 

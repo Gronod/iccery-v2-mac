@@ -71,7 +71,9 @@ struct RootView: View {
             Stage4View(model: workflow.profile)
         case .verifyInstall:
             Stage5View(model: workflow.profile)
-        default:
+        case .calibrate:
+            CalibrationView(model: workflow.calibration)
+        @unknown default:
             StagePlaceholderView(stage: model.stage)
         }
     }

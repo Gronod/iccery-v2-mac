@@ -123,8 +123,10 @@ final class TargetWorkflowViewModel {
     /// across stage switches and can observe settings changes.
     var measurement: MeasurementWorkflowViewModel
     /// Stage 4/5 profile workflow, owned at the app level so it persists
-    /// across stage switches and can apply preset values.
+    /// across stage switches and can observe preset values.
     var profile: ProfileWorkflowViewModel
+    /// Stage 0 calibration workflow.
+    var calibration: CalibrationViewModel!
 
     init(environment: AppEnvironment = .live()) {
         self.environment = environment
@@ -135,6 +137,12 @@ final class TargetWorkflowViewModel {
         )
         self.profile = ProfileWorkflowViewModel(
             wizard: wizard,
+            environment: environment
+        )
+        self.calibration = nil
+        self.calibration = CalibrationViewModel(
+            workflow: self,
+            profile: self.profile,
             environment: environment
         )
         reloadPresets()
@@ -339,6 +347,8 @@ final class TargetWorkflowViewModel {
                 customLabel: labelIsCustom ? customLabel : nil,
                 basename: wizard.basename,
                 metadata: labelMetadata),
+            calibrationFile: profile.applyCalibration ? profile.calibrationFile : nil,
+            calibrationEmbedOnly: false,
             basename: wizard.basename,
             workingDirectory: wizard.effectiveWorkingDirectory
         )

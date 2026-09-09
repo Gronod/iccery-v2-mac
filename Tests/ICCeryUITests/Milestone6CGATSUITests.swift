@@ -44,7 +44,10 @@ final class Milestone6CGATSUITests: XCTestCase {
     /// Must fail if import presents a save panel or a `.ti1` filter.
     func testImportUsesOpenPanelNotSaveTi1() throws {
         app.launch()
-        app.activate()
+
+        // CGATS import needs a working directory; the env provides one.
+        XCTAssertTrue(app.buttons["btnSelectWorkDir"].waitForExistence(timeout: 5))
+        app.buttons["btnSelectWorkDir"].tap()
 
         XCTAssertTrue(app.buttons["btn-import-dataset"].waitForExistence(timeout: 10))
         app.buttons["btn-import-dataset"].click()
@@ -54,8 +57,7 @@ final class Milestone6CGATSUITests: XCTestCase {
         XCTAssertFalse(savePanel.exists, "Import must use an open panel, never a save panel.")
 
         // The dataset should be accepted and the user should advance to Stage 4.
-        _ = app.otherElements["stage-4"].waitForExistence(timeout: 10)
-        XCTAssertTrue(app.otherElements["stage-4"].exists)
+        XCTAssertTrue(app.staticTexts["stage4TargetBasename"].waitForExistence(timeout: 10))
 
         // The canonical .ti3 should be written next to the source file.
         let ti3URL = testRoot.appendingPathComponent("imported.ti3")

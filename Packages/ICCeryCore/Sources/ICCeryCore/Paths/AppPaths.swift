@@ -15,8 +15,9 @@ public enum AppPaths {
 
     /// `~/Library/Application Support/com.gronod.iccery2`
     ///
-    /// DEBUG only: `ICCERY_TEST_ROOT` redirects app data so UI tests run
-    /// against an isolated root and never touch the developer's state.
+    /// DEBUG only: `ICCERY_TEST_ROOT` or `ICCERY_TEST_WORKDIR` redirect app
+    /// data so UI tests run against an isolated root and never touch the
+    /// developer's state.
     public static var appDataDir: URL {
         #if DEBUG
         if let root = testRoot {
@@ -42,10 +43,31 @@ public enum AppPaths {
     }
 
     #if DEBUG
+    /// DEBUG-only root override. Order:
+    /// 1. `ICCERY_TEST_ROOT` for an explicit test root.
+    /// 2. `ICCERY_TEST_WORKDIR` so the app data and log files live next to
+    ///    the current UI test's working directory.
+    /// 3. `ICCERY_UI_TESTING=1` creates a per-process temp root so a UI test
+    ///    that sets neither of the above still runs in isolation.
+    ///
+    /// Computed from `ProcessInfo` each call — no mutable static state.
     private static var testRoot: URL? {
-        guard let raw = ProcessInfo.processInfo.environment["ICCERY_TEST_ROOT"],
-              !raw.isEmpty else { return nil }
-        return URL(fileURLWithPath: raw, isDirectory: true)
+        if let raw = ProcessInfo.processInfo.environment["ICCERY_TEST_ROOT"],
+           !raw.isEmpty {
+            return URL(fileURLWithPath: raw, isDirectory: true)
+        }
+        if let raw = ProcessInfo.processInfo.environment["ICCERY_TEST_WORKDIR"],
+           !raw.isEmpty {
+            return URL(fileURLWithPath: raw, isDirectory: true)
+        }
+        if ProcessInfo.processInfo.environment["ICCERY_UI_TESTING"] == "1" {
+            return FileManager.default.temporaryDirectory
+                .appendingPathComponent(
+                    "iccery-ui-\(ProcessInfo.processInfo.processIdentifier)",
+                    isDirectory: true
+                )
+        }
+        return nil
     }
     #endif
 

@@ -85,6 +85,7 @@ struct Stage1View: View {
                 Button("Browse…") { workflow.browseForTargetFile() }
                     .accessibilityIdentifier("btnBrowse")
                 Button("Working Dir…") { workflow.browseForWorkingDirectory() }
+                    .accessibilityIdentifier("btnSelectWorkDir")
                 Button("Open Existing…") { workflow.openExistingTarget() }
                     .accessibilityIdentifier("btnOpenExisting")
                 Button("Import Dataset…") { workflow.importMeasurementDataset() }
