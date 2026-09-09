@@ -1,0 +1,14 @@
+#!/bin/sh
+# Mock colprof for Milestone 5 UI tests.
+# Writes {basename}.icc next to the last argument and emits progress.
+last=""
+for arg in "$@"; do last="$arg"; done
+if [ "${ICCERY_MOCK_COLPROF_EXIT:-0}" -ne 0 ]; then
+  echo "mock colprof failure" >&2
+  exit "$ICCERY_MOCK_COLPROF_EXIT"
+fi
+echo "Gamut mapping calculation..."
+echo "Fitting cLUT grid points..."
+echo "Writing ICC profile..."
+touch "$last.icc"
+exit 0

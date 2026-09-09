@@ -8,6 +8,11 @@ public enum ArgyllRunnerError: LocalizedError, Equatable, Sendable {
     case instrumentDetectionFailed(String)
     case chartreadFailed(String)
     case averageFailed(String)
+    case colprofFailed(String)
+    case applycalFailed(String)
+    case iccgamutFailed(String)
+    case profcheckFailed(String)
+    case profcheckUnparseable
 
     public var errorDescription: String? {
         switch self {
@@ -23,6 +28,16 @@ public enum ArgyllRunnerError: LocalizedError, Equatable, Sendable {
             return "Chartread failed: \(reason)"
         case .averageFailed(let reason):
             return "Averaging failed: \(reason)"
+        case .colprofFailed(let reason):
+            return "Profile creation failed: \(reason)"
+        case .applycalFailed(let reason):
+            return "Apply calibration failed: \(reason)"
+        case .iccgamutFailed(let reason):
+            return "Gamut extraction failed: \(reason)"
+        case .profcheckFailed(let reason):
+            return "Profile verification failed: \(reason)"
+        case .profcheckUnparseable:
+            return "Profile verification produced unparseable output"
         }
     }
 }
@@ -157,6 +172,7 @@ public struct ArgyllRunner: Sendable {
     private struct CollectedRun {
         var exitCode: Int32?
         var stdout: String
+        var stderr: String
         var lines: [String]
     }
 
@@ -170,6 +186,7 @@ public struct ArgyllRunner: Sendable {
     ) async -> CollectedRun {
         var lines: [String] = []
         var stdout = ""
+        var stderr = ""
         var pendingBatch: [String] = []
         var exitCode: Int32?
         var lastFlush = Date()
@@ -190,6 +207,7 @@ public struct ArgyllRunner: Sendable {
                 pendingBatch.append(line)
             case .stderr(_, let line):
                 lines.append(line)
+                stderr += line + "\n"
                 pendingBatch.append(line)
             case .error(_, let message):
                 lines.append("Error: \(message)")
@@ -211,7 +229,7 @@ public struct ArgyllRunner: Sendable {
                 break
             }
         }
-        return CollectedRun(exitCode: exitCode, stdout: stdout, lines: lines)
+        return CollectedRun(exitCode: exitCode, stdout: stdout, stderr: stderr, lines: lines)
     }
 
     // MARK: - instlist (Stage 3 detection)
@@ -301,6 +319,199 @@ public struct ArgyllRunner: Sendable {
             throw ArgyllRunnerError.missingArtefact(canonical.path)
         }
         return canonical
+    }
+
+    // MARK: - colprof (Stage 4)
+
+    /// Runs `colprof` streaming, collecting logs and classifying progress
+    /// until the profile is written.
+    public func runColprof(
+        config: ColprofConfig,
+        onLogBatch: (@Sendable ([String]) -> Void)? = nil
+    ) async throws -> URL {
+        let cleanBasename = try PathSecurity.sanitizeBasename(config.basename)
+        let cwd = PathSecurity.resolveSafeCwd(config.workingDirectory)
+        let args = try ColprofArgs.build(config: config)
+        let binaryURL = binaryResolver.resolve("colprof")
+        let processId = ProcessID.colprof(cleanBasename)
+
+        let events = processManager.events()
+        try await processManager.runStreaming(
+            id: processId,
+            binary: binaryURL,
+            arguments: args,
+            workingDirectory: cwd
+        )
+        let run = await collect(id: processId, events: events, onLogBatch: onLogBatch)
+
+        guard run.exitCode == 0 else {
+            throw ArgyllRunnerError.colprofFailed(
+                "colprof exited with code \(run.exitCode ?? -1)"
+            )
+        }
+
+        // Argyll may produce `.icm` on Windows, but on macOS we expect `.icc`.
+        // `resolveProfile` checks `.icm` first, then `.icc`, matching #69.
+        guard let profileURL = ArtefactProbe.resolveProfile(
+            basename: cleanBasename,
+            cwd: cwd
+        ) else {
+            let defaultURL = cwd.appendingPathComponent("\(cleanBasename).icc")
+            throw ArgyllRunnerError.missingArtefact(defaultURL.path)
+        }
+        return profileURL
+    }
+
+    // MARK: - applycal (post-colprof calibration curve)
+
+    /// Embeds a `.cal` curve into an `.icc`/`.icm` profile.
+    ///
+    /// Runs `applycal` captured and performs an in-place replace via
+    /// `{input}.applycal.tmp` then `replaceItemAt`. On failure the tmp
+    /// file is removed and the original is left untouched.
+    public func runApplycal(
+        config: ApplycalConfig
+    ) async throws -> URL {
+        let inputURL = config.inputProfileURL
+        let cwd = inputURL.deletingLastPathComponent()
+        let binaryURL = binaryResolver.resolve("applycal")
+        let processId = ProcessID.applycal(inputURL.lastPathComponent)
+
+        let tmpURL = inputURL.appendingPathExtension("applycal.tmp")
+        let fm = FileManager.default
+
+        // Remove any stale tmp from a previous crash.
+        try? fm.removeItem(at: tmpURL)
+
+        let outputConfig = ApplycalConfig(
+            calibrationPath: config.calibrationPath,
+            inputProfileURL: inputURL,
+            outputProfileURL: tmpURL,
+            unapply: false
+        )
+        let outputArgs = try ApplycalArgs.build(config: outputConfig)
+
+        let result = try await processManager.runCaptured(
+            id: processId,
+            binary: binaryURL,
+            arguments: outputArgs,
+            workingDirectory: cwd
+        )
+
+        guard result.exitCode == 0 else {
+            try? fm.removeItem(at: tmpURL)
+            throw ArgyllRunnerError.applycalFailed(
+                result.stderr.isEmpty
+                    ? "applycal exited with code \(result.exitCode)"
+                    : result.stderr
+            )
+        }
+
+        guard fm.fileExists(atPath: tmpURL.path) else {
+            throw ArgyllRunnerError.applycalFailed(
+                "applycal did not create temp profile"
+            )
+        }
+
+        do {
+            if fm.fileExists(atPath: inputURL.path) {
+                _ = try fm.replaceItemAt(inputURL, withItemAt: tmpURL)
+            } else {
+                try fm.moveItem(at: tmpURL, to: inputURL)
+            }
+        } catch {
+            try? fm.removeItem(at: tmpURL)
+            throw ArgyllRunnerError.applycalFailed(error.localizedDescription)
+        }
+
+        return inputURL
+    }
+
+    // MARK: - iccgamut (post-colprof gamut mesh)
+
+    /// Extracts a `.gam` mesh from the finished profile.
+    public func runIccgamut(
+        config: IccgamutConfig,
+        onLogBatch: (@Sendable ([String]) -> Void)? = nil
+    ) async throws -> URL {
+        let profileURL = config.profileURL
+        let cwd = profileURL.deletingLastPathComponent()
+        let stem = profileURL.deletingPathExtension().lastPathComponent
+        let args = try IccgamutArgs.build(config: config)
+        let binaryURL = binaryResolver.resolve("iccgamut")
+        let processId = ProcessID.iccgamut(stem: stem)
+
+        let events = processManager.events()
+        try await processManager.runStreaming(
+            id: processId,
+            binary: binaryURL,
+            arguments: args,
+            workingDirectory: cwd
+        )
+        let run = await collect(id: processId, events: events, onLogBatch: onLogBatch)
+
+        guard run.exitCode == 0 else {
+            throw ArgyllRunnerError.iccgamutFailed(
+                "iccgamut exited with code \(run.exitCode ?? -1)"
+            )
+        }
+
+        let gamURL = cwd.appendingPathComponent("\(stem).gam")
+        guard FileManager.default.fileExists(atPath: gamURL.path) else {
+            throw ArgyllRunnerError.missingArtefact(gamURL.path)
+        }
+        return gamURL
+    }
+
+    // MARK: - profcheck (Stage 5 verification)
+
+    /// Verifies a profile against the canonical `.ti3`.
+    public func runProfcheck(
+        config: ProfcheckConfig,
+        onLogBatch: (@Sendable ([String]) -> Void)? = nil
+    ) async throws -> ProfcheckReport {
+        let cwd = config.ti3URL.deletingLastPathComponent()
+        let ti3Path = config.ti3URL.path
+
+        let iccURL = Self.resolveProfileForVerification(config.iccURL)
+        let config = ProfcheckConfig(ti3URL: config.ti3URL, iccURL: iccURL)
+
+        let args = try ProfcheckArgs.build(config: config)
+        let binaryURL = binaryResolver.resolve("profcheck")
+        let processId = ProcessID.profcheck(ti3Path: ti3Path)
+
+        let events = processManager.events()
+        try await processManager.runStreaming(
+            id: processId,
+            binary: binaryURL,
+            arguments: args,
+            workingDirectory: cwd
+        )
+        let run = await collect(id: processId, events: events, onLogBatch: onLogBatch)
+
+        guard run.exitCode == 0 else {
+            throw ArgyllRunnerError.profcheckFailed(
+                run.stderr.isEmpty
+                    ? "profcheck exited with code \(run.exitCode ?? -1)"
+                    : run.stderr
+            )
+        }
+
+        let output = (run.stdout + "\n" + run.stderr).trimmingCharacters(in: .whitespacesAndNewlines)
+        let report = ProfcheckParser.parse(output)
+        guard report.isValid else {
+            throw ArgyllRunnerError.profcheckUnparseable
+        }
+        return report
+    }
+
+    private static func resolveProfileForVerification(_ url: URL) -> URL {
+        let fm = FileManager.default
+        if fm.fileExists(atPath: url.path) { return url }
+        let alt = url.pathExtension.lowercased() == "icc"
+            ? url.deletingPathExtension().appendingPathExtension("icm")
+            : url.deletingPathExtension().appendingPathExtension("icc")
+        return fm.fileExists(atPath: alt.path) ? alt : url
     }
 
     // MARK: - chartread (Stage 3 interactive)

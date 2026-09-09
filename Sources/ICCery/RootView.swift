@@ -64,6 +64,10 @@ struct RootView: View {
             Stage2View(workflow: workflow)
         case .measure:
             Stage3View(model: workflow.measurement)
+        case .buildProfile:
+            Stage4View(model: workflow.profile)
+        case .verifyInstall:
+            Stage5View(model: workflow.profile)
         default:
             StagePlaceholderView(stage: model.stage)
         }

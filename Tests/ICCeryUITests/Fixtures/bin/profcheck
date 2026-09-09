@@ -1,0 +1,12 @@
+#!/bin/sh
+# Mock profcheck for Milestone 5 UI tests.
+# Emits a JSON report and legacy text summary.
+if [ "${ICCERY_MOCK_PROFCHECK_EXIT:-0}" -ne 0 ]; then
+  echo "mock profcheck failure" >&2
+  exit "$ICCERY_MOCK_PROFCHECK_EXIT"
+fi
+echo "No of test patches = 52"
+sleep 0.1
+printf '{"event": "report", "peak_de2000": 2.41, "avg_de2000": 0.85, "rms": 1.02}\n'
+echo "Profile check complete, errors(CIEDE2000): max. = 2.41, avg. = 0.85, RMS = 1.02"
+exit 0

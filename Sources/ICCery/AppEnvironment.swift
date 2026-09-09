@@ -12,6 +12,7 @@ struct AppEnvironment: Sendable {
     let presetStore: PresetStore
     let runner: ArgyllRunner
     let cupsService: CupsService
+    let historyStore: VerificationHistoryStore
 
     static func live(
         environment: [String: String] = ProcessInfo.processInfo.environment
@@ -38,7 +39,8 @@ struct AppEnvironment: Sendable {
             ),
             cupsService: CupsService(
                 processManager: .shared,
-                binaryDir: cupsDir)
+                binaryDir: cupsDir),
+            historyStore: VerificationHistoryStore()
         )
     }
 }
