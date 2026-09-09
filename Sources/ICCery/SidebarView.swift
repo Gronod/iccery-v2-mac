@@ -7,6 +7,7 @@ struct SidebarView: View {
     @Bindable var workflow: TargetWorkflowViewModel
     var onOpenSettings: () -> Void
     var onOpenAbout: () -> Void
+    @Binding var showingAllHelp: Bool
 
     private var model: WizardViewModel { workflow.wizard }
 
@@ -22,12 +23,20 @@ struct SidebarView: View {
                     Image(systemName: "gearshape")
                 }
                 .buttonStyle(.plain)
-                .help("Settings")
+                .helpOverlay("Open the Settings dialog.", showing: $showingAllHelp)
+                .accessibilityIdentifier("openSettingsBtn")
                 Button(action: onOpenAbout) {
                     Image(systemName: "info.circle")
                 }
                 .buttonStyle(.plain)
-                .help("About ICCery")
+                .helpOverlay("Open the About dialog.", showing: $showingAllHelp)
+                .accessibilityIdentifier("openAboutBtn")
+                Button(action: { showingAllHelp.toggle() }) {
+                    Image(systemName: showingAllHelp ? "questionmark.circle.fill" : "questionmark.circle")
+                }
+                .buttonStyle(.plain)
+                .help("Toggle help overlays")
+                .accessibilityIdentifier("btnToggleAllHelp")
             }
             .padding(12)
 
