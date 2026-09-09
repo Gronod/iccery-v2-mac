@@ -122,11 +122,18 @@ final class TargetWorkflowViewModel {
     /// Stage 3 measurement workflow, owned at the app level so it persists
     /// across stage switches and can observe settings changes.
     var measurement: MeasurementWorkflowViewModel
+    /// Stage 4/5 profile workflow, owned at the app level so it persists
+    /// across stage switches and can apply preset values.
+    var profile: ProfileWorkflowViewModel
 
     init(environment: AppEnvironment = .live()) {
         self.environment = environment
         self.wizard = WizardViewModel(stateStore: environment.stateStore)
         self.measurement = MeasurementWorkflowViewModel(
+            wizard: wizard,
+            environment: environment
+        )
+        self.profile = ProfileWorkflowViewModel(
             wizard: wizard,
             environment: environment
         )
@@ -535,6 +542,8 @@ final class TargetWorkflowViewModel {
         }
         customSeed = preset.randomSeed ?? 1
 
+        profile.applyPreset(preset)
+
         selectedPresetID = preset.id
     }
 
@@ -571,7 +580,17 @@ final class TargetWorkflowViewModel {
             bitDepth: bitDepth.rawValue,
             dpi: tiffDpi,
             randomSeed: layoutOrder == .deterministic ? 1 : customSeed,
-            noRandomize: layoutOrder == .raster
+            noRandomize: layoutOrder == .raster,
+            calibrationFile: profile.calibrationFile.isEmpty ? nil : profile.calibrationFile,
+            applyCalibration: profile.applyCalibration ? true : nil,
+            colprofAlgorithm: profile.algorithm,
+            colprofQuality: profile.quality,
+            colprofIntent: profile.intent.isEmpty ? nil : profile.intent,
+            colprofFwa: profile.fwaValue,
+            colprofIlluminant: profile.illuminant.isEmpty ? nil : profile.illuminant,
+            colprofObserver: profile.observer.isEmpty ? nil : profile.observer,
+            colprofInputViewingCond: profile.inputViewingCond.isEmpty ? nil : profile.inputViewingCond,
+            colprofOutputViewingCond: profile.outputViewingCond.isEmpty ? nil : profile.outputViewingCond
         )
         do {
             try environment.presetStore.saveCustom(preset)

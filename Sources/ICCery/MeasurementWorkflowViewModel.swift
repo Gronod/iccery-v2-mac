@@ -305,6 +305,10 @@ final class MeasurementWorkflowViewModel {
         environment.runner.cancelChartread(basename: basename, isXY: selectedInstrument.isXY)
         chartreadTask?.cancel()
         isChartreadRunning = false
+        chartreadState = .idle
+        currentPrompt = nil
+        requestedWarningKey = nil
+        showRemoveSheetNotice = false
     }
 
     func sendWarningKey(_ key: String) {

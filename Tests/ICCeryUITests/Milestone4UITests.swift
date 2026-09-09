@@ -93,7 +93,6 @@ final class Milestone4UITests: XCTestCase {
     /// End-to-end handheld chartread with the mock fixture produces a
     /// canonical .ti3 and unlocks Stage 4.
     func testHandheldFixtureChartreadAndAverage() throws {
-        try XCTSkipIf(true, "Full interactive chartread UI requires fixture timing tuning; skipped for CI stability. Core chartread/arteffact tests cover the model.")
         reachStage3()
 
         app.buttons["btnDetectInstruments"].click()
@@ -113,19 +112,21 @@ final class Milestone4UITests: XCTestCase {
         app.buttons["btnCalibrate"].click()
 
         // Trigger strip A.
-        _ = waitFor("btnCalibrate", timeout: 20)
-        app.buttons["btnCalibrate"].click()
+        _ = waitFor("btnTrigger", timeout: 20)
+        app.buttons["btnTrigger"].click()
 
         // Trigger strip B.
-        _ = waitFor("btnCalibrate", timeout: 20)
-        app.buttons["btnCalibrate"].click()
+        _ = waitFor("btnTrigger", timeout: 20)
+        app.buttons["btnTrigger"].click()
 
         // All strips read → Done & Save appears.
         _ = waitFor("btnDoneRead", timeout: 20)
         app.buttons["btnDoneRead"].firstMatch.click()
 
         // Averaging panel appears with one pass snapshot.
+        _ = waitFor("chartreadAveragingPanel", timeout: 20)
         _ = waitFor("passCounterBadge", timeout: 20)
+        XCTAssertTrue(app.buttons["btnFinishAndAverage"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["btnFinishAndAverage"].isEnabled)
 
         app.buttons["btnFinishAndAverage"].click()

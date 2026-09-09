@@ -39,7 +39,7 @@ def main():
 
     def read_input():
         line = read_line()
-        if not line:
+        if line == "":
             sys.exit(1)
         return line.strip()
 
