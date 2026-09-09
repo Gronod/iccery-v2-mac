@@ -109,6 +109,9 @@ final class TargetWorkflowViewModel {
     var printNotice: String?
     var printNoticeIsError = false
     var isPrinting = false
+    /// Strong reference to the active print task so the unstructured
+    /// `Task` is not dropped before it resumes.
+    private var printTask: Task<Void, Never>?
 
     // MARK: - Presets
 
@@ -480,7 +483,9 @@ final class TargetWorkflowViewModel {
     func printAllPages() {
         guard let result = printtargResult, !isPrinting else { return }
         isPrinting = true
-        Task { @MainActor in
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.printTask = nil }
             var printed = 0
             for page in result.pages {
                 do {
@@ -498,13 +503,16 @@ final class TargetWorkflowViewModel {
             printNoticeIsError = false
             isPrinting = false
         }
+        printTask = task
     }
 
     /// `#btnPrintPage-N` — one TIFF.
     func printPage(_ page: GalleryPage) {
         guard !isPrinting else { return }
         isPrinting = true
-        Task { @MainActor in
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { self.printTask = nil }
             do {
                 try await spool(page, index: page.index)
                 printNotice = "Sent \(page.page.filename) to \(selectedPrinter)."
@@ -515,6 +523,7 @@ final class TargetWorkflowViewModel {
             }
             isPrinting = false
         }
+        printTask = task
     }
 
     private func spool(_ page: GalleryPage, index: Int) async throws {

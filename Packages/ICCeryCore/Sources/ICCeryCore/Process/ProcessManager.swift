@@ -179,6 +179,14 @@ public actor ProcessManager {
 
         do {
             try process.run()
+            // Fallback watchdog: very fast child exits can race past the
+            // terminationHandler delivery on a loaded host. waitUntilExit()
+            // blocks the detached thread and guarantees didTerminate runs.
+            Task.detached { [weak self, process] in
+                process.waitUntilExit()
+                guard let self else { return }
+                await self.didTerminate(id: id, code: process.terminationStatus)
+            }
         } catch {
             preKillHooks.removeValue(forKey: id)
             children.removeValue(forKey: id)
@@ -273,6 +281,14 @@ public actor ProcessManager {
 
         do {
             try process.run()
+            // Fallback watchdog: very fast child exits can race past the
+            // terminationHandler delivery on a loaded host. waitUntilExit()
+            // blocks the detached thread and resumes the box if the handler
+            // did not already do so (#50, #52).
+            Task.detached { [capturedProcess] in
+                capturedProcess.waitUntilExit()
+                _ = box.resume(with: capturedProcess.terminationStatus)
+            }
         } catch {
             _ = box.resume(with: -1)
             captured.removeValue(forKey: id)
