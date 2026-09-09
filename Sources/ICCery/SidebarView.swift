@@ -74,14 +74,13 @@ struct SidebarView: View {
             .padding(.horizontal, 12)
             .padding(.bottom, 8)
 
-            // Calibrate Printer (`#btnCalibratePrinter`). Disabled until
-            // Stage 0 lands in issue #29; `#calStatusChip` likewise.
+            // Calibrate Printer (`#btnCalibratePrinter`).
             Button(action: { model.enterCalibration() }) {
                 Label("Calibrate Printer", systemImage: "slider.horizontal.3")
                     .frame(maxWidth: .infinity)
             }
             .controlSize(.large)
-            .disabled(true)
+            .accessibilityIdentifier("btnCalibratePrinter")
             .padding(.horizontal, 12)
 
             Button(action: { model.openGamut(profileGamURL: workflow.profile.createdGamutURL) }) {

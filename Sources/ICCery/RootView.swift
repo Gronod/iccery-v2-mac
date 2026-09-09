@@ -53,7 +53,10 @@ struct RootView: View {
         .sheet(isPresented: $showingAbout) {
             AboutView { showingAbout = false }
         }
-        .sheet(isPresented: $workflow.wizard.showingGamutViewer) {
+        .sheet(isPresented: Binding(
+            get: { workflow.wizard.showingGamutViewer },
+            set: { workflow.wizard.showingGamutViewer = $0 }
+        )) {
             GamutView(profileGamURL: workflow.wizard.gamutProfileURL)
         }
     }
@@ -71,7 +74,9 @@ struct RootView: View {
             Stage4View(model: workflow.profile)
         case .verifyInstall:
             Stage5View(model: workflow.profile)
-        default:
+        case .calibrate:
+            CalibrationView(model: workflow.calibration)
+        @unknown default:
             StagePlaceholderView(stage: model.stage)
         }
     }
