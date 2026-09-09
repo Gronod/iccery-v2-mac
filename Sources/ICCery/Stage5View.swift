@@ -146,6 +146,12 @@ struct Stage5View: View {
 
                 Spacer()
 
+                Button("View Gamut") {
+                    model.wizard.openGamut(profileGamURL: model.createdGamutURL)
+                }
+                .disabled(model.createdGamutURL == nil)
+                .accessibilityIdentifier("btnViewGamut")
+
                 Button("Install Profile") { model.beginInstallProfile() }
                     .disabled(model.createdProfileURL == nil)
                     .accessibilityIdentifier("btnInstallProfile")

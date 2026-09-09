@@ -52,6 +52,8 @@ final class ProfileWorkflowViewModel {
     var colprofProgress: String?
     var lastError: String?
     var createdProfileURL: URL?
+    /// Path to the `.gam` gamut mesh extracted post-`colprof` (issue #28).
+    var createdGamutURL: URL?
 
     // MARK: - Stage 4/5 calibration (issue #24)
 
@@ -84,12 +86,17 @@ final class ProfileWorkflowViewModel {
         restoreCreatedProfileURL()
     }
 
-    /// Restores `createdProfileURL` from the wizard artefacts or by probing
-    /// the working directory for an existing `.icc`/`.icm` (#52).
+    /// Restores `createdProfileURL` and `createdGamutURL` from the wizard
+    /// artefacts or by probing the working directory (#52, #28).
     func restoreCreatedProfileURL() {
         let cwd = wizard.effectiveWorkingDirectory ?? PathSecurity.resolveSafeCwd(nil)
         createdProfileURL = wizard.artefacts.profilePath
             ?? ArtefactProbe.resolveProfile(basename: wizard.basename, cwd: cwd)
+        createdGamutURL = wizard.artefacts.gamPath
+            ?? ArtefactProbe.artefact(wizard.basename, "gam", cwd)
+        if let gam = createdGamutURL, !FileManager.default.fileExists(atPath: gam.path) {
+            createdGamutURL = nil
+        }
     }
 
     // MARK: - Derived
@@ -190,6 +197,7 @@ final class ProfileWorkflowViewModel {
         colprofProgress = nil
         lastError = nil
         createdProfileURL = nil
+        createdGamutURL = nil
 
         let runner = environment.runner
         Task { @MainActor [weak self] in
@@ -223,12 +231,13 @@ final class ProfileWorkflowViewModel {
                 // Gamut extraction is best-effort for Stage 5 / M6 viewer.
                 do {
                     let gamConfig = IccgamutConfig(profileURL: finalProfileURL)
-                    _ = try await runner.runIccgamut(config: gamConfig) { [weak self] batch in
+                    let gamURL = try await runner.runIccgamut(config: gamConfig) { [weak self] batch in
                         Task { @MainActor [weak self] in
                             self?.colprofLog.append(contentsOf: batch)
                         }
                     }
-                    self.colprofLog.append("Gamut mesh extracted.")
+                    self.createdGamutURL = gamURL
+                    self.colprofLog.append("Gamut mesh extracted: \(gamURL.lastPathComponent)")
                 } catch {
                     self.wizard.showNotice(
                         "Gamut extraction skipped: \(error.localizedDescription)",

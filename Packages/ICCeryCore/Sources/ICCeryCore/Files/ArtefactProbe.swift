@@ -12,19 +12,23 @@ public struct StageArtefacts: Sendable, Equatable {
     public var stage4Complete = false
     /// Absolute path of the profile file when present.
     public var profilePath: URL?
+    /// Absolute path of the `.gam` gamut mesh when present (issue #28).
+    public var gamPath: URL?
 
     public init(
         stage1Complete: Bool = false,
         stage2Complete: Bool = false,
         stage3Complete: Bool = false,
         stage4Complete: Bool = false,
-        profilePath: URL? = nil
+        profilePath: URL? = nil,
+        gamPath: URL? = nil
     ) {
         self.stage1Complete = stage1Complete
         self.stage2Complete = stage2Complete
         self.stage3Complete = stage3Complete
         self.stage4Complete = stage4Complete
         self.profilePath = profilePath
+        self.gamPath = gamPath
     }
 }
 
@@ -45,6 +49,10 @@ public enum ArtefactProbe {
         if let profile = resolveProfile(basename: basename, cwd: cwd, fileManager: fileManager) {
             out.stage4Complete = true
             out.profilePath = profile
+            let gam = artefact(basename, "gam", cwd)
+            if exists(gam, fm: fileManager) {
+                out.gamPath = gam
+            }
         }
         return out
     }

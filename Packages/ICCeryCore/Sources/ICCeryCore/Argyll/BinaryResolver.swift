@@ -88,9 +88,10 @@ public struct BinaryResolver: Sendable {
 
     /// Bundled reference gamut (`Resources/Argyll/reference_gamuts/`).
     public func referenceGamut(_ name: String) -> URL {
-        bundledRoot
+        let stem = name.hasSuffix(".gam") ? name : "\(name).gam"
+        return bundledRoot
             .appendingPathComponent("reference_gamuts", isDirectory: true)
-            .appendingPathComponent(name, isDirectory: false)
+            .appendingPathComponent(stem, isDirectory: false)
     }
 
     /// Whether the resolved path exists and is executable.

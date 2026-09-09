@@ -53,6 +53,9 @@ struct RootView: View {
         .sheet(isPresented: $showingAbout) {
             AboutView { showingAbout = false }
         }
+        .sheet(isPresented: $workflow.wizard.showingGamutViewer) {
+            GamutView(profileGamURL: workflow.wizard.gamutProfileURL)
+        }
     }
 
     @ViewBuilder
