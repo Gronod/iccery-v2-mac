@@ -170,6 +170,24 @@ struct ProcessManagerTests {
         #expect(result.exitCode == 3)
     }
 
+    @Test func capturedRunFastExit() async throws {
+        let pm = ProcessManager()
+        let bin = try script("fast.sh", "#!/bin/sh\nexit 7\n")
+        let result = try await pm.runCaptured(id: "fast", binary: bin, arguments: [])
+        #expect(result.exitCode == 7)
+        #expect(result.stdout == "")
+        #expect(result.stderr == "")
+    }
+
+    @Test func capturedRunStderrOnly() async throws {
+        let pm = ProcessManager()
+        let bin = try script("stderr-only.sh", "#!/bin/sh\necho 'mock lp failure' 1>&2\nexit 1\n")
+        let result = try await pm.runCaptured(id: "stderr-only", binary: bin, arguments: [])
+        #expect(result.exitCode == 1)
+        #expect(result.stdout == "")
+        #expect(result.stderr.contains("mock lp failure"))
+    }
+
     @Test func capturedRunDoesNotDeadlockOnLargeOutput() async throws {
         let pm = ProcessManager()
         // 5000 lines each stream exceeds the 64 KiB pipe buffer.
