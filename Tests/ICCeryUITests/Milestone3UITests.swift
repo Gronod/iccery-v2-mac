@@ -49,6 +49,23 @@ final class Milestone3UITests: XCTestCase {
         testRoot = nil
     }
 
+    private func waitForFileContent(
+        _ url: URL,
+        containing needle: String,
+        timeout: TimeInterval = 10
+    ) -> String? {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let data = try? Data(contentsOf: url),
+               let text = String(data: data, encoding: .utf8),
+               text.contains(needle) {
+                return text
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        return (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+    }
+
     private func launchApp() {
         app.launch()
         app.activate()
@@ -171,6 +188,14 @@ final class Milestone3UITests: XCTestCase {
         reachPrintPanel()
         _ = waitFor("printerStatusBadge")
 
+        // Wait for the async printer enumeration to select a queue; once
+        // `btnPrintAll` is enabled, `btnPrintPage-0` is too.
+        let deadline = Date().addingTimeInterval(15)
+        while Date() < deadline, !app.buttons["btnPrintAll"].isEnabled {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        XCTAssertTrue(app.buttons["btnPrintAll"].isEnabled)
+
         app.buttons["btnPrintPage-0"].click()
         let argv = waitForLpLine()
         XCTAssertTrue(argv.contains("AP_ColorMatchingMode"), argv)
@@ -202,18 +227,11 @@ final class Milestone3UITests: XCTestCase {
         let stateURL = testRoot
             .appendingPathComponent("AppData")
             .appendingPathComponent("wizard_state.json")
-        XCTAssertTrue(waitForFile(stateURL))
-        let data = try Data(contentsOf: stateURL)
-        let state = String(data: data, encoding: .utf8) ?? ""
-        XCTAssertTrue(state.contains("Mock_Epson_7450"), state)
+        let state = waitForFileContent(
+            stateURL, containing: "Mock_Epson_7450", timeout: 15)
+        XCTAssertNotNil(state)
+        XCTAssertTrue((state ?? "").contains("Mock_Epson_7450"))
     }
 
-    private func waitForFile(_ url: URL, timeout: TimeInterval = 10) -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            if FileManager.default.fileExists(atPath: url.path) { return true }
-            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
-        }
-        return false
-    }
+
 }
