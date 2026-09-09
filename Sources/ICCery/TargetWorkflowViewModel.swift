@@ -123,8 +123,10 @@ final class TargetWorkflowViewModel {
     /// across stage switches and can observe settings changes.
     var measurement: MeasurementWorkflowViewModel
     /// Stage 4/5 profile workflow, owned at the app level so it persists
-    /// across stage switches and can apply preset values.
+    /// across stage switches and can observe preset values.
     var profile: ProfileWorkflowViewModel
+    /// Stage 0 calibration workflow.
+    var calibration: CalibrationViewModel!
 
     init(environment: AppEnvironment = .live()) {
         self.environment = environment
@@ -135,6 +137,12 @@ final class TargetWorkflowViewModel {
         )
         self.profile = ProfileWorkflowViewModel(
             wizard: wizard,
+            environment: environment
+        )
+        self.calibration = nil
+        self.calibration = CalibrationViewModel(
+            workflow: self,
+            profile: self.profile,
             environment: environment
         )
         reloadPresets()
@@ -243,6 +251,43 @@ final class TargetWorkflowViewModel {
 
     // MARK: - Issue 8: resume an existing target
 
+    /// `#btn-import-dataset` — open a measured dataset, write a canonical
+    /// `.ti3` to the working directory, and set the target (issue #30).
+    func importMeasurementDataset() {
+        let url = UITestHooks.isEnabled
+            ? UITestHooks.datasetImportURL
+            : fileDialogs.selectDatasetFile()
+        guard let url else { return }
+
+        do {
+            let dataset = try CGATSParser.parse(url: url)
+            guard let directory = targetDirectory ?? wizard.effectiveWorkingDirectory else {
+                wizard.showNotice("Choose a working directory before importing.", kind: .warning)
+                return
+            }
+
+            let stem = url.deletingPathExtension().lastPathComponent
+            let output = directory.appendingPathComponent("\(stem).ti3")
+            try CGATSWriter.write(dataset, to: output)
+
+            wizard.setTarget(basename: stem, workingDirectory: directory)
+            wizard.refreshGating()
+            wizard.showNotice("Imported \(dataset.samples.count) patches from \(url.lastPathComponent)")
+
+            if wizard.isUnlocked(.verifyInstall) {
+                wizard.go(to: .verifyInstall)
+            } else if wizard.isUnlocked(.buildProfile) {
+                wizard.go(to: .buildProfile)
+            } else {
+                wizard.showNotice("Imported dataset is not ready for profiling.", kind: .warning)
+            }
+        } catch let error as CGATSParseError {
+            wizard.showNotice("Import failed: \(error.localizedDescription)", kind: .error)
+        } catch {
+            wizard.showNotice("Import failed: \(error.localizedDescription)", kind: .error)
+        }
+    }
+
     /// `#btnOpenExisting` — open `.ti1`/`.ti2` (open dialog, #103).
     /// `.ti1` → Stage 2; `.ti2` → Stage 3 with the resume notice, but
     /// only when the sibling `.ti1` exists so the artefact gate holds.
@@ -302,6 +347,8 @@ final class TargetWorkflowViewModel {
                 customLabel: labelIsCustom ? customLabel : nil,
                 basename: wizard.basename,
                 metadata: labelMetadata),
+            calibrationFile: profile.applyCalibration ? profile.calibrationFile : nil,
+            calibrationEmbedOnly: false,
             basename: wizard.basename,
             workingDirectory: wizard.effectiveWorkingDirectory
         )

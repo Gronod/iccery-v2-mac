@@ -85,11 +85,11 @@ struct Stage1View: View {
                 Button("Browse…") { workflow.browseForTargetFile() }
                     .accessibilityIdentifier("btnBrowse")
                 Button("Working Dir…") { workflow.browseForWorkingDirectory() }
+                    .accessibilityIdentifier("btnSelectWorkDir")
                 Button("Open Existing…") { workflow.openExistingTarget() }
                     .accessibilityIdentifier("btnOpenExisting")
-                Button("Import Dataset…") { /* CGATS import — #94, later */ }
+                Button("Import Dataset…") { workflow.importMeasurementDataset() }
                     .accessibilityIdentifier("btn-import-dataset")
-                    .disabled(true)
             }
             Text(workflow.targetDirectory?.path ?? "No working directory selected")
                 .font(.caption)

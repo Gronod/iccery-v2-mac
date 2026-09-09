@@ -1,5 +1,5 @@
 #!/bin/sh
-# Mock iccgamut for Milestone 5 UI tests.
+# Mock iccgamut for Milestone 5/6 UI tests.
 # Writes {stem}.gam next to the profile path.
 last=""
 for arg in "$@"; do last="$arg"; done
@@ -9,5 +9,9 @@ if [ "${ICCERY_MOCK_ICCGAMUT_EXIT:-0}" -ne 0 ]; then
 fi
 stem=$(basename "$last" | sed 's/\.icc$//; s/\.icm$//')
 dir=$(dirname "$last")
-touch "$dir/$stem.gam"
+if [ -n "${ICCERY_MOCK_GAMUT_SOURCE}" ] && [ -f "${ICCERY_MOCK_GAMUT_SOURCE}" ]; then
+  cp "${ICCERY_MOCK_GAMUT_SOURCE}" "$dir/$stem.gam"
+else
+  touch "$dir/$stem.gam"
+fi
 exit 0

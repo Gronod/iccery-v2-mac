@@ -25,6 +25,7 @@ targets:
     dependencies:
       - package: ICCeryCore
         product: ICCeryCore
+      - sdk: SceneKit.framework
     postBuildScripts:
       - name: Copy Argyll sidecars
         script: |

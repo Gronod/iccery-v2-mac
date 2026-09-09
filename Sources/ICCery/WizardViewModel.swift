@@ -42,6 +42,10 @@ final class WizardViewModel {
     var notice: Notice?
     /// Current artefact probe result; recomputed on `refreshGating()`.
     private(set) var artefacts = StageArtefacts()
+    /// Whether the 3D gamut viewer sheet is open (issue #28).
+    var showingGamutViewer = false
+    /// Optional `.gam` URL to show alongside the sRGB reference.
+    var gamutProfileURL: URL?
 
     private let stateStore: WizardStateStore
     private var noticeDismissTask: Task<Void, Never>?
@@ -124,6 +128,12 @@ final class WizardViewModel {
     func exitCalibration() {
         sessionMode = .profile
         stage = .generate
+    }
+
+    /// Open the 3D gamut viewer (issue #28).
+    func openGamut(profileGamURL: URL? = nil) {
+        self.gamutProfileURL = profileGamURL
+        showingGamutViewer = true
     }
 
     /// Window-focus hook (#151): files deleted in Finder re-lock stages.

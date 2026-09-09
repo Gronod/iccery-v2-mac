@@ -8,6 +8,7 @@ struct RootView: View {
     @Bindable var workflow: TargetWorkflowViewModel
     @State private var showingSettings = false
     @State private var showingAbout = false
+    @State private var showingAllHelp = false
 
     private var model: WizardViewModel { workflow.wizard }
 
@@ -16,7 +17,8 @@ struct RootView: View {
             SidebarView(
                 workflow: workflow,
                 onOpenSettings: { showingSettings = true },
-                onOpenAbout: { showingAbout = true }
+                onOpenAbout: { showingAbout = true },
+                showingAllHelp: $showingAllHelp
             )
 
             Rectangle()
@@ -48,10 +50,14 @@ struct RootView: View {
         .sheet(isPresented: $workflow.showingManagePresets) {
             ManagePresetsDialog(workflow: workflow)
         }
-        .alert("ICCery 2.0.0", isPresented: $showingAbout) {
-            Button("OK") {}
-        } message: {
-            Text("Native macOS printer profiling workstation.\nFull About dialog lands in issue #31.")
+        .sheet(isPresented: $showingAbout) {
+            AboutView { showingAbout = false }
+        }
+        .sheet(isPresented: Binding(
+            get: { workflow.wizard.showingGamutViewer },
+            set: { workflow.wizard.showingGamutViewer = $0 }
+        )) {
+            GamutView(profileGamURL: workflow.wizard.gamutProfileURL)
         }
     }
 
@@ -68,7 +74,9 @@ struct RootView: View {
             Stage4View(model: workflow.profile)
         case .verifyInstall:
             Stage5View(model: workflow.profile)
-        default:
+        case .calibrate:
+            CalibrationView(model: workflow.calibration)
+        @unknown default:
             StagePlaceholderView(stage: model.stage)
         }
     }

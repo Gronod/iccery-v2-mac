@@ -7,6 +7,7 @@ struct SidebarView: View {
     @Bindable var workflow: TargetWorkflowViewModel
     var onOpenSettings: () -> Void
     var onOpenAbout: () -> Void
+    @Binding var showingAllHelp: Bool
 
     private var model: WizardViewModel { workflow.wizard }
 
@@ -22,12 +23,20 @@ struct SidebarView: View {
                     Image(systemName: "gearshape")
                 }
                 .buttonStyle(.plain)
-                .help("Settings")
+                .helpOverlay("Open the Settings dialog.", showing: $showingAllHelp)
+                .accessibilityIdentifier("openSettingsBtn")
                 Button(action: onOpenAbout) {
                     Image(systemName: "info.circle")
                 }
                 .buttonStyle(.plain)
-                .help("About ICCery")
+                .helpOverlay("Open the About dialog.", showing: $showingAllHelp)
+                .accessibilityIdentifier("openAboutBtn")
+                Button(action: { showingAllHelp.toggle() }) {
+                    Image(systemName: showingAllHelp ? "questionmark.circle.fill" : "questionmark.circle")
+                }
+                .buttonStyle(.plain)
+                .help("Toggle help overlays")
+                .accessibilityIdentifier("btnToggleAllHelp")
             }
             .padding(12)
 
@@ -65,14 +74,21 @@ struct SidebarView: View {
             .padding(.horizontal, 12)
             .padding(.bottom, 8)
 
-            // Calibrate Printer (`#btnCalibratePrinter`). Disabled until
-            // Stage 0 lands in issue #29; `#calStatusChip` likewise.
+            // Calibrate Printer (`#btnCalibratePrinter`).
             Button(action: { model.enterCalibration() }) {
                 Label("Calibrate Printer", systemImage: "slider.horizontal.3")
                     .frame(maxWidth: .infinity)
             }
             .controlSize(.large)
-            .disabled(true)
+            .accessibilityIdentifier("btnCalibratePrinter")
+            .padding(.horizontal, 12)
+
+            Button(action: { model.openGamut(profileGamURL: workflow.profile.createdGamutURL) }) {
+                Label("View Gamut", systemImage: "view.3d")
+                    .frame(maxWidth: .infinity)
+            }
+            .controlSize(.large)
+            .accessibilityIdentifier("btnViewGamut")
             .padding(.horizontal, 12)
 
             Divider().overlay(Theme.border)

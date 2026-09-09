@@ -1,0 +1,25 @@
+#!/bin/sh
+# Mock printcal for Stage 0 calibration tests. Creates the .cal named by
+# the -o argument in the process working directory. Exit code overridable
+# via ICCERY_MOCK_PRINTCAL_EXIT.
+output=""
+basename=""
+prev=""
+for arg in "$@"; do
+  if [ "$prev" = "-o" ]; then
+    output="$arg"
+  fi
+  prev="$arg"
+done
+# If no -o, derive from the last positional argument.
+if [ -z "$output" ]; then
+  for arg in "$@"; do basename="$arg"; done
+  output="$basename.cal"
+fi
+if [ "${ICCERY_MOCK_PRINTCAL_EXIT:-0}" -ne 0 ]; then
+  echo "mock printcal failure" >&2
+  exit "$ICCERY_MOCK_PRINTCAL_EXIT"
+fi
+echo "ideal power 1.0, device power 0.8"
+touch "$output"
+exit 0
