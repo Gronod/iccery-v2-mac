@@ -84,6 +84,14 @@ struct SidebarView: View {
             .disabled(true)
             .padding(.horizontal, 12)
 
+            Button(action: { model.openGamut(profileGamURL: workflow.profile.createdGamutURL) }) {
+                Label("View Gamut", systemImage: "view.3d")
+                    .frame(maxWidth: .infinity)
+            }
+            .controlSize(.large)
+            .accessibilityIdentifier("btnViewGamut")
+            .padding(.horizontal, 12)
+
             Divider().overlay(Theme.border)
                 .padding(.vertical, 8)
 
