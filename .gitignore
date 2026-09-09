@@ -20,3 +20,9 @@ ICCery.xcodeproj/
 
 # macOS
 .DS_Store
+
+# Release artefacts (not git blobs)
+*.dmg
+*.zip
+Release/
+notarization/
