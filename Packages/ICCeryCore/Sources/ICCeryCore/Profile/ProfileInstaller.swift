@@ -33,10 +33,32 @@ public enum ProfileInstallError: LocalizedError, Equatable, Sendable {
 /// Installs an ICC/ICM profile into the OS colour store.
 public enum ProfileInstaller {
 
+    /// Resolves the destination URL that `install` would write to for the
+    /// given source and options, without copying anything. Useful for
+    /// collision previews in the UI.
+    public static func resolveDestinationURL(
+        for config: InstallProfileConfig,
+        fileManager: FileManager = .default
+    ) throws -> URL {
+        let sourceURL = config.sourceURL
+        let ext = sourceURL.pathExtension.lowercased()
+        guard ext == "icc" || ext == "icm" else {
+            throw ProfileInstallError.sourceNotProfile
+        }
+
+        try validateSourceURL(sourceURL)
+
+        let destDir = destinationDirectory(for: config.options, fileManager: fileManager)
+        return destDir.appendingPathComponent(sourceURL.lastPathComponent)
+    }
+
     /// Installs `sourceURL` into `~/Library/ColorSync/Profiles` or
     /// `/Library/ColorSync/Profiles`. Always copies, never moves.
-    public static func install(config: InstallProfileConfig) throws -> InstallProfileResult {
-        let fm = FileManager.default
+    public static func install(
+        config: InstallProfileConfig,
+        fileManager: FileManager = .default
+    ) throws -> InstallProfileResult {
+        let fm = fileManager
 
         // Source validation.
         let sourceURL = config.sourceURL
@@ -55,38 +77,37 @@ public enum ProfileInstaller {
             throw ProfileInstallError.sourceTooSmall
         }
 
-        // Stem security.
-        let stem = sourceURL.deletingPathExtension().lastPathComponent
-        guard !stem.contains("..") && !stem.contains("/") && !stem.contains("\\") else {
-            throw ProfileInstallError.unsafeStem(stem)
-        }
+        try validateSourceURL(sourceURL)
 
         // Destination directory.
-        let destDir: URL
-        if config.options.preferSystem {
-            destDir = URL(fileURLWithPath: "/Library/ColorSync/Profiles")
-        } else {
-            let home = fm.homeDirectoryForCurrentUser
-            destDir = home.appendingPathComponent("Library/ColorSync/Profiles")
-        }
-
-        // Ensure parent exists.
-        try? fm.createDirectory(at: destDir, withIntermediateDirectories: true)
-
-        let destURL = destDir.appendingPathComponent("\(stem).icc")
+        let destURL = try resolveDestinationURL(for: config, fileManager: fm)
+        try? fm.createDirectory(
+            at: destURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
 
         // Collision resolution.
         let destExists = fm.fileExists(atPath: destURL.path)
         if destExists {
             if config.options.forceOverwrite {
-                // Continue to overwrite path.
+                return try performInstall(
+                    from: sourceURL,
+                    to: destURL,
+                    options: config.options,
+                    fileManager: fm,
+                    overwritten: true,
+                    renamed: false
+                )
             } else if config.options.collisionPolicy == .rename {
                 let epoch = Int(Date().timeIntervalSince1970)
-                let renamedURL = destDir.appendingPathComponent("\(stem)-\(epoch).icc")
+                let stem = sourceURL.deletingPathExtension().lastPathComponent
+                let renamedURL = destURL.deletingLastPathComponent()
+                    .appendingPathComponent("\(stem)-\(epoch).\(ext)")
                 return try performInstall(
                     from: sourceURL,
                     to: renamedURL,
                     options: config.options,
+                    fileManager: fm,
                     overwritten: false,
                     renamed: true
                 )
@@ -102,19 +123,53 @@ public enum ProfileInstaller {
             from: sourceURL,
             to: destURL,
             options: config.options,
-            overwritten: destExists,
+            fileManager: fm,
+            overwritten: false,
             renamed: false
         )
+    }
+
+    // MARK: - Private helpers
+
+    private static func validateSourceURL(_ sourceURL: URL) throws {
+        let path = sourceURL.path
+        let stem = sourceURL.deletingPathExtension().lastPathComponent
+
+        // Reject backslashes anywhere in the path.
+        guard !path.contains("\\") else {
+            throw ProfileInstallError.unsafeStem(stem)
+        }
+
+        // Reject any path component that is literally "." or "..".
+        // This allows names like "foo..bar" while blocking real traversal.
+        for component in sourceURL.pathComponents {
+            if component == "." || component == ".." {
+                throw ProfileInstallError.unsafeStem(stem)
+            }
+        }
+    }
+
+    private static func destinationDirectory(
+        for options: InstallProfileOptions,
+        fileManager: FileManager
+    ) -> URL {
+        if options.preferSystem {
+            return URL(fileURLWithPath: "/Library/ColorSync/Profiles")
+        } else {
+            return fileManager.homeDirectoryForCurrentUser
+                .appendingPathComponent("Library/ColorSync/Profiles")
+        }
     }
 
     private static func performInstall(
         from sourceURL: URL,
         to destURL: URL,
         options: InstallProfileOptions,
+        fileManager: FileManager,
         overwritten: Bool,
         renamed: Bool
     ) throws -> InstallProfileResult {
-        let fm = FileManager.default
+        let fm = fileManager
         let tmpURL = destURL.appendingPathExtension("iccery-install.tmp")
 
         // Remove stale tmp.
@@ -122,6 +177,13 @@ public enum ProfileInstaller {
 
         do {
             try fm.copyItem(at: sourceURL, to: tmpURL)
+
+            let attrs = try? fm.attributesOfItem(atPath: tmpURL.path)
+            let tmpSize = attrs?[.size] as? UInt64 ?? 0
+            guard tmpSize >= 128 else {
+                try? fm.removeItem(at: tmpURL)
+                throw ProfileInstallError.sourceTooSmall
+            }
 
             if fm.fileExists(atPath: destURL.path) {
                 _ = try fm.replaceItemAt(destURL, withItemAt: tmpURL)
@@ -134,6 +196,10 @@ public enum ProfileInstaller {
             // Surface a clear admin-rights hint when writing to system.
             if destURL.path.hasPrefix("/Library/") && !fm.fileExists(atPath: destURL.path) {
                 throw ProfileInstallError.systemRequiresAdminRights
+            }
+
+            if let installError = error as? ProfileInstallError {
+                throw installError
             }
             throw ProfileInstallError.copyFailed(error.localizedDescription)
         }

@@ -35,6 +35,18 @@ public struct ProcessLineDecoder: Sendable {
         return rest.isEmpty ? nil : Self.decode(rest)
     }
 
+    /// Emits the current unterminated tail as a single line and clears it.
+    /// Used by `ProcessManager.flushPartialLine` for tools that emit
+    /// progress dots without newlines.
+    public mutating func flushPartial() -> String? {
+        guard !pending.isEmpty else { return nil }
+        var rest = pending
+        pending.removeAll(keepingCapacity: false)
+        if rest.last == 0x0D { rest = rest.dropLast() }
+        let text = Self.decode(rest)
+        return text.isEmpty ? nil : text
+    }
+
     private static func decode(_ bytes: Data.SubSequence) -> String {
         String(decoding: bytes, as: UTF8.self)
     }
