@@ -68,6 +68,8 @@ enum UITestHooks {
     static var existingTargetURL: URL? { url("ICCERY_TEST_EXISTING_TARGET") }
     /// `select_directory` result (working-directory browse).
     static var workDirURL: URL? { url("ICCERY_TEST_WORKDIR") }
+    /// Dataset import file (`.ti3`, `.txt`, `.cgats`, `.csv`).
+    static var datasetImportURL: URL? { url("ICCERY_TEST_DATASET_IMPORT") }
     /// Preset import file.
     static var presetImportURL: URL? { url("ICCERY_TEST_PRESET_IMPORT") }
     /// Preset export destination.
