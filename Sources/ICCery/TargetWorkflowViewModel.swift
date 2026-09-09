@@ -205,7 +205,7 @@ final class TargetWorkflowViewModel {
         targenLog = []
         resumedFromTi2 = false
         let runner = environment.runner
-        Task {
+        Task { @MainActor in
             do {
                 let url = try await runner.runTargen(config: config) { [weak self] batch in
                     Task { @MainActor [weak self] in
@@ -297,7 +297,7 @@ final class TargetWorkflowViewModel {
         printtargLog = []
         printtargResult = nil
         let runner = environment.runner
-        Task {
+        Task { @MainActor in
             do {
                 let result = try await runner.runPrinttarg(config: config) { [weak self] batch in
                     Task { @MainActor [weak self] in
@@ -331,7 +331,7 @@ final class TargetWorkflowViewModel {
     /// appears with a manifest.
     func refreshPrinters() {
         let cups = environment.cupsService
-        Task {
+        Task { @MainActor in
             do {
                 let list = try await cups.listPrinters()
                 printers = list
@@ -379,7 +379,7 @@ final class TargetWorkflowViewModel {
         let queue = selectedPrinter
         let displayName = printers.first { $0.name == queue }?.displayName
         let cups = environment.cupsService
-        Task {
+        Task { @MainActor in
             do {
                 guard let result = try await PrintPanelService()
                     .showProperties(
@@ -413,10 +413,12 @@ final class TargetWorkflowViewModel {
 
     /// `#btnPrintAll` — spool every gallery TIFF, sequentially. Stops on
     /// the first failure so the user sees which page failed.
+    /// `#btnPrintAll` — spool every gallery TIFF, sequentially. Stops on
+    /// the first failure so the user sees which page failed.
     func printAllPages() {
         guard let result = printtargResult, !isPrinting else { return }
         isPrinting = true
-        Task {
+        Task { @MainActor in
             var printed = 0
             for page in result.pages {
                 do {
@@ -440,7 +442,7 @@ final class TargetWorkflowViewModel {
     func printPage(_ page: GalleryPage) {
         guard !isPrinting else { return }
         isPrinting = true
-        Task {
+        Task { @MainActor in
             do {
                 try await spool(page, index: page.index)
                 printNotice = "Sent \(page.page.filename) to \(selectedPrinter)."

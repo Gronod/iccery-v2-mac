@@ -249,7 +249,7 @@ struct Stage2View: View {
                 .onChange(of: workflow.selectedPrinter) { _, _ in
                     workflow.selectedTray = nil
                     workflow.selectedMediaType = nil
-                    Task { await workflow.reloadSelectedCapabilities() }
+                    Task { @MainActor in await workflow.reloadSelectedCapabilities() }
                 }
                 if let selected = workflow.printers
                     .first(where: { $0.name == workflow.selectedPrinter }) {
@@ -330,8 +330,9 @@ struct Stage2View: View {
         .clipShape(RoundedRectangle(cornerRadius: Theme.Metrics.cornerMedium))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("rawPrintPanel")
-        .task {
-            // Auto-enumerate when the panel appears with a manifest.
+        .task(id: workflow.printtargResult?.pages.count) {
+            // Auto-enumerate once a manifest exists and whenever it
+            // changes (e.g. resume from .ti2).
             if workflow.printers.isEmpty, workflow.printtargResult != nil {
                 workflow.refreshPrinters()
             }
