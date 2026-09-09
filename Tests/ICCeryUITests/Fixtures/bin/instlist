@@ -1,0 +1,17 @@
+#!/bin/sh
+# Mock instlist for Milestone4UITests. Emits a pretty JSON device list.
+# Override the list with ICCERY_MOCK_INSTLIST_JSON.
+if [ -n "${ICCERY_MOCK_INSTLIST_JSON}" ]; then
+  echo "${ICCERY_MOCK_INSTLIST_JSON}"
+  exit 0
+fi
+printf '{
+  "event": "instruments",
+  "devices": [
+    {"port": 1, "name": "X-Rite i1Pro", "type": "usb"},
+    {"port": 2, "name": "X-Rite i1Pro 2", "type": "usb"},
+    {"port": 3, "name": "i1iO Table", "type": "usb"}
+  ]
+}
+'
+exit 0

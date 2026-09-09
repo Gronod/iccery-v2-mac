@@ -43,6 +43,7 @@ struct NoticeBanner: View {
                 .foregroundStyle(Theme.text)
                 .lineLimit(3)
                 .accessibilityIdentifier("noticeText")
+                .accessibilityValue(notice.text)
             Spacer()
             Button(action: onClose) {
                 Image(systemName: "xmark")

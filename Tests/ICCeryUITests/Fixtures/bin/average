@@ -1,0 +1,35 @@
+#!/bin/sh
+# Mock average for Milestone4UITests.
+# Usage: average -v pass1.ti3 pass2.ti3 ... output.ti3
+# The canonical output is the last argument.
+# Set MOCK_AVERAGE_FAIL=1 to exit with code 1.
+if [ "${MOCK_AVERAGE_FAIL:-0}" -ne 0 ]; then
+  echo "average: could not converge" >&2
+  exit 1
+fi
+
+# Drop leading -v
+shift
+
+output="$1"
+if [ $# -ge 2 ]; then
+  output="$2"
+fi
+
+# Find last argument
+for arg in "$@"; do
+  output="$arg"
+done
+
+# Sanity: the output is the last argument.
+# Write a fake canonical .ti3 that identifies the inputs.
+{
+  echo "CTI3"
+  echo "INPUTS:"
+  for arg in "$@"; do
+    if [ "$arg" != "$output" ]; then
+      echo "$arg"
+    fi
+  done
+} > "$output"
+exit 0
