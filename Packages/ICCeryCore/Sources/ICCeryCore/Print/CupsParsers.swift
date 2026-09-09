@@ -91,7 +91,18 @@ public enum CupsParsers {
                 index = output.index(after: index)
             }
             let key = String(output[tokenStart..<index])
-            guard !key.isEmpty else { break }
+            // A token starting with `=` has no key — skip it (and its
+            // value) rather than truncating the whole parse.
+            guard !key.isEmpty else {
+                if index < output.endIndex && output[index] == "=" {
+                    index = output.index(after: index)
+                    while index < output.endIndex
+                            && !output[index].isWhitespace {
+                        index = output.index(after: index)
+                    }
+                }
+                continue
+            }
             if index < output.endIndex && output[index] == "=" {
                 index = output.index(after: index)
                 if index < output.endIndex && output[index] == "'" {

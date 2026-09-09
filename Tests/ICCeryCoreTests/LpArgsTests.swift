@@ -96,19 +96,21 @@ struct LpArgsTests {
             .contains("orientation-requested=3"))
         #expect(try build(options: PrintOptions(orientation: "landscape"))
             .contains("orientation-requested=4"))
-        #expect(!try build(options: PrintOptions(
+        let capturedOrients = try build(options: PrintOptions(
             orientation: "landscape",
             cupsOptions: "orientation-requested=5"))
-            .contains("orientation-requested=4"))
+        #expect(!capturedOrients.contains("orientation-requested=4"))
+        #expect(capturedOrients.contains("orientation-requested=5"))
     }
 
     @Test("PageSize emitted unless captured")
     func pageSize() throws {
         #expect(try build(options: PrintOptions(paperSize: "A4"))
             .contains("PageSize=A4"))
-        #expect(!try build(options: PrintOptions(
+        let capturedSize = try build(options: PrintOptions(
             paperSize: "A4", cupsOptions: "PageSize=Letter"))
-            .contains("PageSize=A4"))
+        #expect(!capturedSize.contains("PageSize=A4"))
+        #expect(capturedSize.contains("PageSize=Letter"))
     }
 
     @Test("Sanitise rejects `;`, newline, and shell metachars")

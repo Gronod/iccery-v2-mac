@@ -202,7 +202,7 @@ struct Stage2View: View {
                     spacing: 12
                 ) {
                     ForEach(result.pages) { page in
-                        GalleryPageView(page: page)
+                        GalleryPageView(page: page, workflow: workflow)
                     }
                 }
                 .accessibilityElement(children: .contain)
@@ -213,24 +213,111 @@ struct Stage2View: View {
         }
     }
 
-    // MARK: - Raw print panel (#rawPrintPanel) — stubbed until M3
+    // MARK: - Raw print panel (#rawPrintPanel) — unmanaged lp path
 
     private var printPanel: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Print").font(.headline).foregroundStyle(Theme.text)
-            Text("Unmanaged printing (lp) lands in Milestone 3.")
-                .font(.caption).foregroundStyle(.secondary)
-                .accessibilityIdentifier("printNotification")
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                Text("Print").font(.headline).foregroundStyle(Theme.text)
+                if let notice = workflow.printNotice {
+                    Image(systemName: workflow.printNoticeIsError
+                          ? "xmark.circle.fill" : "info.circle.fill")
+                        .foregroundStyle(workflow.printNoticeIsError
+                                         ? .red : .blue)
+                        .accessibilityIdentifier("printNotificationIcon")
+                    Text(notice)
+                        .font(.caption)
+                        .foregroundStyle(workflow.printNoticeIsError
+                                         ? .red : .secondary)
+                        .accessibilityIdentifier("printNotificationText")
+                }
+                Spacer()
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("printNotification")
+
+            // Printer row: select + status + refresh + Preferences.
+            HStack(spacing: 10) {
+                Picker("Printer", selection: $workflow.selectedPrinter) {
+                    ForEach(workflow.printers, id: \.name) { printer in
+                        Text(printer.displayName ?? printer.name)
+                            .tag(printer.name)
+                    }
+                }
+                .frame(maxWidth: 320)
+                .accessibilityIdentifier("printerSelect")
+                .onChange(of: workflow.selectedPrinter) { _, _ in
+                    workflow.selectedTray = nil
+                    workflow.selectedMediaType = nil
+                    Task { await workflow.reloadSelectedCapabilities() }
+                }
+                if let selected = workflow.printers
+                    .first(where: { $0.name == workflow.selectedPrinter }) {
+                    Text(selected.status.rawValue)
+                        .font(.caption).foregroundStyle(.secondary)
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(Theme.background)
+                        .clipShape(Capsule())
+                        .accessibilityIdentifier("printerStatusBadge")
+                }
+                Button(action: workflow.refreshPrinters) {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .help("Refresh printer list")
+                .accessibilityIdentifier("btnRefreshPrinters")
+                Button(action: workflow.openPrinterPreferences) {
+                    Image(systemName: "gearshape")
+                }
+                .help("Printer properties — bound NSPrintPanel")
+                .disabled(workflow.selectedPrinter.isEmpty)
+                .accessibilityIdentifier("btnPrinterProperties")
+            }
+
+            // Tray / media / orientation — from queue capabilities.
+            HStack(spacing: 14) {
+                if !workflow.printerCaps.trays.isEmpty {
+                    Picker("Tray", selection: $workflow.selectedTray) {
+                        ForEach(workflow.printerCaps.trays, id: \.id) {
+                            Text($0.name).tag(Optional($0.id))
+                        }
+                    }
+                    .frame(maxWidth: 200)
+                    .accessibilityIdentifier("printerTraySelect")
+                }
+                if !workflow.printerCaps.mediaTypes.isEmpty {
+                    Picker("Media", selection: $workflow.selectedMediaType) {
+                        ForEach(workflow.printerCaps.mediaTypes, id: \.id) {
+                            Text($0.name).tag(Optional($0.id))
+                        }
+                    }
+                    .frame(maxWidth: 240)
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("mediaTypeGroup")
+                    .accessibilityIdentifier("printerMediaTypeSelect")
+                }
+                HStack(spacing: 0) {
+                    Button("Portrait") { workflow.printOrientation = "portrait" }
+                        .buttonStyle(.bordered)
+                        .tint(workflow.printOrientation == "portrait" ? .accentColor : .gray)
+                        .accessibilityIdentifier("btnOrientPortrait")
+                    Button("Landscape") { workflow.printOrientation = "landscape" }
+                        .buttonStyle(.bordered)
+                        .tint(workflow.printOrientation == "landscape" ? .accentColor : .gray)
+                        .accessibilityIdentifier("btnOrientLandscape")
+                }
+                Spacer()
+            }
+
             HStack(spacing: 8) {
-                Button("Print All") {}
-                    .accessibilityIdentifier("btnPrintAll")
-                    .disabled(true)
-                Button("Refresh Printers") {}
-                    .accessibilityIdentifier("btnRefreshPrinters")
-                    .disabled(true)
-                Button("Printer Properties") {}
-                    .accessibilityIdentifier("btnPrinterProperties")
-                    .disabled(true)
+                Button(action: workflow.printAllPages) {
+                    Label(workflow.isPrinting ? "Printing…" : "Print All",
+                          systemImage: "printer")
+                }
+                .controlSize(.large)
+                .disabled(workflow.isPrinting
+                          || workflow.printtargResult == nil
+                          || workflow.selectedPrinter.isEmpty)
+                .accessibilityIdentifier("btnPrintAll")
                 Spacer()
                 Button("Advance to Stage 3") { workflow.advanceToStage3() }
                     .accessibilityIdentifier("btnAdvanceToStage3")
@@ -243,12 +330,19 @@ struct Stage2View: View {
         .clipShape(RoundedRectangle(cornerRadius: Theme.Metrics.cornerMedium))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("rawPrintPanel")
+        .task {
+            // Auto-enumerate when the panel appears with a manifest.
+            if workflow.printers.isEmpty, workflow.printtargResult != nil {
+                workflow.refreshPrinters()
+            }
+        }
     }
 }
 
-/// One gallery cell: PNG preview + per-page stubbed Print button.
+/// One gallery cell: PNG preview + per-page Print button.
 private struct GalleryPageView: View {
     let page: GalleryPage
+    let workflow: TargetWorkflowViewModel
 
     var body: some View {
         VStack(spacing: 6) {
@@ -269,8 +363,9 @@ private struct GalleryPageView: View {
             Text("\(page.page.patches) patches · " +
                  "\(Int(page.page.widthMm))×\(Int(page.page.heightMm)) mm")
                 .font(.caption2).foregroundStyle(.secondary)
-            Button("Print") {}
-                .disabled(true)
+            Button("Print") { workflow.printPage(page) }
+                .disabled(workflow.isPrinting
+                          || workflow.selectedPrinter.isEmpty)
                 .accessibilityIdentifier("btnPrintPage-\(page.index)")
         }
         .padding(8)

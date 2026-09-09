@@ -129,21 +129,17 @@ struct CupsParsersTests {
 
     @Test("Driver bypass: Canon Intent2 > Intent; Epson CCor > CMat")
     func driverBypass() {
-        #expect(CupsParsers.detectDriverColorBypass(
-            optionKeys: ["CNIJIntent2", "CNIJIntent"])
-            == ("CNIJIntent2", "4"))
-        #expect(CupsParsers.detectDriverColorBypass(optionKeys: ["CNIJIntent"])
-            == ("CNIJIntent", "4"))
-        #expect(CupsParsers.detectDriverColorBypass(
-            optionKeys: ["EPIJ_CCor", "EPIJ_CMat"]) == ("EPIJ_CCor", "0"))
-        #expect(CupsParsers.detectDriverColorBypass(optionKeys: ["EPIJ_CMat"])
-            == ("EPIJ_CMat", "3"))
-        #expect(CupsParsers.detectDriverColorBypass(
-            optionKeys: ["StpColorCorrection"]) == ("StpColorCorrection", "Uncorrected"))
-        #expect(CupsParsers.detectDriverColorBypass(
-            optionKeys: ["ColorCorrection"]) == ("ColorCorrection", "Uncorrected"))
-        #expect(CupsParsers.detectDriverColorBypass(
-            optionKeys: ["EpsonColorMode"]) == ("EpsonColorMode", "Off"))
-        #expect(CupsParsers.detectDriverColorBypass(optionKeys: ["PageSize"]) == nil)
+        func pair(_ keys: Set<String>) -> String? {
+            CupsParsers.detectDriverColorBypass(optionKeys: keys)
+                .map { "\($0.key)=\($0.value)" }
+        }
+        #expect(pair(["CNIJIntent2", "CNIJIntent"]) == "CNIJIntent2=4")
+        #expect(pair(["CNIJIntent"]) == "CNIJIntent=4")
+        #expect(pair(["EPIJ_CCor", "EPIJ_CMat"]) == "EPIJ_CCor=0")
+        #expect(pair(["EPIJ_CMat"]) == "EPIJ_CMat=3")
+        #expect(pair(["StpColorCorrection"]) == "StpColorCorrection=Uncorrected")
+        #expect(pair(["ColorCorrection"]) == "ColorCorrection=Uncorrected")
+        #expect(pair(["EpsonColorMode"]) == "EpsonColorMode=Off")
+        #expect(pair(["PageSize"]) == nil)
     }
 }
