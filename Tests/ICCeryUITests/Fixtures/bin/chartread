@@ -1,0 +1,131 @@
+#!/usr/bin/env python3
+"""Mock chartread for Milestone4UITests.
+
+Supports handheld (MOCK_CHARTREAD_MODE=strip) and XY (MOCK_CHARTREAD_MODE=xy).
+Writes basename.ti3 on receiving 'd' and exits 0.
+Exit 0 and no .ti3 on 'q' before done.
+Usage: chartread -v -u [-c port] [-Y l] basename
+"""
+import json
+import os
+import sys
+
+
+def read_line():
+    try:
+        return sys.stdin.readline()
+    except Exception:
+        return ""
+
+
+def emit_row(payload: dict):
+    text = "ROW_COLORS_JSON: " + json.dumps(payload)
+    print(text, flush=True)
+
+
+def write_ti3(basename: str):
+    if basename:
+        with open(f"{basename}.ti3", "w") as f:
+            f.write("MOCK_TI3\n")
+
+
+def main():
+    mode = os.environ.get("MOCK_CHARTREAD_MODE", "strip")
+    basename = ""
+    for arg in sys.argv[1:]:
+        if arg.startswith("-"):
+            continue
+        basename = arg
+
+    def read_input():
+        line = read_line()
+        if not line:
+            sys.exit(1)
+        return line.strip()
+
+    if mode == "xy":
+        print("Place instrument on calibration tile and hit [Space] to calibrate.", flush=True)
+        read_input()
+        print("Calibration successful.", flush=True)
+
+        print("Please place sheet 1 of 1 on the table", flush=True)
+        print("hit return to continue, Esc or 'q' to give up", flush=True)
+        read_input()
+
+        print("locate patch A1 with the sight,", flush=True)
+        print("then hit return to continue", flush=True)
+        read_input()
+
+        print("Reading sheet 1...", flush=True)
+        emit_row({
+            "event": "row_complete",
+            "row_id": "A",
+            "row_index": 0,
+            "total_rows": 1,
+            "patch_count": 3,
+            "patches": [
+                {"id": "1", "loc": "A1", "is_pad": False, "device": [0.0, 50.0, 100.0], "expected": {"XYZ": [18.4210, 20.1234, 15.6789], "Lab": [51.98, -8.45, 12.32]}, "measured": {"XYZ": [18.5120, 20.0451, 15.7100], "Lab": [51.89, -8.31, 12.15]}},
+                {"id": "2", "loc": "A2", "is_pad": False, "device": [10.0, 60.0, 90.0], "expected": {"Lab": [60.0, 10.0, -20.0]}, "measured": {"Lab": [60.1, 10.5, -19.5]}},
+                {"id": "3", "loc": "A3", "is_pad": True, "device": [100.0, 100.0, 100.0], "measured": {"Lab": [95.0, 0.0, 0.0]}},
+            ]
+        })
+
+        print("Sheet 1 of 1 read OK", flush=True)
+        print("Please remove last sheet from table", flush=True)
+        print("'d' if/when done", flush=True)
+        while True:
+            line = read_input()
+            if line.startswith("d"):
+                write_ti3(basename)
+                sys.exit(0)
+            if line.startswith("q"):
+                sys.exit(0)
+
+    # Handheld / strip mode (default)
+    print("Place instrument on calibration tile and hit [Space] to calibrate.", flush=True)
+    read_input()
+    print("Calibration successful.", flush=True)
+
+    print("Hit [Space] to read strip A", flush=True)
+    read_input()
+    print("Reading strip A...", flush=True)
+    emit_row({
+        "event": "row_complete",
+        "row_id": "A",
+        "row_index": 0,
+        "total_rows": 2,
+        "patch_count": 3,
+        "patches": [
+            {"id": "1", "loc": "A1", "is_pad": False, "device": [0.0, 50.0, 100.0], "expected": {"XYZ": [18.4210, 20.1234, 15.6789], "Lab": [51.98, -8.45, 12.32]}, "measured": {"XYZ": [18.5120, 20.0451, 15.7100], "Lab": [51.89, -8.31, 12.15]}},
+            {"id": "2", "loc": "A2", "is_pad": False, "device": [10.0, 60.0, 90.0], "expected": {"Lab": [60.0, 10.0, -20.0]}, "measured": {"Lab": [60.1, 10.5, -19.5]}},
+            {"id": "3", "loc": "A3", "is_pad": True, "device": [100.0, 100.0, 100.0], "measured": {"Lab": [95.0, 0.0, 0.0]}},
+        ]
+    })
+
+    print("Hit [Space] to read strip B", flush=True)
+    read_input()
+    print("Reading strip B...", flush=True)
+    emit_row({
+        "event": "row_complete",
+        "row_id": "B",
+        "row_index": 1,
+        "total_rows": 2,
+        "patch_count": 2,
+        "patches": [
+            {"id": "4", "loc": "B1", "is_pad": False, "device": [100.0, 0.0, 0.0], "expected": {"Lab": [40.0, 40.0, 40.0]}, "measured": {"Lab": [38.0, 41.0, 39.0]}},
+            {"id": "5", "loc": "B2", "is_pad": False, "device": [0.0, 100.0, 0.0], "expected": {"Lab": [80.0, -50.0, 50.0]}, "measured": {"Lab": [79.0, -49.0, 51.0]}},
+        ]
+    })
+
+    print("'d' if/when done", flush=True)
+    while True:
+        line = read_input()
+        if line.startswith("d"):
+            write_ti3(basename)
+            sys.exit(0)
+        if line.startswith("q"):
+            sys.exit(0)
+
+
+if __name__ == "__main__":
+    main()

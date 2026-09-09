@@ -1,10 +1,13 @@
 import Foundation
 
 /// Errors from `ArgyllRunner` executions.
-public enum ArgyllRunnerError: LocalizedError, Equatable {
+public enum ArgyllRunnerError: LocalizedError, Equatable, Sendable {
     case processFailed(code: Int32, logs: [String])
     case missingArtefact(String)
     case malformedManifest(String)
+    case instrumentDetectionFailed(String)
+    case chartreadFailed(String)
+    case averageFailed(String)
 
     public var errorDescription: String? {
         switch self {
@@ -14,6 +17,12 @@ public enum ArgyllRunnerError: LocalizedError, Equatable {
             return "Expected output file was not created: \(path)"
         case .malformedManifest(let reason):
             return "Failed to parse printtarg manifest: \(reason)"
+        case .instrumentDetectionFailed(let reason):
+            return "Instrument detection failed: \(reason)"
+        case .chartreadFailed(let reason):
+            return "Chartread failed: \(reason)"
+        case .averageFailed(let reason):
+            return "Averaging failed: \(reason)"
         }
     }
 }
@@ -203,5 +212,302 @@ public struct ArgyllRunner: Sendable {
             }
         }
         return CollectedRun(exitCode: exitCode, stdout: stdout, lines: lines)
+    }
+
+    // MARK: - instlist (Stage 3 detection)
+
+    /// Runs `instlist` and returns the detected devices.
+    ///
+    /// The fork emits pretty-printed JSON; if that cannot be decoded a regex
+    /// fallback constrained to known instrument tokens is used.
+    public func detectInstruments() async throws -> [InstrumentDevice] {
+        let binaryURL = binaryResolver.resolve("instlist")
+        let processId = ProcessID.instlist
+
+        let events = processManager.events()
+        try await processManager.runStreaming(
+            id: processId,
+            binary: binaryURL,
+            arguments: [],
+            workingDirectory: nil
+        )
+
+        var accumulator = JSONAccumulator()
+        var stdout = ""
+        var stderr: [String] = []
+        var exitCode: Int32?
+
+        for await event in events {
+            guard event.id == processId else { continue }
+            switch event {
+            case .stdout(_, let line):
+                stdout += line + "\n"
+                _ = accumulator.feed(line: line)
+            case .stderr(_, let line):
+                stderr.append(line)
+            case .exit(_, let code):
+                exitCode = code
+            default:
+                break
+            }
+            if exitCode != nil { break }
+        }
+
+        if let data = accumulator.completeData ?? stdout.trimmingCharacters(in: .whitespacesAndNewlines).data(using: .utf8) {
+            if let devices = try? InstrumentParser.parse(String(data: data, encoding: .utf8) ?? stdout) {
+                return devices
+            }
+        }
+
+        if let code = exitCode, code != 0, stderr.isEmpty == false {
+            throw ArgyllRunnerError.instrumentDetectionFailed(stderr.joined(separator: "\n"))
+        }
+
+        // Final fallback: try to parse the raw stdout as a text document.
+        if let devices = try? InstrumentParser.parse(stdout) {
+            return devices
+        }
+
+        throw ArgyllRunnerError.instrumentDetectionFailed("Could not parse instlist output")
+    }
+
+    // MARK: - average (Stage 3 multi-pass finish)
+
+    /// Runs `average` to merge two or more pass snapshots into the canonical `.ti3`.
+    public func runAverage(
+        config: AverageConfig,
+        onLogBatch: (@Sendable ([String]) -> Void)? = nil
+    ) async throws -> URL {
+        let cwd = PathSecurity.resolveSafeCwd(config.workingDirectory)
+        let args = try AverageArgs.build(config: config)
+        let binaryURL = binaryResolver.resolve("average")
+        let processId = ProcessID.average(config.basename)
+
+        let events = processManager.events()
+        try await processManager.runStreaming(
+            id: processId,
+            binary: binaryURL,
+            arguments: args,
+            workingDirectory: cwd
+        )
+        let run = await collect(id: processId, events: events, onLogBatch: onLogBatch)
+
+        guard run.exitCode == 0 else {
+            throw ArgyllRunnerError.averageFailed("average exited with code \(run.exitCode ?? -1)")
+        }
+
+        let canonical = cwd.appendingPathComponent("\(config.basename).ti3")
+        guard FileManager.default.fileExists(atPath: canonical.path) else {
+            throw ArgyllRunnerError.missingArtefact(canonical.path)
+        }
+        return canonical
+    }
+
+    // MARK: - chartread (Stage 3 interactive)
+
+    /// Runs `chartread` and returns an `AsyncStream` of typed events.
+    ///
+    /// Subscribe-before-spawn, prompt/row/log forwarding, and exit verification
+    /// are all handled here. Use `sendChartreadInput` to drive the child and
+    /// `cancelChartread` to terminate it.
+    public func runChartread(config: ChartreadConfig) -> AsyncStream<ChartreadEvent> {
+        let cleanBasename: String
+        let cwd: URL
+        do {
+            cleanBasename = try PathSecurity.sanitizeBasename(config.basename)
+            cwd = PathSecurity.resolveSafeCwd(config.workingDirectory)
+        } catch {
+            return AsyncStream { continuation in
+                continuation.yield(.failed(ArgyllRunnerError.chartreadFailed(error.localizedDescription)))
+                continuation.finish()
+            }
+        }
+
+        let args: [String]
+        do {
+            args = try ChartreadArgs.build(config: config)
+        } catch {
+            return AsyncStream { continuation in
+                continuation.yield(.failed(ArgyllRunnerError.chartreadFailed(error.localizedDescription)))
+                continuation.finish()
+            }
+        }
+
+        let binaryURL = binaryResolver.resolve("chartread")
+        let processId = ProcessID.chartread(cleanBasename)
+        let processManager = self.processManager
+
+        return AsyncStream { continuation in
+            let task = Task {
+                let events = processManager.events()
+
+                do {
+                    try await processManager.runStreaming(
+                        id: processId,
+                        binary: binaryURL,
+                        arguments: args,
+                        workingDirectory: cwd
+                    )
+                } catch {
+                    continuation.yield(.failed(ArgyllRunnerError.chartreadFailed(error.localizedDescription)))
+                    continuation.finish()
+                    return
+                }
+
+                var state: ChartreadState = .idle
+                var pendingLogs: [String] = []
+                var lastFlush = Date()
+                var exitCode: Int32?
+
+                func flushLogs() {
+                    guard !pendingLogs.isEmpty else { return }
+                    let batch = pendingLogs
+                    pendingLogs.removeAll(keepingCapacity: true)
+                    continuation.yield(.log(batch))
+                }
+
+                for await event in events {
+                    guard event.id == processId else { continue }
+
+                    switch event {
+                    case .stdout(_, let line):
+                        let classified = ChartreadClassifier.classify(line: line, previousState: state)
+                        state = classified.state
+                        if classified.isRemoveSheetNotice {
+                            continuation.yield(.removeSheetNotice)
+                        }
+                        if classified.sheetNumber != nil || classified.alignmentPatch != nil {
+                            continuation.yield(.prompt(classified))
+                        } else if state != previousOrContinuationState(state, classified) {
+                            // Only emit prompt when the state meaningfully changes.
+                            continuation.yield(.prompt(classified))
+                        } else if state == .tablePlaceSheet || state == .tableAlign {
+                            // Continuation lines in table states are still prompts.
+                            continuation.yield(.prompt(classified))
+                        } else if classified.requestedWarningKey != nil {
+                            continuation.yield(.prompt(classified))
+                        }
+
+                        pendingLogs.append(line)
+
+                    case .stderr(_, let line):
+                        pendingLogs.append(line)
+
+                    case .jsonRow(_, let payload):
+                        do {
+                            let row = try JSONDecoder().decode(ChartreadRow.self, from: payload)
+                            state = row.isFinalRow ? .allStripsRead : state
+                            continuation.yield(.row(row))
+                        } catch {
+                            pendingLogs.append("Malformed row JSON: \(error.localizedDescription)")
+                        }
+
+                    case .error(_, let message):
+                        pendingLogs.append("Error: \(message)")
+
+                    case .exit(_, let code):
+                        exitCode = code
+                    }
+
+                    if exitCode == nil,
+                       pendingLogs.count >= 20 || Date().timeIntervalSince(lastFlush) >= 0.1 {
+                        flushLogs()
+                        lastFlush = Date()
+                    }
+
+                    if exitCode != nil {
+                        flushLogs()
+                        break
+                    }
+                }
+
+                let canonical = cwd.appendingPathComponent("\(cleanBasename).ti3")
+                if let code = exitCode, code == 0 {
+                    if FileManager.default.fileExists(atPath: canonical.path) {
+                        continuation.yield(.completed(canonical))
+                    } else {
+                        continuation.yield(.failed(ArgyllRunnerError.missingArtefact(canonical.path)))
+                    }
+                } else {
+                    continuation.yield(.failed(ArgyllRunnerError.chartreadFailed("chartread exited with code \(exitCode ?? -1)")))
+                }
+                continuation.finish()
+            }
+
+            continuation.onTermination = { _ in
+                task.cancel()
+            }
+        }
+    }
+
+    private func previousOrContinuationState(_ state: ChartreadState, _ classified: ChartreadClassifyResult) -> ChartreadState {
+        if classified.isTableContinuation { return .promptContinue }
+        return state
+    }
+
+    /// Send an exact input sequence to the running `chartread` child.
+    public func sendChartreadInput(basename: String, input: ChartreadInput) async throws {
+        let cleanBasename = try PathSecurity.sanitizeBasename(basename)
+        let processId = ProcessID.chartread(cleanBasename)
+        try await processManager.sendStdin(id: processId, bytes: input.bytes)
+    }
+
+    /// Terminate a running `chartread` child.
+    ///
+    /// For XY tables, sends `q\n` first and waits ~500 ms so the head parks.
+    public func cancelChartread(basename: String, isXY: Bool = false) {
+        let cleanBasename = try? PathSecurity.sanitizeBasename(basename)
+        guard let cleanBasename else { return }
+        let processId = ProcessID.chartread(cleanBasename)
+
+        Task {
+            if isXY {
+                try? await processManager.sendStdin(id: processId, bytes: ChartreadInput.quit.bytes)
+                try? await Task.sleep(for: .milliseconds(500))
+            }
+            await processManager.kill(id: processId)
+        }
+    }
+}
+
+/// Events emitted by a running `chartread` session.
+public enum ChartreadEvent: Sendable {
+    /// Classified prompt / state update.
+    case prompt(ChartreadClassifyResult)
+    /// A decoded `ROW_COLORS_JSON` row.
+    case row(ChartreadRow)
+    /// A batched log chunk (stdout + stderr lines).
+    case log([String])
+    /// Informational "remove last sheet" notice.
+    case removeSheetNotice
+    /// Process exited with the given code.
+    case exit(Int32)
+    /// Successful completion with the canonical `.ti3` URL.
+    case completed(URL)
+    /// Failure (non-zero exit, missing artefact, spawn/parse error).
+    case failed(ArgyllRunnerError)
+}
+
+/// Exact bytes sent to `chartread` stdin.
+public enum ChartreadInput: Sendable {
+    case trigger    // " \n"
+    case accept     // "\n"
+    case done       // "d\n"
+    case quit       // "q\n"
+    case customKey(String)
+
+    public var bytes: Data {
+        switch self {
+        case .trigger:
+            return Data(" \n".utf8)
+        case .accept:
+            return Data("\n".utf8)
+        case .done:
+            return Data("d\n".utf8)
+        case .quit:
+            return Data("q\n".utf8)
+        case .customKey(let key):
+            return Data("\(key)\n".utf8)
+        }
     }
 }

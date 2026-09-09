@@ -164,10 +164,11 @@ final class Milestone2UITests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(
             atPath: workDir.appendingPathComponent("mytarget.ti2").path))
 
-        // M3 stubs: visible but inert.
+        // Print panel is live from M3; a default printer is selected
+        // so both the all-pages and per-page print buttons are enabled.
         XCTAssertTrue(element("rawPrintPanel").exists)
-        XCTAssertFalse(app.buttons["btnPrintAll"].isEnabled)
-        XCTAssertFalse(app.buttons["btnPrintPage-0"].isEnabled)
+        XCTAssertTrue(app.buttons["btnPrintAll"].isEnabled)
+        XCTAssertTrue(app.buttons["btnPrintPage-0"].isEnabled)
         XCTAssertTrue(app.buttons["btnAdvanceToStage3"].isEnabled)
     }
 
