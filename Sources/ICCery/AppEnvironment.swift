@@ -11,6 +11,7 @@ struct AppEnvironment: Sendable {
     let settingsStore: SettingsStore
     let presetStore: PresetStore
     let runner: ArgyllRunner
+    let cupsService: CupsService
 
     static func live(
         environment: [String: String] = ProcessInfo.processInfo.environment
@@ -18,9 +19,13 @@ struct AppEnvironment: Sendable {
         let settingsStore = SettingsStore()
         var overrideDir = settingsStore.load().argyllBinaryDir
             .map { URL(fileURLWithPath: $0) }
+        var cupsDir = URL(fileURLWithPath: "/usr/bin")
         #if DEBUG
         if let dir = environment["ICCERY_ARGYLL_BINARY_DIR"], !dir.isEmpty {
             overrideDir = URL(fileURLWithPath: dir)
+        }
+        if let dir = environment["ICCERY_CUPS_BIN_DIR"], !dir.isEmpty {
+            cupsDir = URL(fileURLWithPath: dir)
         }
         #endif
         return AppEnvironment(
@@ -30,7 +35,10 @@ struct AppEnvironment: Sendable {
             runner: ArgyllRunner(
                 processManager: .shared,
                 binaryResolver: BinaryResolver(overrideDir: overrideDir)
-            )
+            ),
+            cupsService: CupsService(
+                processManager: .shared,
+                binaryDir: cupsDir)
         )
     }
 }
@@ -62,6 +70,48 @@ enum UITestHooks {
     static var presetImportURL: URL? { url("ICCERY_TEST_PRESET_IMPORT") }
     /// Preset export destination.
     static var presetExportURL: URL? { url("ICCERY_TEST_PRESET_EXPORT") }
+
+    // MARK: - Print panel / CUPS stubs (issue 13/17)
+
+    /// Directory of mock `lp`/`lpstat`/`lpoptions` fixture scripts —
+    /// `CupsService.binaryDir` under UI tests.
+    static var cupsBinaryDir: URL? { url("ICCERY_CUPS_BIN_DIR") }
+
+    /// Path the mock `lp` script appends its argv to, for assertions.
+    static var lpArgvOutURL: URL? { url("ICCERY_TEST_LP_ARGV") }
+
+    /// Whether the `NSPrintPanel` should be stubbed under UI testing —
+    /// separate from the stub's *result* so "cancel" (`nil`) does not
+    /// fall through to the real modal.
+    static var printPanelStubbed: Bool { isEnabled }
+
+    /// Canned `NSPrintPanel` outcome — XCUITest cannot drive the
+    /// system modal. `ICCERY_TEST_PRINT_PANEL`:
+    /// - `cancel` (or unset while testing) → user cancelled → `nil`
+    /// - `ok` → `PrintPropertiesResult` with
+    ///   `ICCERY_TEST_PANEL_OPTIONS` (captured `k=v` string) and
+    ///   `ICCERY_TEST_PANEL_PRINTER` (selected queue; default = the
+    ///   queue the panel was opened for).
+    static func printPanelResult(forQueue queue: String) -> PrintPropertiesResult? {
+        switch env["ICCERY_TEST_PRINT_PANEL"] {
+        case "ok":
+            let options = env["ICCERY_TEST_PANEL_OPTIONS"].flatMap {
+                $0.isEmpty ? nil : $0
+            }
+            return PrintPropertiesResult(
+                selectedPrinter: env["ICCERY_TEST_PANEL_PRINTER"].flatMap {
+                    $0.isEmpty ? nil : $0
+                } ?? queue,
+                options: PrintOptions(
+                    mediaType: options.flatMap {
+                        CupsParsers.extractMediaType(fromOptionsString: $0)
+                    },
+                    ppdUncorrectedPassthrough: true,
+                    cupsOptions: options))
+        default:
+            return nil
+        }
+    }
 
     private static func url(_ key: String) -> URL? {
         guard let raw = env[key], !raw.isEmpty else { return nil }

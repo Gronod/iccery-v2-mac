@@ -1,7 +1,7 @@
 import Foundation
 
-/// Captured output from `runCaptured` (used by printcal/applycal —
-/// the only tools whose results arrive as one-shot output).
+/// Captured output from `runCaptured` — one-shot tools whose results
+/// arrive as buffered stdout/stderr (printcal/applycal, CUPS tools).
 public struct CapturedResult: Sendable, Equatable {
     public let stdout: String
     public let stderr: String
@@ -173,7 +173,8 @@ public actor ProcessManager {
 
     /// Runs a child to completion and returns all output. Reads stdout
     /// and stderr concurrently so a full pipe buffer can never deadlock
-    /// the child. Used by `printcal` / `applycal` (docs/03).
+    /// the child. Used by `printcal` / `applycal` (docs/03) and by
+    /// `CupsService` for `/usr/bin/lpstat`, `lpoptions`, `lp` (#12/#15).
     public func runCaptured(
         id: String,
         binary: URL,

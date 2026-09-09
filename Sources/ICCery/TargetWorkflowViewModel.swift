@@ -89,6 +89,27 @@ final class TargetWorkflowViewModel {
     /// Stage 3 (`#stage3LoadedTargetBanner` data).
     var resumedFromTi2 = false
 
+    // MARK: - Print panel (issue 17)
+
+    /// CUPS destinations from `lpstat` (#printerSelect).
+    var printers: [Printer] = []
+    /// Selected queue name.
+    var selectedPrinter = ""
+    /// Capabilities of the selected queue (#printerTraySelect /
+    /// #printerMediaTypeSelect / PageSize source).
+    var printerCaps = PrinterCapabilities()
+    var selectedTray: Int?
+    var selectedMediaType: String?
+    /// "portrait" | "landscape" (#btnOrientPortrait/#btnOrientLandscape).
+    var printOrientation = "portrait"
+    /// Per-queue captured `key=value` strings from Preferences — replayed
+    /// on `lp` (session-only, docs/11 §capturedCupsOptions).
+    var capturedCupsOptions: [String: String] = [:]
+    /// In-panel notice (#printNotification) — cancel → info, not error.
+    var printNotice: String?
+    var printNoticeIsError = false
+    var isPrinting = false
+
     // MARK: - Presets
 
     var presets: [ProfilingPreset] = []
@@ -184,7 +205,7 @@ final class TargetWorkflowViewModel {
         targenLog = []
         resumedFromTi2 = false
         let runner = environment.runner
-        Task {
+        Task { @MainActor in
             do {
                 let url = try await runner.runTargen(config: config) { [weak self] batch in
                     Task { @MainActor [weak self] in
@@ -276,7 +297,7 @@ final class TargetWorkflowViewModel {
         printtargLog = []
         printtargResult = nil
         let runner = environment.runner
-        Task {
+        Task { @MainActor in
             do {
                 let result = try await runner.runPrinttarg(config: config) { [weak self] batch in
                     Task { @MainActor [weak self] in
@@ -301,6 +322,156 @@ final class TargetWorkflowViewModel {
     func advanceToStage3() {
         wizard.refreshGating()
         wizard.go(to: .measure)
+    }
+
+    // MARK: - Print panel actions (issue 17)
+
+    /// `#btnRefreshPrinters` — re-enumerate CUPS destinations and load
+    /// capabilities for the selection. Auto-runs when the panel first
+    /// appears with a manifest.
+    func refreshPrinters() {
+        let cups = environment.cupsService
+        Task { @MainActor in
+            do {
+                let list = try await cups.listPrinters()
+                printers = list
+                if !list.contains(where: { $0.name == selectedPrinter }) {
+                    selectedPrinter = list.first { $0.isDefault }?.name
+                        ?? list.first?.name ?? ""
+                }
+                await reloadSelectedCapabilities()
+            } catch {
+                printNotice = "Could not list printers: \(error.localizedDescription)"
+                printNoticeIsError = true
+            }
+        }
+    }
+
+    /// Capabilities for `selectedPrinter` — trays / media / sizes feed
+    /// the selects.
+    func reloadSelectedCapabilities() async {
+        guard !selectedPrinter.isEmpty else {
+            printerCaps = PrinterCapabilities()
+            return
+        }
+        do {
+            printerCaps = try await environment.cupsService
+                .capabilities(for: selectedPrinter)
+            // Default selections only when the captured options didn't
+            // already pin them (Preferences round-trip wins).
+            if selectedMediaType == nil {
+                selectedMediaType = printerCaps.mediaTypes.first?.id
+            }
+            if selectedTray == nil {
+                selectedTray = printerCaps.trays.first?.id
+            }
+        } catch {
+            printerCaps = PrinterCapabilities()
+        }
+    }
+
+    /// `#btnPrinterProperties` — bound NSPrintPanel ("Use Settings").
+    /// Cancel → info notice, never an error, cache untouched. On OK the
+    /// captured options are stored per-queue; a panel-side queue switch
+    /// updates `printerSelect` when the returned CUPS id is in the list.
+    func openPrinterPreferences() {
+        guard !selectedPrinter.isEmpty else { return }
+        let queue = selectedPrinter
+        let displayName = printers.first { $0.name == queue }?.displayName
+        let cups = environment.cupsService
+        Task { @MainActor in
+            do {
+                guard let result = try await PrintPanelService()
+                    .showProperties(
+                        queue: queue, displayName: displayName,
+                        cupsService: cups)
+                else {
+                    printNotice = "Printer properties dialog cancelled."
+                    printNoticeIsError = false
+                    return
+                }
+                if let selected = result.selectedPrinter,
+                   printers.contains(where: { $0.name == selected }),
+                   selected != queue {
+                    selectedPrinter = selected
+                    await reloadSelectedCapabilities()
+                }
+                if let captured = result.options.cupsOptions {
+                    capturedCupsOptions[selectedPrinter] = captured
+                }
+                if let media = result.options.mediaType {
+                    selectedMediaType = media
+                }
+                printNotice = "Settings captured for \(selectedPrinter)."
+                printNoticeIsError = false
+            } catch {
+                printNotice = error.localizedDescription
+                printNoticeIsError = true
+            }
+        }
+    }
+
+    /// `#btnPrintAll` — spool every gallery TIFF, sequentially. Stops on
+    /// the first failure so the user sees which page failed.
+    /// `#btnPrintAll` — spool every gallery TIFF, sequentially. Stops on
+    /// the first failure so the user sees which page failed.
+    func printAllPages() {
+        guard let result = printtargResult, !isPrinting else { return }
+        isPrinting = true
+        Task { @MainActor in
+            var printed = 0
+            for page in result.pages {
+                do {
+                    try await spool(page, index: page.index)
+                    printed += 1
+                } catch {
+                    printNotice = "Print failed on \(page.page.filename): "
+                        + error.localizedDescription
+                    printNoticeIsError = true
+                    isPrinting = false
+                    return
+                }
+            }
+            printNotice = "Sent \(printed) page(s) to \(selectedPrinter)."
+            printNoticeIsError = false
+            isPrinting = false
+        }
+    }
+
+    /// `#btnPrintPage-N` — one TIFF.
+    func printPage(_ page: GalleryPage) {
+        guard !isPrinting else { return }
+        isPrinting = true
+        Task { @MainActor in
+            do {
+                try await spool(page, index: page.index)
+                printNotice = "Sent \(page.page.filename) to \(selectedPrinter)."
+                printNoticeIsError = false
+            } catch {
+                printNotice = "Print failed: \(error.localizedDescription)"
+                printNoticeIsError = true
+            }
+            isPrinting = false
+        }
+    }
+
+    private func spool(_ page: GalleryPage, index: Int) async throws {
+        guard !selectedPrinter.isEmpty else {
+            throw CupsError.noPrinterSelected
+        }
+        let options = PrintOptions(
+            orientation: printOrientation,
+            paperSize: pageSize == .custom ? nil : pageSize.rawValue,
+            mediaType: selectedMediaType,
+            ppdUncorrectedPassthrough: true,
+            cupsOptions: capturedCupsOptions[selectedPrinter])
+        try await environment.cupsService.printTarget(
+            queue: selectedPrinter,
+            tiffPath: page.fileURL.path,
+            options: options,
+            page: index)
+        // For Stage 5 history (#95): record which queue printed.
+        wizard.printerName = selectedPrinter
     }
 
     // MARK: - Presets

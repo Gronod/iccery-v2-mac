@@ -14,4 +14,10 @@ public enum ProcessID {
     public static func iccgamut(stem: String) -> String { "iccgamut_\(stem)" }
     public static func printcal(_ stem: String) -> String { "printcal_\(stem)" }
     public static func applycal(_ stem: String) -> String { "applycal_\(stem)" }
+
+    /// CUPS system tools (`/usr/bin/…`) — captured one-shots, not
+    /// streaming Argyll children.
+    public static func lpstat(_ mode: String) -> String { "lpstat_\(mode)" }
+    public static func lpoptions(_ queue: String) -> String { "lpoptions_\(queue)" }
+    public static func lp(_ queue: String, page: Int) -> String { "lp_\(queue)_\(page)" }
 }

@@ -1,0 +1,23 @@
+#!/bin/sh
+# Mock lpoptions for Milestone3UITests. `-p <q>` prints printer-info;
+# `-p <q> -l` prints Key/Label listings incl. Epson bypass keys.
+queue=""
+list=0
+for arg in "$@"; do
+  case "$arg" in
+    -p) shift_flag=1 ;;
+    -l) list=1 ;;
+    -*) ;;
+    *) queue="$arg" ;;
+  esac
+done
+if [ "$list" = "1" ]; then
+  printf 'PageSize/Media Size: 4x6 5x7 *A4 Letter Legal\n'
+  printf 'InputSlot/Media Source: Auto *Main Rear\n'
+  printf 'MediaType/Media Type: *Stationery PhotographicGlossy PhotographicMatte\n'
+  printf 'EPIJ_CMat/Color Adjust: *0 1 2 3\n'
+  printf 'ColorModel/Output Mode: *RGB Gray\n'
+  exit 0
+fi
+printf "printer-info='Mock %s' printer-type=42\n" "$queue"
+exit 0

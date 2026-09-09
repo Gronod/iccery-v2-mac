@@ -1,0 +1,19 @@
+#!/bin/sh
+# Mock lpstat for Milestone3UITests. Emits two canned queues so the UI
+# can exercise select/refresh/status-badge without real CUPS.
+case "$1" in
+  -e)
+    printf 'Mock_Epson_7450\nMock_Canon_Pro\n'
+    ;;
+  -p)
+    printf 'printer Mock_Epson_7450 is idle.  enabled since Mon Sep  7 21:50:25 2026\n'
+    printf 'printer Mock_Canon_Pro disabled since Tue Sep  8 09:00:00 2026 -\n\tPaused\n'
+    ;;
+  -d)
+    printf 'system default destination: Mock_Epson_7450\n'
+    ;;
+  *)
+    exit 1
+    ;;
+esac
+exit 0
