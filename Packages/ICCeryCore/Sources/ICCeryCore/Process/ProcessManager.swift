@@ -169,7 +169,7 @@ public actor ProcessManager {
             Task { await self.ingestOutput(data, id: id, isStderr: true, handle: handle) }
         }
 
-        attachExitWatchdog(process) { [weak self] code in
+        attachTerminationHandler(process) { [weak self] code in
             guard let self else { return }
             Task { await self.didTerminate(id: id, code: code) }
         }
@@ -181,6 +181,10 @@ public actor ProcessManager {
             children.removeValue(forKey: id)
             emit(.error(id: id, message: error.localizedDescription))
             throw ProcessError.spawnFailed("\(binary.path): \(error.localizedDescription)")
+        }
+        startWaitUntilExitWatchdog(process) { [weak self] code in
+            guard let self else { return }
+            Task { await self.didTerminate(id: id, code: code) }
         }
     }
 
@@ -265,7 +269,7 @@ public actor ProcessManager {
             }
         }
         let box = Box()
-        attachExitWatchdog(capturedProcess) { status in
+        attachTerminationHandler(capturedProcess) { status in
             _ = box.resume(with: status)
         }
 
@@ -277,6 +281,9 @@ public actor ProcessManager {
             preKillHooks.removeValue(forKey: id)
             emit(.error(id: id, message: error.localizedDescription))
             throw ProcessError.spawnFailed("\(binary.path): \(error.localizedDescription)")
+        }
+        startWaitUntilExitWatchdog(capturedProcess) { status in
+            _ = box.resume(with: status)
         }
 
         // Close the parent write ends so readDataToEndOfFile() gets EOF
@@ -459,15 +466,24 @@ public actor ProcessManager {
         )
     }
 
-    /// terminationHandler can lose a fast-exit race on a loaded host;
+    /// `terminationHandler` can lose a fast-exit race on a loaded host;
     /// `waitUntilExit` on a detached thread is the fallback (#50, #52).
-    private func attachExitWatchdog(
+    /// The handler is attached before `run()`; the wait thread starts
+    /// only after a successful launch — `terminationStatus` on an
+    /// unlaunched NSTask raises NSInvalidArgumentException.
+    private func attachTerminationHandler(
         _ process: Process,
         onExit: @escaping @Sendable (Int32) -> Void
     ) {
         process.terminationHandler = { proc in
             onExit(proc.terminationStatus)
         }
+    }
+
+    private func startWaitUntilExitWatchdog(
+        _ process: Process,
+        onExit: @escaping @Sendable (Int32) -> Void
+    ) {
         Task.detached { [process] in
             process.waitUntilExit()
             onExit(process.terminationStatus)
