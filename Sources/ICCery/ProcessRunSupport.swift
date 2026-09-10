@@ -11,12 +11,15 @@ enum ProcessRunSupport {
         }
     }
 
+    /// Wraps a runner call with running/log bookkeeping.
+    /// `work` stays on the main actor so `T` does not cross isolation
+    /// (Swift 6: non-Sendable generic return from a nonisolated async fn).
     @MainActor
     static func runLogged<T>(
         setRunning: (Bool) -> Void,
         resetLog: () -> Void,
         onLog: @escaping @MainActor @Sendable ([String]) -> Void,
-        work: (@escaping @Sendable ([String]) -> Void) async throws -> T
+        work: @MainActor @escaping (@escaping @Sendable ([String]) -> Void) async throws -> T
     ) async throws -> T {
         setRunning(true)
         resetLog()
