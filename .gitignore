@@ -26,3 +26,4 @@ ICCery.xcodeproj/
 *.zip
 Release/
 notarization/
+build/
