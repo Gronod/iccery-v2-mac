@@ -67,8 +67,21 @@ jobs:
           NOTARIZE_PASSWORD: ${{ secrets.NOTARIZE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
+      - name: Prepare Node CA bundle
+        run: |
+          NODE_CA_FILE="/tmp/macos-ca-bundle.pem"
+          security find-certificate -a -p \
+            /System/Library/Keychains/SystemRootCertificates.keychain \
+            /Library/Keychains/System.keychain \
+            > "$NODE_CA_FILE" 2>/dev/null || true
+          if [ ! -s "$NODE_CA_FILE" ] && [ -f /etc/ssl/cert.pem ]; then
+            cp /etc/ssl/cert.pem "$NODE_CA_FILE"
+          fi
+
       - name: Upload DMG artifact
         uses: actions/upload-artifact@v3
+        env:
+          NODE_EXTRA_CA_CERTS: /tmp/macos-ca-bundle.pem
         with:
           name: iccery-dmg
           path: ICCery-*.dmg
