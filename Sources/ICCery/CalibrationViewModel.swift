@@ -27,8 +27,6 @@ final class CalibrationViewModel {
     var isComputing = false
     var lastError: String?
 
-    private var originalBasename: String = ""
-
     init(workflow: TargetWorkflowViewModel, profile: ProfileWorkflowViewModel, environment: AppEnvironment) {
         self.workflow = workflow
         self.profile = profile
@@ -53,7 +51,11 @@ final class CalibrationViewModel {
     }
 
     private var calBasename: String {
-        originalBasename.isEmpty ? "CAL_\(wizard.basename)" : "CAL_\(originalBasename)"
+        if wizard.basename.hasPrefix("CAL_") { return wizard.basename }
+        let original = !wizard.calibrationOriginalBasename.isEmpty
+            ? wizard.calibrationOriginalBasename
+            : wizard.basename
+        return "CAL_\(original)"
     }
 
     private var calOutputURL: URL? {
@@ -65,8 +67,14 @@ final class CalibrationViewModel {
 
     func generateTarget() {
         guard canGenerate, let cwd = wizard.effectiveWorkingDirectory else { return }
-        originalBasename = wizard.basename
-        wizard.basename = calBasename
+        // Snapshot the original (pre-CAL_) basename before changing the live one.
+        if !wizard.basename.hasPrefix("CAL_") {
+            wizard.calibrationOriginalBasename = wizard.basename
+        } else if wizard.calibrationOriginalBasename.isEmpty {
+            wizard.calibrationOriginalBasename = String(wizard.basename.dropFirst(4))
+        }
+        let original = wizard.calibrationOriginalBasename
+        wizard.basename = "CAL_\(original)"
         wizard.sessionMode = .calibration
 
         isGenerating = true
@@ -79,7 +87,7 @@ final class CalibrationViewModel {
             whitePatches: whitePatches,
             includeNeutralEmphasis: includeNeutralEmphasis,
             inkLimit: inkLimitValue,
-            basename: originalBasename,
+            basename: original,
             workingDirectory: cwd
         )
 
@@ -102,7 +110,7 @@ final class CalibrationViewModel {
                     "Calibration target failed: \(error.localizedDescription)",
                     kind: .error
                 )
-                self.restoreProfileBasename()
+                self.wizard.restoreCalibration()
             }
         }
     }
@@ -166,6 +174,7 @@ final class CalibrationViewModel {
                 self.profile.calibrationFile = url.path
                 self.profile.applyCalibration = self.applyToProfile
                 self.wizard.showNotice("Calibration curves computed.")
+                self.wizard.restoreCalibration()
             } catch {
                 self.lastError = error.localizedDescription
                 self.wizard.showNotice(
@@ -190,16 +199,8 @@ final class CalibrationViewModel {
     }
 
     func returnToProfiling() {
-        restoreProfileBasename()
-        wizard.sessionMode = .profile
+        wizard.restoreCalibration()
         wizard.go(to: .generate)
-    }
-
-    private func restoreProfileBasename() {
-        if !originalBasename.isEmpty {
-            wizard.basename = originalBasename
-            originalBasename = ""
-        }
     }
 
     private var inkLimitValue: Int? {
