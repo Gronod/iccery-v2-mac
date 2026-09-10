@@ -52,8 +52,7 @@ final class AboutHelpUITests: XCTestCase {
         _ = waitFor("aboutVersion", timeout: 10)
         XCTAssertTrue(element("aboutBuildDate").exists)
 
-        let close = app.sheets.firstMatch.buttons["closeAboutBtn"]
-        XCTAssertTrue(close.waitForExistence(timeout: 5))
+        let close = waitFor("closeAboutBtn", timeout: 10)
         close.click()
 
         XCTAssertFalse(element("aboutDialog").exists)

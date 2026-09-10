@@ -61,6 +61,7 @@ struct AboutView: View {
         .padding(32)
         .frame(width: 360)
         .background(Theme.panel)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("aboutDialog")
     }
 }
