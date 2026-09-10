@@ -132,8 +132,11 @@ dmgbuild -s scripts/dmgbuild-settings.py "$VOLUME_NAME" "$DMG"
 
 echo "DMG: $PWD/$DMG"
 
-# Optional notarization/stapling when credentials are present.
-if [ -n "${NOTARIZE_APPLE_ID:-}" ] && \
+# Notarization requires a Developer ID signature. If the app was ad-hoc
+# signed or any notarization secret is missing, skip silently — the DMG is
+# still usable for local/testing installs.
+if [ -n "${CODESIGN_IDENTITY:-}" ] && [ "$CODESIGN_IDENTITY" != "-" ] && \
+   [ -n "${NOTARIZE_APPLE_ID:-}" ] && \
    [ -n "${NOTARIZE_PASSWORD:-}" ] && \
    [ -n "${APPLE_TEAM_ID:-}" ]; then
     echo "==> Submitting $DMG for notarization"
@@ -144,6 +147,4 @@ if [ -n "${NOTARIZE_APPLE_ID:-}" ] && \
         --wait
     xcrun stapler staple "$DMG"
     echo "==> Stapled $DMG"
-else
-    echo "==> Notarization credentials not set; skipping"
 fi
