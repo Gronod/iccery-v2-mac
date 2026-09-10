@@ -35,9 +35,15 @@ final class AboutHelpUITests: XCTestCase {
         return el
     }
 
-    func testAboutDialogShowsVersionAndBuildDate() throws {
+    private func launchApp() {
         app.launch()
-        app.activate()
+        if !app.wait(for: .runningForeground, timeout: 10) {
+            app.activate()
+        }
+    }
+
+    func testAboutDialogShowsVersionAndBuildDate() throws {
+        launchApp()
 
         let openAbout = app.buttons["openAboutBtn"]
         XCTAssertTrue(openAbout.waitForExistence(timeout: 10))
@@ -54,8 +60,7 @@ final class AboutHelpUITests: XCTestCase {
     }
 
     func testHelpOverlaysDoNotChangeSidebarHeight() throws {
-        app.launch()
-        app.activate()
+        launchApp()
 
         let toggle = app.buttons["btnToggleAllHelp"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 10))
