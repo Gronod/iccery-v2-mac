@@ -107,7 +107,7 @@ public enum PrintcalArgs {
         }
         args.append(contentsOf: ["-o", config.outputURL.path])
 
-        let calBasename = cleanBasename.hasPrefix("CAL_") ? cleanBasename : "CAL_\(cleanBasename)"
+        let calBasename = CalibrationIdentity.prefix(cleanBasename)
         args.append(calBasename)
         return args
     }

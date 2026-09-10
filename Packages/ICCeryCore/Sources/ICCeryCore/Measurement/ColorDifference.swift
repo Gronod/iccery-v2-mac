@@ -154,11 +154,9 @@ public enum ColorDifference {
 
     /// Resolve a Lab from a `PatchColor`, computing it from XYZ when Lab is absent.
     public static func resolveLab(_ color: PatchColor) -> LabColor? {
-        if let lab = color.lab {
-            return LabColor(l: lab.l, a: lab.a, b: lab.b)
-        }
+        if let lab = color.lab { return lab }
         guard let xyz = color.xyz else { return nil }
-        return LabColorMath.xyzToLab(XYZColor(x: xyz.x, y: xyz.y, z: xyz.z))
+        return LabColorMath.xyzToLab(xyz)
     }
 
     private static func atan2ToDegrees(_ y: Double, _ x: Double) -> Double {

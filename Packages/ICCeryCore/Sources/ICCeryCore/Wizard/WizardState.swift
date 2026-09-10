@@ -74,23 +74,24 @@ public struct WizardState: Codable, Equatable, Sendable {
 /// Atomic JSON persistence for `WizardState` (issue #4).
 public final class WizardStateStore: Sendable {
     public let fileURL: URL
+    private let store: JSONFileStore<WizardState>
 
     public init(
         fileURL: URL = AppPaths.appDataDir.appendingPathComponent("wizard_state.json")
     ) {
         self.fileURL = fileURL
+        self.store = JSONFileStore(
+            fileURL: fileURL,
+            corrupt: .replaceWithDefault,
+            defaultValue: { .default }
+        )
     }
 
     public func load() -> WizardState {
-        guard let data = try? Data(contentsOf: fileURL),
-              let state = try? JSONDecoder().decode(WizardState.self, from: data)
-        else { return .default }
-        return state
+        (try? store.load()) ?? .default
     }
 
     public func save(_ state: WizardState) throws {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try AtomicFileWriter.write(encoder.encode(state), to: fileURL)
+        try store.save(state)
     }
 }

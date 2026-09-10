@@ -67,8 +67,12 @@ final class WizardViewModel {
         self.calibrationOriginalBasename = s.calibrationOriginalBasename
         // A Force Quit mid-calibration leaves a CAL_ basename behind; restore
         // the original before the UI can do anything with it (#29).
-        if basename.hasPrefix("CAL_"), !calibrationOriginalBasename.isEmpty {
-            basename = calibrationOriginalBasename
+        if CalibrationIdentity.isCalibration(basename), !calibrationOriginalBasename.isEmpty {
+            let identity = CalibrationIdentity.parse(
+                liveBasename: basename,
+                persistedOriginal: calibrationOriginalBasename
+            )
+            basename = identity.originalBasename
             calibrationOriginalBasename = ""
             sessionMode = .profile
             stage = .generate
@@ -128,7 +132,7 @@ final class WizardViewModel {
     /// refused and the original basename is restored (#29).
     func go(to target: WizardStage) {
         guard target != .calibrate else { enterCalibration(); return }
-        if basename.hasPrefix("CAL_") {
+        if CalibrationIdentity.isCalibration(basename) {
             guard !calibrationOriginalBasename.isEmpty else {
                 showNotice(
                     "Cannot leave calibration — the original target name is missing.",
@@ -152,7 +156,7 @@ final class WizardViewModel {
     }
 
     func enterCalibration() {
-        if !basename.isEmpty, !basename.hasPrefix("CAL_"), calibrationOriginalBasename.isEmpty {
+        if !basename.isEmpty, !CalibrationIdentity.isCalibration(basename), calibrationOriginalBasename.isEmpty {
             calibrationOriginalBasename = basename
         }
         sessionMode = .calibration

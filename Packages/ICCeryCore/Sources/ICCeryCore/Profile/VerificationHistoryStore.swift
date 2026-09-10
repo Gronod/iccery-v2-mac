@@ -13,8 +13,7 @@ public actor VerificationHistoryStore {
     private var records: [VerificationRecord] = []
 
     private let capacity: Int
-    private let encoder: JSONEncoder
-    private let decoder: JSONDecoder
+    private let fileStore: JSONFileStore<[VerificationRecord]>
 
     public init(
         url: URL = AppPaths.appDataDir.appendingPathComponent("verification_history.json"),
@@ -22,13 +21,13 @@ public actor VerificationHistoryStore {
     ) {
         self.url = url
         self.capacity = capacity
-
-        self.encoder = JSONEncoder()
-        self.encoder.dateEncodingStrategy = .iso8601
-        self.encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-
-        self.decoder = JSONDecoder()
-        self.decoder.dateDecodingStrategy = .iso8601
+        self.fileStore = JSONFileStore(
+            fileURL: url,
+            corrupt: .throwCorrupt,
+            defaultValue: { [] },
+            dateEncoding: .iso8601,
+            dateDecoding: .iso8601
+        )
     }
 
     /// Loads records from disk. Returns the existing cache if already loaded.
@@ -37,10 +36,8 @@ public actor VerificationHistoryStore {
     /// is never overwritten in that case.
     public func load() throws -> [VerificationRecord] {
         guard records.isEmpty else { return records }
-        let fm = FileManager.default
-        guard fm.fileExists(atPath: url.path),
-              let data = try? Data(contentsOf: url) else { return [] }
-        records = try decoder.decode([VerificationRecord].self, from: data)
+        guard FileManager.default.fileExists(atPath: url.path) else { return [] }
+        records = try fileStore.load()
         return records
     }
 
@@ -106,8 +103,7 @@ public actor VerificationHistoryStore {
 
     /// Writes `records` through a temp file and rename.
     private func write(_ records: [VerificationRecord]) throws {
-        let data = try encoder.encode(records)
-        try AtomicFileWriter.write(data, to: url)
+        try fileStore.save(records)
     }
 
     private func csvRow(_ fields: [String]) -> String {

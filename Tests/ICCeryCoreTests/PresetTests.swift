@@ -230,3 +230,61 @@ struct PresetMigrationTests {
         #expect(back.dpi == 150)
     }
 }
+
+@Suite("Preset mapping")
+struct PresetMappingTests {
+    @Test("Draft 150 DPI maps into PrinttargConfig")
+    func draftDpi() {
+        let cfg = PrinttargConfig(
+            preset: PresetCatalog.draftRGB,
+            basename: "t",
+            workingDirectory: nil,
+            calibrationFile: nil
+        )
+        #expect(cfg.dpi == 150)
+        #expect(cfg.layoutOrder == .deterministic)
+    }
+
+    @Test("Nil optional targen fields stay nil")
+    func optionalNil() {
+        let preset = ProfilingPreset(id: "x", name: "n", patchCount: 800)
+        let cfg = TargenConfig(preset: preset, basename: "t", workingDirectory: nil)
+        #expect(cfg.greySteps == nil)
+        #expect(cfg.singleChannelSteps == nil)
+        #expect(cfg.neutralSteps == nil)
+        #expect(cfg.totalInkLimit == nil)
+        #expect(cfg.darkEmphasis == nil)
+        #expect(cfg.devicePower == nil)
+    }
+
+    @Test("Custom page and FWA survive a config round-trip")
+    func roundTripConfigs() {
+        var preset = PresetCatalog.highQualityCMYK
+        preset.pageSize = "210x297"
+        preset.colprofFwa = "D50"
+        preset.greySteps = nil
+        let targen = TargenConfig(preset: preset, basename: "job", workingDirectory: nil)
+        let printtarg = PrinttargConfig(
+            preset: preset, basename: "job", workingDirectory: nil, calibrationFile: nil
+        )
+        let colprof = ColprofConfig(preset: preset, basename: "job", workingDirectory: nil)
+        #expect(printtarg.pageSize == .custom)
+        #expect(printtarg.customPageWidth == 210)
+        #expect(colprof.fwa == "D50")
+        let back = ProfilingPreset(
+            id: preset.id,
+            name: preset.name,
+            description: preset.description,
+            targen: targen,
+            printtarg: printtarg,
+            colprof: colprof,
+            calibrationFile: preset.calibrationFile,
+            applyCalibration: preset.applyCalibration
+        )
+        #expect(back.dpi == preset.dpi)
+        #expect(back.colourSpace == "cmyk")
+        #expect(back.pageSize == "210x297")
+        #expect(back.colprofFwa == "D50")
+        #expect(back.greySteps == nil)
+    }
+}

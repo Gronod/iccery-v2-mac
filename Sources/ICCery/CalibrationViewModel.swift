@@ -50,13 +50,14 @@ final class CalibrationViewModel {
         return cwd.appendingPathComponent("\(calBasename).ti3")
     }
 
-    private var calBasename: String {
-        if wizard.basename.hasPrefix("CAL_") { return wizard.basename }
-        let original = !wizard.calibrationOriginalBasename.isEmpty
-            ? wizard.calibrationOriginalBasename
-            : wizard.basename
-        return "CAL_\(original)"
+    private var identity: CalibrationIdentity {
+        CalibrationIdentity.parse(
+            liveBasename: wizard.basename,
+            persistedOriginal: wizard.calibrationOriginalBasename
+        )
     }
+
+    private var calBasename: String { identity.calibrationBasename }
 
     private var calOutputURL: URL? {
         guard let cwd = wizard.effectiveWorkingDirectory else { return nil }
@@ -68,13 +69,12 @@ final class CalibrationViewModel {
     func generateTarget() {
         guard canGenerate, let cwd = wizard.effectiveWorkingDirectory else { return }
         // Snapshot the original (pre-CAL_) basename before changing the live one.
-        if !wizard.basename.hasPrefix("CAL_") {
-            wizard.calibrationOriginalBasename = wizard.basename
-        } else if wizard.calibrationOriginalBasename.isEmpty {
-            wizard.calibrationOriginalBasename = String(wizard.basename.dropFirst(4))
-        }
-        let original = wizard.calibrationOriginalBasename
-        wizard.basename = "CAL_\(original)"
+        let identity = CalibrationIdentity.parse(
+            liveBasename: wizard.basename,
+            persistedOriginal: wizard.calibrationOriginalBasename
+        )
+        wizard.calibrationOriginalBasename = identity.originalBasename
+        wizard.basename = identity.calibrationBasename
         wizard.sessionMode = .calibration
 
         isGenerating = true
@@ -87,7 +87,7 @@ final class CalibrationViewModel {
             whitePatches: whitePatches,
             includeNeutralEmphasis: includeNeutralEmphasis,
             inkLimit: inkLimitValue,
-            basename: original,
+            basename: identity.originalBasename,
             workingDirectory: cwd
         )
 
@@ -95,11 +95,9 @@ final class CalibrationViewModel {
             defer { self.isGenerating = false }
 
             do {
-                _ = try await self.environment.runner.runCalibrationTargen(config: config) { batch in
-                    Task { @MainActor [weak self] in
-                        self?.calibrationLog.append(contentsOf: batch)
-                    }
-                }
+                _ = try await self.environment.runner.runCalibrationTargen(config: config, onLogBatch: ProcessRunSupport.logSink { [weak self] batch in
+                    self?.calibrationLog.append(contentsOf: batch)
+                })
                 self.wizard.refreshGating()
                 self.wizard.showNotice("Calibration target generated.")
                 self.wizard.go(to: .layOutPrint)
@@ -163,11 +161,9 @@ final class CalibrationViewModel {
             defer { self.isComputing = false }
 
             do {
-                let url = try await self.environment.runner.runPrintcal(config: config) { batch in
-                    Task { @MainActor [weak self] in
-                        self?.calibrationLog.append(contentsOf: batch)
-                    }
-                }
+                let url = try await self.environment.runner.runPrintcal(config: config, onLogBatch: ProcessRunSupport.logSink { [weak self] batch in
+                    self?.calibrationLog.append(contentsOf: batch)
+                })
                 self.computedCalURL = url
                 self.profile.calibrationFile = url.path
                 self.profile.applyCalibration = self.applyToProfile

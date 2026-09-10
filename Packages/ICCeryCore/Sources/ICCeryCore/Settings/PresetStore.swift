@@ -60,9 +60,7 @@ public final class PresetStore: Sendable {
 
     /// Single-preset pretty JSON export.
     public func export(_ preset: ProfilingPreset) throws -> Data {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        return try encoder.encode(preset)
+        return try JSONEncoder.icceryPretty().encode(preset)
     }
 
     /// Parses + validates a preset from JSON. The preset is assigned a
