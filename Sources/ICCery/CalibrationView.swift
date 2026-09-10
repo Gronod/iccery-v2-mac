@@ -4,6 +4,7 @@ import ICCeryCore
 /// Stage 0 calibration dashboard (issue #29, docs/07).
 struct CalibrationView: View {
     @Bindable var model: CalibrationViewModel
+    @Bindable var wizard: WizardViewModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -51,11 +52,15 @@ struct CalibrationView: View {
                     HStack(spacing: 12) {
                         Button("Generate Target") { model.generateTarget() }
                             .accessibilityIdentifier("btnCalGenerate")
-                            .disabled(!model.canGenerate)
+                            .disabled(wizard.basename.isEmpty
+                                      || wizard.effectiveWorkingDirectory == nil
+                                      || model.isGenerating)
 
                         Button("Create Layout & Print") { model.createLayout() }
                             .accessibilityIdentifier("btnCalLayout")
-                            .disabled(!model.canGenerate)
+                            .disabled(wizard.basename.isEmpty
+                                      || wizard.effectiveWorkingDirectory == nil
+                                      || model.isGenerating)
 
                         Button("Measure") { model.measureChart() }
                             .accessibilityIdentifier("btnCalMeasure")

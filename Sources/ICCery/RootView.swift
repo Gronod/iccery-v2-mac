@@ -83,7 +83,7 @@ private struct WizardStageContent: View {
         case .verifyInstall:
             Stage5View(model: workflow.profile)
         case .calibrate:
-            CalibrationView(model: workflow.calibration)
+            CalibrationView(model: workflow.calibration, wizard: workflow.wizard)
         @unknown default:
             StagePlaceholderView(stage: model.stage)
         }
