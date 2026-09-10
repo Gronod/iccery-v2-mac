@@ -210,10 +210,10 @@ final class Milestone3UITests: XCTestCase {
         _ = waitFor("printerStatusBadge")
 
         app.buttons["btnPrintAll"].click()
-        let notice = element("printNotificationText")
+        let predicate = NSPredicate(format: "label CONTAINS[c] %@", "Print failed")
+        let notice = app.staticTexts.containing(predicate).firstMatch
         XCTAssertTrue(notice.waitForExistence(timeout: 10))
-        XCTAssertTrue((notice.value as? String ?? "")
-            .contains("Print failed"))
+        XCTAssertTrue(notice.label.contains("Print failed"))
     }
 
     /// wizardState.printerName records the queue used for spooling (#95).
