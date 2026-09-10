@@ -3,6 +3,65 @@ import SceneKit
 import ICCeryCore
 import simd
 
+/// Builds a SceneKit geometry from a `GamutMesh` while dropping faces whose
+/// indices are not backed by a vertex in the source mesh.
+@MainActor
+internal struct GamutSceneGeometryBuilder {
+    static func geometry(for mesh: GamutMesh) -> (SCNGeometry, SCNGeometryElement) {
+        let positions = mesh.vertices.map { $0.position }
+        let positionData = positions.withUnsafeBytes { Data($0) }
+        let positionSource = SCNGeometrySource(
+            data: positionData,
+            semantic: .vertex,
+            vectorCount: positions.count,
+            usesFloatComponents: true,
+            componentsPerVector: 3,
+            bytesPerComponent: MemoryLayout<Float>.size,
+            dataOffset: 0,
+            dataStride: MemoryLayout<SIMD3<Float>>.stride
+        )
+
+        let colors: [SIMD4<Float>] = mesh.vertices.map { v in
+            SIMD4<Float>(Float(v.rgb.r), Float(v.rgb.g), Float(v.rgb.b), 1.0)
+        }
+        let colorData = colors.withUnsafeBytes { Data($0) }
+        let colorSource = SCNGeometrySource(
+            data: colorData,
+            semantic: .color,
+            vectorCount: colors.count,
+            usesFloatComponents: true,
+            componentsPerVector: 4,
+            bytesPerComponent: MemoryLayout<Float>.size,
+            dataOffset: 0,
+            dataStride: MemoryLayout<SIMD4<Float>>.stride
+        )
+
+        let vcount = mesh.vertices.count
+        var indices: [UInt32] = []
+        var validFaces: [GamutTriangle] = []
+        indices.reserveCapacity(mesh.faces.count * 3)
+        for face in mesh.faces {
+            guard Int(face.a) < vcount, Int(face.b) < vcount, Int(face.c) < vcount else {
+                continue
+            }
+            indices.append(face.a)
+            indices.append(face.b)
+            indices.append(face.c)
+            validFaces.append(face)
+        }
+        let data = indices.withUnsafeBytes { Data($0) }
+        let element = SCNGeometryElement(
+            data: data,
+            primitiveType: .triangles,
+            primitiveCount: validFaces.count,
+            bytesPerIndex: 4
+        )
+
+        let geometry = SCNGeometry(sources: [positionSource, colorSource], elements: [element])
+        return (geometry, element)
+    }
+}
+
 /// Native SceneKit 3D gamut viewer.
 ///
 /// Displays a profile gamut mesh and the bundled `sRGB.gam` reference.  Uses
@@ -11,6 +70,7 @@ import simd
 /// (blue-yellow) is depth.
 struct GamutView: View {
     @State private var viewModel: GamutViewModel
+    @State private var pause: () -> Void = {}
     @FocusState private var isFocused: Bool
 
     init(profileGamURL: URL? = nil) {
@@ -22,7 +82,8 @@ struct GamutView: View {
             GamutSceneView(
                 profileMesh: viewModel.profileMesh,
                 referenceMesh: viewModel.sRGBMesh,
-                onReset: $viewModel.resetCamera
+                onReset: $viewModel.resetCamera,
+                onPause: $pause
             )
             .focusable()
             .focused($isFocused)
@@ -56,6 +117,7 @@ struct GamutView: View {
             }
         }
         .frame(minWidth: 500, minHeight: 400)
+        .onDisappear { pause() }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("gamutView")
     }
@@ -70,6 +132,7 @@ private struct GamutSceneView: NSViewRepresentable {
     var profileMesh: GamutMesh?
     var referenceMesh: GamutMesh?
     var onReset: Binding<() -> Void>
+    var onPause: Binding<() -> Void>
 
     func makeNSView(context: Context) -> SCNView {
         let scnView = SCNView()
@@ -98,7 +161,14 @@ private struct GamutSceneView: NSViewRepresentable {
         onReset.wrappedValue = { [weak coordinator] in
             coordinator?.resetCamera()
         }
+        onPause.wrappedValue = { [weak coordinator] in
+            coordinator?.pause()
+        }
         return coordinator
+    }
+
+    static func dismantleNSView(_ nsView: SCNView, coordinator: Coordinator) {
+        nsView.isPlaying = false
     }
 
     @MainActor
@@ -314,7 +384,9 @@ private struct GamutSceneView: NSViewRepresentable {
 
             // Structural outline: one line per triangle edge.
             var linePoints: [SIMD3<Float>] = []
-            for face in mesh.faces {
+            let vcount = mesh.vertices.count
+            for face in mesh.faces
+            where Int(face.a) < vcount && Int(face.b) < vcount && Int(face.c) < vcount {
                 let va = mesh.vertices[Int(face.a)].position
                 let vb = mesh.vertices[Int(face.b)].position
                 let vc = mesh.vertices[Int(face.c)].position
@@ -337,51 +409,7 @@ private struct GamutSceneView: NSViewRepresentable {
         /// Uses data-backed `SCNGeometrySource` initializers; this is the only
         /// path that supports vertex colours through the `.color` semantic.
         private func scnGeometry(for mesh: GamutMesh) -> (SCNGeometry, SCNGeometryElement) {
-            let positions = mesh.vertices.map { $0.position }
-            let positionData = positions.withUnsafeBytes { Data($0) }
-            let positionSource = SCNGeometrySource(
-                data: positionData,
-                semantic: .vertex,
-                vectorCount: positions.count,
-                usesFloatComponents: true,
-                componentsPerVector: 3,
-                bytesPerComponent: MemoryLayout<Float>.size,
-                dataOffset: 0,
-                dataStride: MemoryLayout<SIMD3<Float>>.stride
-            )
-
-            let colors: [SIMD4<Float>] = mesh.vertices.map { v in
-                SIMD4<Float>(Float(v.rgb.r), Float(v.rgb.g), Float(v.rgb.b), 1.0)
-            }
-            let colorData = colors.withUnsafeBytes { Data($0) }
-            let colorSource = SCNGeometrySource(
-                data: colorData,
-                semantic: .color,
-                vectorCount: colors.count,
-                usesFloatComponents: true,
-                componentsPerVector: 4,
-                bytesPerComponent: MemoryLayout<Float>.size,
-                dataOffset: 0,
-                dataStride: MemoryLayout<SIMD4<Float>>.stride
-            )
-
-            var indices: [UInt32] = []
-            indices.reserveCapacity(mesh.faces.count * 3)
-            for face in mesh.faces {
-                indices.append(face.a)
-                indices.append(face.b)
-                indices.append(face.c)
-            }
-            let data = indices.withUnsafeBytes { Data($0) }
-            let element = SCNGeometryElement(
-                data: data,
-                primitiveType: .triangles,
-                primitiveCount: mesh.faces.count,
-                bytesPerIndex: 4
-            )
-
-            let geometry = SCNGeometry(sources: [positionSource, colorSource], elements: [element])
-            return (geometry, element)
+            GamutSceneGeometryBuilder.geometry(for: mesh)
         }
 
         /// Shared helper for data-backed position sources.
@@ -397,6 +425,10 @@ private struct GamutSceneView: NSViewRepresentable {
                 dataOffset: 0,
                 dataStride: MemoryLayout<SIMD3<Float>>.stride
             )
+        }
+
+        func pause() {
+            scnView?.isPlaying = false
         }
 
         func resetCamera() {
