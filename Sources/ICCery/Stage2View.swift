@@ -234,6 +234,7 @@ struct Stage2View: View {
                 }
                 Spacer()
             }
+            .accessibilityElement(children: .contain)
 
             // Printer row: select + status + refresh + Preferences.
             HStack(spacing: 10) {

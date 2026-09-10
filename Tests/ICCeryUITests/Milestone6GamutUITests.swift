@@ -46,7 +46,9 @@ final class Milestone6GamutUITests: XCTestCase {
             "basename": "mytarget",
             "cwd": workDir.path,
             "printerName": "MockPrinter",
-            "sessionMode": "profile"
+            "sessionMode": "profile",
+            "profileBasename": "mytarget",
+            "calibrationOriginalBasename": ""
         ]
         let stateData = try JSONSerialization.data(withJSONObject: state, options: [])
         try stateData.write(to: appDataDir.appendingPathComponent("wizard_state.json"))

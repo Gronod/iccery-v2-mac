@@ -37,14 +37,10 @@ jobs:
           BUILT_PRODUCTS_DIR="$(xcodebuild -scheme ICCery -destination 'platform=macOS' -showBuildSettings | sed -n 's/^ *BUILT_PRODUCTS_DIR = //p' | head -n 1)"
           if [ -d "$BUILT_PRODUCTS_DIR/ICCery.app" ]; then
             xattr -cr "$BUILT_PRODUCTS_DIR/ICCery.app"
-            codesign -f -s - --options runtime "$BUILT_PRODUCTS_DIR/ICCery.app"
+            codesign -f -s - --options runtime \
+              --entitlements Resources/ICCery.entitlements \
+              "$BUILT_PRODUCTS_DIR/ICCery.app"
           fi
-          for runner in "$BUILT_PRODUCTS_DIR"/*Runner.app; do
-            if [ -d "$runner" ]; then
-              xattr -cr "$runner"
-              codesign -f -s - --options runtime "$runner"
-            fi
-          done
 
           xcodebuild test \
             -scheme ICCery \
