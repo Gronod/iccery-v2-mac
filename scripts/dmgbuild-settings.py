@@ -32,7 +32,7 @@ if background and not os.path.exists(background):
 icon = None
 
 # Window size is enough for the app icon and the Applications alias.
-window_rect = ((100, 100), (640, 480))
+window_rect = ((100, 100), (660, 400))
 
 # Use icon view without extra chrome.
 default_view = 'icon-view'
@@ -45,8 +45,8 @@ sidebar_width = 180
 
 # Position the .app on the left and the Applications alias on the right.
 icon_locations = {
-    'ICCery.app': (140, 240),
-    'Applications': (500, 240),
+    'ICCery.app': (180, 220),
+    'Applications': (480, 220),
 }
 
 # Symlink to /Applications for drag-and-drop install.
