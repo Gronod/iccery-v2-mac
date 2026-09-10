@@ -25,6 +25,25 @@ public struct WizardState: Codable, Equatable, Sendable {
     /// restore the original (#29).
     public var calibrationOriginalBasename: String = ""
 
+    private enum CodingKeys: String, CodingKey {
+        case currentStage, basename, cwd, printerName, sessionMode
+        case profileBasename, calibrationOriginalBasename
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.currentStage = try container.decodeIfPresent(Int.self, forKey: .currentStage)
+            ?? WizardStage.generate.rawValue
+        self.basename = try container.decodeIfPresent(String.self, forKey: .basename) ?? ""
+        self.cwd = try container.decodeIfPresent(String.self, forKey: .cwd) ?? ""
+        self.printerName = try container.decodeIfPresent(String.self, forKey: .printerName)
+        self.sessionMode = try container.decodeIfPresent(SessionMode.self, forKey: .sessionMode)
+            ?? .profile
+        self.profileBasename = try container.decodeIfPresent(String.self, forKey: .profileBasename)
+        self.calibrationOriginalBasename = try container.decodeIfPresent(
+            String.self, forKey: .calibrationOriginalBasename) ?? ""
+    }
+
     public init(
         currentStage: Int = WizardStage.generate.rawValue,
         basename: String = "",

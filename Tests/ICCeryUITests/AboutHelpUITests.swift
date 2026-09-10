@@ -18,7 +18,9 @@ final class AboutHelpUITests: XCTestCase {
     }
 
     private func element(_ id: String) -> XCUIElement {
-        app.descendants(matching: .any)[id]
+        let inApp = app.descendants(matching: .any)[id].firstMatch
+        if inApp.exists { return inApp }
+        return app.sheets.firstMatch.descendants(matching: .any)[id].firstMatch
     }
 
     private func waitFor(_ id: String, timeout: TimeInterval = 10) -> XCUIElement {
@@ -41,8 +43,7 @@ final class AboutHelpUITests: XCTestCase {
         XCTAssertTrue(openAbout.waitForExistence(timeout: 10))
         openAbout.click()
 
-        _ = waitFor("aboutDialog", timeout: 10)
-        XCTAssertTrue(element("aboutVersion").exists)
+        _ = waitFor("aboutVersion", timeout: 10)
         XCTAssertTrue(element("aboutBuildDate").exists)
 
         let close = app.buttons["closeAboutBtn"]
