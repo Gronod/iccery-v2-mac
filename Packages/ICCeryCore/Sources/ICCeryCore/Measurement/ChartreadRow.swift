@@ -51,58 +51,6 @@ public struct PatchColor: Codable, Sendable, Equatable {
     }
 }
 
-public struct CIEXYZ: Codable, Sendable, Equatable {
-    public let x: Double
-    public let y: Double
-    public let z: Double
-
-    public init(from decoder: Decoder) throws {
-        var container = try decoder.unkeyedContainer()
-        self.x = try container.decode(Double.self)
-        self.y = try container.decode(Double.self)
-        self.z = try container.decode(Double.self)
-    }
-
-    public init(x: Double, y: Double, z: Double) {
-        self.x = x
-        self.y = y
-        self.z = z
-    }
-
-    public func encode(to encoder: Encoder) throws {
-        var container = encoder.unkeyedContainer()
-        try container.encode(x)
-        try container.encode(y)
-        try container.encode(z)
-    }
-}
-
-public struct CIELab: Codable, Sendable, Equatable {
-    public let l: Double
-    public let a: Double
-    public let b: Double
-
-    public init(from decoder: Decoder) throws {
-        var container = try decoder.unkeyedContainer()
-        self.l = try container.decode(Double.self)
-        self.a = try container.decode(Double.self)
-        self.b = try container.decode(Double.self)
-    }
-
-    public init(l: Double, a: Double, b: Double) {
-        self.l = l
-        self.a = a
-        self.b = b
-    }
-
-    public func encode(to encoder: Encoder) throws {
-        var container = encoder.unkeyedContainer()
-        try container.encode(l)
-        try container.encode(a)
-        try container.encode(b)
-    }
-}
-
 public struct SpectralData: Codable, Sendable, Equatable {
     public let bands: Int
     public let startNM: Double

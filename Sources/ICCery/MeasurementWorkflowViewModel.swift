@@ -70,8 +70,7 @@ final class MeasurementWorkflowViewModel {
 
     var passSnapshots: [URL] = []
     var isFinishing = false
-    var finishNotice: String?
-    var finishNoticeIsError = false
+    var finishNotice: Notice?
     var resumedFromTi2 = false
 
     init(wizard: WizardViewModel, environment: AppEnvironment) {
@@ -400,7 +399,6 @@ final class MeasurementWorkflowViewModel {
         guard !isFinishing, let cwd = workingDirectory, !passSnapshots.isEmpty else { return }
         isFinishing = true
         finishNotice = nil
-        finishNoticeIsError = false
 
         Task { @MainActor [weak self] in
             guard let self else { return }
@@ -420,10 +418,8 @@ final class MeasurementWorkflowViewModel {
                     )
                     canonical = try await self.environment.runner.runAverage(
                         config: config,
-                        onLogBatch: { [weak self] batch in
-                            Task { @MainActor [weak self] in
-                                self?.chartreadLog.append(contentsOf: batch)
-                            }
+                        onLogBatch: ProcessRunSupport.logSink { [weak self] batch in
+                            self?.chartreadLog.append(contentsOf: batch)
                         }
                     )
                 }
@@ -432,7 +428,11 @@ final class MeasurementWorkflowViewModel {
                 if self.wizard.isUnlocked(.buildProfile) {
                     self.wizard.go(to: .buildProfile)
                 } else {
-                    self.finishNotice = "Finished: \(canonical.lastPathComponent) ready."
+                    self.finishNotice = Notice(
+                        kind: .info,
+                        text: "Finished: \(canonical.lastPathComponent) ready.",
+                        autoHideAfter: nil
+                    )
                 }
             } catch {
                 // Fallback to pass 1 promotion if averaging failed.
@@ -445,15 +445,24 @@ final class MeasurementWorkflowViewModel {
                         )
                         self.discoverPassSnapshots()
                         self.wizard.refreshGating()
-                        self.finishNotice = "Averaging failed — promoted first pass."
-                        self.finishNoticeIsError = true
+                        self.finishNotice = Notice(
+                            kind: .error,
+                            text: "Averaging failed — promoted first pass.",
+                            autoHideAfter: nil
+                        )
                     } catch {
-                        self.finishNotice = "Finish failed: \(error.localizedDescription)"
-                        self.finishNoticeIsError = true
+                        self.finishNotice = Notice(
+                            kind: .error,
+                            text: "Finish failed: \(error.localizedDescription)",
+                            autoHideAfter: nil
+                        )
                     }
                 } else {
-                    self.finishNotice = "Finish failed: \(error.localizedDescription)"
-                    self.finishNoticeIsError = true
+                    self.finishNotice = Notice(
+                        kind: .error,
+                        text: "Finish failed: \(error.localizedDescription)",
+                        autoHideAfter: nil
+                    )
                 }
             }
             self.isFinishing = false

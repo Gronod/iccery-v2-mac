@@ -26,18 +26,13 @@ public enum ColprofArgs {
         let cleanBasename = try PathSecurity.sanitizeBasename(config.basename)
 
         var args: [String] = ["-v"]
-
         args.append(contentsOf: ["-a", config.algorithm])
         args.append(contentsOf: ["-q", config.quality])
-
-        if let intent = config.intent?.trimmingCharacters(in: .whitespaces), !intent.isEmpty {
-            args.append(contentsOf: ["-t", intent])
-        }
+        args.append(contentsOf: ArgsBuilder.optionIfNonEmpty("-t", config.intent))
 
         if let fwa = config.fwa?.trimmingCharacters(in: .whitespaces) {
             switch fwa.lowercased() {
             case "none", "":
-                // "none" omits the flag; an explicit empty string means bare -f.
                 if fwa.isEmpty {
                     args.append("-f")
                 }
@@ -46,32 +41,20 @@ public enum ColprofArgs {
             }
         }
 
-        if let illuminant = config.illuminant?.trimmingCharacters(in: .whitespaces), !illuminant.isEmpty {
-            args.append(contentsOf: ["-i", illuminant])
-        }
-
-        if let observer = config.observer?.trimmingCharacters(in: .whitespaces), !observer.isEmpty {
-            args.append(contentsOf: ["-o", observer])
-        }
+        args.append(contentsOf: ArgsBuilder.optionIfNonEmpty("-i", config.illuminant))
+        args.append(contentsOf: ArgsBuilder.optionIfNonEmpty("-o", config.observer))
 
         if let inputCond = config.inputViewingCond?.trimmingCharacters(in: .whitespaces),
            !inputCond.isEmpty, inputCond.lowercased() != "none" {
             args.append(contentsOf: ["-c", inputCond])
         }
-
         if let outputCond = config.outputViewingCond?.trimmingCharacters(in: .whitespaces),
            !outputCond.isEmpty, outputCond.lowercased() != "none" {
             args.append(contentsOf: ["-d", outputCond])
         }
 
-        let profileDescription = config.description?.trimmingCharacters(in: .whitespaces)
-        if let description = profileDescription, !description.isEmpty {
-            args.append(contentsOf: ["-D", description])
-        }
-
-        if let copyright = config.copyright?.trimmingCharacters(in: .whitespaces), !copyright.isEmpty {
-            args.append(contentsOf: ["-C", copyright])
-        }
+        args.append(contentsOf: ArgsBuilder.optionIfNonEmpty("-D", config.description))
+        args.append(contentsOf: ArgsBuilder.optionIfNonEmpty("-C", config.copyright))
 
         args.append(cleanBasename)
         return args

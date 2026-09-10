@@ -238,19 +238,12 @@ struct Stage1View: View {
     }
 
     private var logSection: some View {
-        DisclosureGroup("Process log") {
-            ScrollView {
-                Text(workflow.targenLog.joined(separator: "\n"))
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(Theme.text)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
-            }
-            .frame(minHeight: 120, maxHeight: 200)
-            .accessibilityIdentifier("targenLog")
-        }
-        .foregroundStyle(Theme.text)
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("targenLogContainer")
+        ProcessLogView(
+            lines: workflow.targenLog,
+            minHeight: 120,
+            maxHeight: 200,
+            containerId: "targenLogContainer",
+            logId: "targenLog"
+        )
     }
 }

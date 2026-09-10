@@ -4,8 +4,8 @@ import Foundation
 /// `~/Library/Application Support/com.gronod.iccery2/settings.json`
 /// (issue #5 — the v1 path is never read).
 ///
-/// Writes are atomic (`AtomicFileWriter`). Invalid/corrupt JSON falls
-/// back to defaults. Saving posts `settingsDidChange` so #20 can
+/// Writes are atomic (`JSONFileStore` → `AtomicFileWriter`). Invalid/corrupt
+/// JSON falls back to defaults. Saving posts `settingsDidChange` so #20 can
 /// reclassify swatches.
 public final class SettingsStore: Sendable {
 
@@ -14,18 +14,19 @@ public final class SettingsStore: Sendable {
         Notification.Name("com.gronod.iccery2.settingsDidChange")
 
     public let fileURL: URL
+    private let store: JSONFileStore<AppSettings>
 
     public init(fileURL: URL = AppPaths.appDataDir.appendingPathComponent("settings.json")) {
         self.fileURL = fileURL
+        self.store = JSONFileStore(
+            fileURL: fileURL,
+            corrupt: .replaceWithDefault,
+            defaultValue: { .default }
+        )
     }
 
     public func load() -> AppSettings {
-        guard let data = try? Data(contentsOf: fileURL),
-              let settings = try? JSONDecoder().decode(AppSettings.self, from: data)
-        else {
-            return .default
-        }
-        return settings
+        (try? store.load()) ?? .default
     }
 
     /// Validates before persisting — throws `SettingsError` listing
@@ -35,9 +36,7 @@ public final class SettingsStore: Sendable {
         guard errors.isEmpty else {
             throw SettingsError.validationFailed(errors)
         }
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        try AtomicFileWriter.write(encoder.encode(settings), to: fileURL)
+        try store.save(settings)
         NotificationCenter.default.post(name: Self.settingsDidChange, object: nil)
     }
 

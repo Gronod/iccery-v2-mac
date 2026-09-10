@@ -78,6 +78,18 @@ public enum ArtefactProbe {
         return nil
     }
 
+    /// Resolve an explicit profile URL, flipping `.icc` ↔ `.icm` when the
+    /// requested path is missing (#69 / issue #83).
+    public static func resolveProfile(
+        _ url: URL,
+        fileManager: FileManager = .default
+    ) -> URL {
+        if fileManager.fileExists(atPath: url.path) { return url }
+        let altExt = url.pathExtension.lowercased() == "icc" ? "icm" : "icc"
+        let alt = url.deletingPathExtension().appendingPathExtension(altExt)
+        return fileManager.fileExists(atPath: alt.path) ? alt : url
+    }
+
     /// Default extension for a *new* profile on macOS (#69).
     public static let defaultProfileExtension = "icc"
 

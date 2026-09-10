@@ -1,7 +1,8 @@
 import Foundation
 
 /// XYZ tristimulus values, stored in the 0–100 scale used by the Argyll fork.
-public struct XYZColor: Sendable, Equatable {
+/// Unkeyed Codable matches `ROW_COLORS_JSON` `[x, y, z]`.
+public struct XYZColor: Codable, Sendable, Equatable {
     public let x: Double
     public let y: Double
     public let z: Double
@@ -11,10 +12,24 @@ public struct XYZColor: Sendable, Equatable {
         self.y = y
         self.z = z
     }
+
+    public init(from decoder: Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        self.x = try container.decode(Double.self)
+        self.y = try container.decode(Double.self)
+        self.z = try container.decode(Double.self)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.unkeyedContainer()
+        try container.encode(x)
+        try container.encode(y)
+        try container.encode(z)
+    }
 }
 
-/// CIELab value (D50).
-public struct LabColor: Sendable, Equatable {
+/// CIELab value (D50). Unkeyed Codable matches `ROW_COLORS_JSON` `[L, a, b]`.
+public struct LabColor: Codable, Sendable, Equatable {
     public let l: Double
     public let a: Double
     public let b: Double
@@ -24,7 +39,25 @@ public struct LabColor: Sendable, Equatable {
         self.a = a
         self.b = b
     }
+
+    public init(from decoder: Decoder) throws {
+        var container = try decoder.unkeyedContainer()
+        self.l = try container.decode(Double.self)
+        self.a = try container.decode(Double.self)
+        self.b = try container.decode(Double.self)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.unkeyedContainer()
+        try container.encode(l)
+        try container.encode(a)
+        try container.encode(b)
+    }
 }
+
+/// JSON aliases used by `chartread` row payloads.
+public typealias CIEXYZ = XYZColor
+public typealias CIELab = LabColor
 
 /// sRGB colour in 0–1 display space.
 public struct DisplayRGB: Sendable, Equatable {

@@ -85,7 +85,7 @@ private struct WizardStageContent: View {
         case .calibrate:
             CalibrationView(model: workflow.calibration, wizard: workflow.wizard)
         @unknown default:
-            StagePlaceholderView(stage: model.stage)
+            Stage1View(workflow: workflow)
         }
     }
 }

@@ -69,7 +69,7 @@ public enum PrinttargArgs {
         }
         args.append(contentsOf: [config.bitDepth.flag, "\(config.dpi)"])
 
-        if !cleanBasename.hasPrefix("CAL_"),
+        if !CalibrationIdentity.isCalibration(cleanBasename),
            let cal = config.calibrationFile?.trimmingCharacters(in: .whitespacesAndNewlines),
            !cal.isEmpty {
             args.append(contentsOf: [config.calibrationEmbedOnly ? "-I" : "-K", cal])
