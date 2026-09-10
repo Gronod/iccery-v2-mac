@@ -26,12 +26,14 @@ struct AboutView: View {
                         .foregroundStyle(Theme.text)
                         .accessibilityIdentifier("aboutVersion")
                 }
+                .accessibilityElement(children: .contain)
                 HStack {
                     Text("Build:")
                         .foregroundStyle(.secondary)
                     Text(info.build)
                         .foregroundStyle(Theme.text)
                 }
+                .accessibilityElement(children: .contain)
                 HStack {
                     Text("Build date:")
                         .foregroundStyle(.secondary)
@@ -39,8 +41,10 @@ struct AboutView: View {
                         .foregroundStyle(Theme.text)
                         .accessibilityIdentifier("aboutBuildDate")
                 }
+                .accessibilityElement(children: .contain)
             }
             .font(.callout)
+            .accessibilityElement(children: .contain)
 
             Text("Native macOS printer profiling workstation.")
                 .font(.caption)
