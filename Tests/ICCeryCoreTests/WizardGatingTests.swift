@@ -95,6 +95,7 @@ struct WizardStateStoreTests {
         s.cwd = "/tmp/charts"
         s.sessionMode = .calibration
         s.profileBasename = "imported"
+        s.calibrationOriginalBasename = "pre-cal"
         try store.save(s)
         #expect(store.load() == s)
     }

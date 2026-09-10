@@ -5,7 +5,8 @@ import ICCeryCore
 /// Wizard state machine + artefact gating (issue #4, docs/06).
 ///
 /// `wizardState` fields (`currentStage`, `basename`, `cwd`,
-/// `printerName`, `sessionMode`, `profileBasename`) are persisted to
+/// `printerName`, `sessionMode`, `profileBasename`,
+/// `calibrationOriginalBasename`) are persisted to
 /// `wizard_state.json`; unlocks come from `ArtefactProbe.verify` —
 /// navigation is disk, not buttons.
 @MainActor
@@ -35,6 +36,10 @@ final class WizardViewModel {
     var profileBasename: String? {
         didSet { if profileBasename != oldValue { persist() } }
     }
+    /// Pre-`CAL_` basename, persisted so relaunch/Force Quit can restore it (#29).
+    var calibrationOriginalBasename: String {
+        didSet { if calibrationOriginalBasename != oldValue { persist() } }
+    }
 
     // MARK: - Ephemeral
 
@@ -59,6 +64,15 @@ final class WizardViewModel {
         self.printerName = s.printerName
         self.sessionMode = s.sessionMode
         self.profileBasename = s.profileBasename
+        self.calibrationOriginalBasename = s.calibrationOriginalBasename
+        // A Force Quit mid-calibration leaves a CAL_ basename behind; restore
+        // the original before the UI can do anything with it (#29).
+        if basename.hasPrefix("CAL_"), !calibrationOriginalBasename.isEmpty {
+            basename = calibrationOriginalBasename
+            calibrationOriginalBasename = ""
+            sessionMode = .profile
+            stage = .generate
+        }
         refreshGating()
         // A restored stage may have been locked since (#151).
         if !WizardGating.isUnlocked(stage, artefacts: artefacts), stage != .calibrate {
@@ -108,8 +122,25 @@ final class WizardViewModel {
 
     /// `navigateToStage(n)` — refuses locked forward moves with a
     /// warning banner; backward is always allowed (docs/06).
+    ///
+    /// If the live basename has a `CAL_` prefix, only `.calibrate`,
+    /// `.layOutPrint`, and `.measure` are allowed; any other target is
+    /// refused and the original basename is restored (#29).
     func go(to target: WizardStage) {
         guard target != .calibrate else { enterCalibration(); return }
+        if basename.hasPrefix("CAL_") {
+            guard !calibrationOriginalBasename.isEmpty else {
+                showNotice(
+                    "Cannot leave calibration — the original target name is missing.",
+                    kind: .warning
+                )
+                return
+            }
+            if target == .generate || target == .buildProfile || target == .verifyInstall {
+                restoreCalibration()
+                return
+            }
+        }
         if WizardGating.canNavigate(to: target, from: stage, artefacts: artefacts) {
             stage = target
         } else {
@@ -121,6 +152,9 @@ final class WizardViewModel {
     }
 
     func enterCalibration() {
+        if !basename.isEmpty, !basename.hasPrefix("CAL_"), calibrationOriginalBasename.isEmpty {
+            calibrationOriginalBasename = basename
+        }
         sessionMode = .calibration
         stage = .calibrate
     }
@@ -128,6 +162,15 @@ final class WizardViewModel {
     func exitCalibration() {
         sessionMode = .profile
         stage = .generate
+    }
+
+    /// Restore the original profile basename and leave calibration mode.
+    func restoreCalibration() {
+        if !calibrationOriginalBasename.isEmpty {
+            basename = calibrationOriginalBasename
+            calibrationOriginalBasename = ""
+        }
+        sessionMode = .profile
     }
 
     /// Open the 3D gamut viewer (issue #28).
@@ -177,7 +220,8 @@ final class WizardViewModel {
             cwd: workingDirectory?.path ?? "",
             printerName: printerName,
             sessionMode: sessionMode,
-            profileBasename: profileBasename
+            profileBasename: profileBasename,
+            calibrationOriginalBasename: calibrationOriginalBasename
         )
         try? stateStore.save(state)
     }

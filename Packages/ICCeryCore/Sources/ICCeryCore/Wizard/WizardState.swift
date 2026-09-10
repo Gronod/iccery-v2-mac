@@ -21,6 +21,9 @@ public struct WizardState: Codable, Equatable, Sendable {
     public var sessionMode: SessionMode
     /// May differ from `basename` after a `.ti3` import (#94).
     public var profileBasename: String?
+    /// The pre-`CAL_` basename, persisted so a crash/relaunch can
+    /// restore the original (#29).
+    public var calibrationOriginalBasename: String = ""
 
     public init(
         currentStage: Int = WizardStage.generate.rawValue,
@@ -28,7 +31,8 @@ public struct WizardState: Codable, Equatable, Sendable {
         cwd: String = "",
         printerName: String? = nil,
         sessionMode: SessionMode = .profile,
-        profileBasename: String? = nil
+        profileBasename: String? = nil,
+        calibrationOriginalBasename: String = ""
     ) {
         self.currentStage = currentStage
         self.basename = basename
@@ -36,6 +40,7 @@ public struct WizardState: Codable, Equatable, Sendable {
         self.printerName = printerName
         self.sessionMode = sessionMode
         self.profileBasename = profileBasename
+        self.calibrationOriginalBasename = calibrationOriginalBasename
     }
 
     public static let `default` = WizardState()
