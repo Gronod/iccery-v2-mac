@@ -4,52 +4,50 @@ on:
   push:
     branches:
       - develop
+    tags:
+      - 'v*'
   pull_request:
     branches:
       - develop
 
 jobs:
   build-and-test:
+    # Prefer a self-hosted Mac runner if your Gitea has one. If not,
+    # macos-14 works for this pipeline.
     runs-on: macos-14
+    env:
+      DERIVED: build/DerivedData-test
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Fetch Argyll sidecars
-        run: scripts/fetch-argyll.sh
-        env:
-          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
-
       - name: Generate Xcode project
-        run: xcodegen generate --project .
+        run: xcodegen generate --spec project.yml
 
-      - name: Build and test (universal)
+      - name: Build for testing (universal)
         run: |
           xcodebuild build-for-testing \
             -scheme ICCery \
             -destination 'platform=macOS' \
+            -derivedDataPath "$DERIVED" \
+            -configuration Debug \
             ARCHS='arm64 x86_64' \
             ONLY_ACTIVE_ARCH=NO \
             CODE_SIGNING_ALLOWED=YES \
-            CODE_SIGN_IDENTITY='-' \
-            CODE_SIGNING_REQUIRED=YES
+            CODE_SIGN_IDENTITY='-'
 
-          BUILT_PRODUCTS_DIR="$(xcodebuild -scheme ICCery -destination 'platform=macOS' -showBuildSettings | sed -n 's/^ *BUILT_PRODUCTS_DIR = //p' | head -n 1)"
-          if [ -d "$BUILT_PRODUCTS_DIR/ICCery.app" ]; then
-            xattr -cr "$BUILT_PRODUCTS_DIR/ICCery.app"
-            codesign -f -s - --options runtime \
-              --entitlements Resources/ICCery.entitlements \
-              "$BUILT_PRODUCTS_DIR/ICCery.app"
+      - name: Test (universal)
+        run: |
+          XCTESTRUN="$(find "$DERIVED" -name 'ICCery*.xctestrun' | head -n 1)"
+          if [ -z "$XCTESTRUN" ] || [ ! -f "$XCTESTRUN" ]; then
+            echo "error: no xctestrun produced by build-for-testing" >&2
+            exit 1
           fi
-
-          xcodebuild test \
-            -scheme ICCery \
+          echo "xctestrun: $XCTESTRUN"
+          xcodebuild test-without-building \
+            -xctestrun "$XCTESTRUN" \
             -destination 'platform=macOS' \
-            ARCHS='arm64 x86_64' \
-            ONLY_ACTIVE_ARCH=NO \
-            CODE_SIGNING_ALLOWED=YES \
-            CODE_SIGN_IDENTITY='-' \
-            CODE_SIGNING_REQUIRED=YES
+            -derivedDataPath "$DERIVED"
 
   package:
     needs: build-and-test

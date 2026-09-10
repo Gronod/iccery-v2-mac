@@ -73,6 +73,28 @@ export GITEA_TOKEN=…           # private releases
 
 Do not open the generated xcodeproj as the source of truth. Edit `project.yml` and regenerate.
 
+## Release packaging
+
+```bash
+scripts/package-release.sh    # fetch → sign → universal build → verify → DMG
+```
+
+The script builds with a fixed derived data path (`build/DerivedData`),
+locates `Release/ICCery.app` from it, signs the bundle, recursively verifies
+every bundled Mach-O sidecar (`scripts/verify-sidecar-signatures.sh`), and
+writes `ICCery-${VERSION}-${BUILD_NUM}.dmg` via `dmgbuild`. Sidecars stay
+ad-hoc signed inside the bundle — the app is never `codesign --deep`ed.
+
+Environment variables read by the pipeline:
+
+| Variable | Purpose |
+|---|---|
+| `GITEA_TOKEN` | private `gronod/argyllcms` release downloads |
+| `ARGYLL_SERVER_URL` / `ARGYLL_REPO` / `ARGYLL_RELEASE_TAG` | sidecar release override |
+| `CODESIGN_IDENTITY` | Developer ID identity for the outer `.app`; unset or `-` = ad-hoc |
+| `DEVELOPMENT_TEAM` | team ID passed to `xcodebuild` when signing |
+| `NOTARIZE_APPLE_ID` / `NOTARIZE_PASSWORD` / `APPLE_TEAM_ID` | `notarytool` + staple when all three are set |
+
 ## Layout
 
 ```
