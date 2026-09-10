@@ -111,22 +111,23 @@ find "$DEST" -type f -exec chmod 0755 {} +
 xattr -dr com.apple.quarantine "$DEST" 2>/dev/null || true
 
 # Ad-hoc sign every Mach-O (#165: unsigned arm64 → "Killed: 9"), then
-# verify — an unsigned sidecar fails the script.
-for f in "$DEST"/*; do
-    [ -f "$f" ] || continue
-    if file -b "$f" | grep -q 'Mach-O'; then
-        codesign -f -s - "$f" 2>/dev/null || true
-    fi
-done
+# verify — an unsigned sidecar fails the script. The tree may nest
+# (e.g. platform subdirs), so scan recursively.
+find "$DEST" -type f -exec sh -c \
+    'for p do file -b "$p" | grep -q "Mach-O" && codesign -f -s - "$p"; done' \
+    _ {} + 2>/dev/null || true
+
 UNSIGNED=""
-for f in "$DEST"/*; do
+while IFS= read -r f; do
     [ -f "$f" ] || continue
-    if file -b "$f" | grep -q 'Mach-O'; then
-        if ! codesign -dvv "$f" >/dev/null 2>&1; then
-            UNSIGNED="$UNSIGNED $f"
-        fi
+    if ! codesign -dvv "$f" >/dev/null 2>&1; then
+        UNSIGNED="$UNSIGNED $f"
     fi
-done
+done <<EOF
+$(find "$DEST" -type f -exec sh -c \
+    'for p do file -b "$p" | grep -q "Mach-O" && printf "%s\n" "$p"; done' \
+    _ {} +)
+EOF
 if [ -n "$UNSIGNED" ]; then
     echo "error: unsigned binaries remain:$UNSIGNED" >&2
     exit 1
