@@ -52,39 +52,70 @@ jobs:
 
       # UI tests need macOS Automation / Accessibility permission on the
       # runner. The self-hosted Mac intermittently times out enabling
-      # that mode (run 29700 / tag v2.0.0-pre2-grok). Retry once; if the
+      # that mode (run 29700) or launches the app into
+      # `.runningBackground` without ever activating it (run 29804).
+      # Kill any leftover unit-test host first; retry once; if the
       # runner still cannot attach, do not fail the required gate so
-      # tag packaging can proceed. Real XCTest failures still fail the job.
+      # tag packaging can proceed. Real XCTest assertion failures
+      # still fail the job.
       - name: Test UI (ICCeryUITests)
         run: |
           set -o pipefail
           XCTESTRUN="$(find "$DERIVED" -name 'ICCery*.xctestrun' | head -n 1)"
           LOG="$DERIVED/ui-test.log"
-          attempt=1
-          while [ "$attempt" -le 2 ]; do
-            echo "::group::UI tests attempt $attempt"
+          pkill -x ICCery 2>/dev/null || true
+          sleep 1
+
+          run_ui() {
+            local label="$1"
+            shift
+            echo "::group::UI tests $label"
             set +e
             xcodebuild test-without-building \
               -xctestrun "$XCTESTRUN" \
-              -only-testing:ICCeryUITests \
               -destination 'platform=macOS' \
-              -derivedDataPath "$DERIVED" | tee "$LOG"
+              -derivedDataPath "$DERIVED" \
+              "$@" | tee "$LOG"
             rc=${PIPESTATUS[0]}
             set -e
             echo "::endgroup::"
-            if [ "$rc" -eq 0 ]; then
+            return "$rc"
+          }
+
+          is_runner_attach_failure() {
+            grep -Eq "Timed out while enabling automation mode|Failed to activate application|current state: Running Background" "$LOG"
+          }
+
+          attempt=1
+          while [ "$attempt" -le 2 ]; do
+            # Probe one case first. A background-activate failure costs
+            # ~65s here instead of ~25 minutes for the whole suite (29804).
+            if ! run_ui "probe attempt $attempt" \
+                -only-testing:ICCeryUITests/AboutHelpUITests/testAboutDialogShowsVersionAndBuildDate; then
+              if is_runner_attach_failure; then
+                echo "warning: UI runner could not attach/activate the app (attempt $attempt)"
+                pkill -x ICCery 2>/dev/null || true
+                attempt=$((attempt + 1))
+                sleep 8
+                continue
+              fi
+              echo "error: UI probe failed with a real test error" >&2
+              exit 1
+            fi
+            if run_ui "full suite attempt $attempt" -only-testing:ICCeryUITests; then
               exit 0
             fi
-            if grep -q "Timed out while enabling automation mode" "$LOG"; then
-              echo "warning: UI runner automation-mode timeout (attempt $attempt)"
+            if is_runner_attach_failure; then
+              echo "warning: UI runner lost activation mid-suite (attempt $attempt)"
+              pkill -x ICCery 2>/dev/null || true
               attempt=$((attempt + 1))
               sleep 8
               continue
             fi
             echo "error: UI tests failed with a real test error" >&2
-            exit "$rc"
+            exit 1
           done
-          echo "warning: skipping UI tests after repeated automation-mode timeouts"
+          echo "warning: skipping UI tests after repeated runner attach/activate failures"
           exit 0
 
   package:
