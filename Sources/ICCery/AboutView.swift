@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import ICCeryCore
 
@@ -9,10 +10,12 @@ struct AboutView: View {
 
     var body: some View {
         VStack(spacing: 20) {
-            Image("ICCery-logo")
-                .resizable()
-                .scaledToFit()
-                .frame(height: 64)
+            if let icon = NSImage(named: NSImage.applicationIconName) {
+                Image(nsImage: icon)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 64)
+            }
 
             Text("ICCery")
                 .font(.title)

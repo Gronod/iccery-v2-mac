@@ -91,8 +91,7 @@ final class CalibrationViewModel {
             workingDirectory: cwd
         )
 
-        Task { @MainActor [weak self] in
-            guard let self else { return }
+        Task { @MainActor in
             defer { self.isGenerating = false }
 
             do {
@@ -160,8 +159,7 @@ final class CalibrationViewModel {
             channelLimits: []
         )
 
-        Task { @MainActor [weak self] in
-            guard let self else { return }
+        Task { @MainActor in
             defer { self.isComputing = false }
 
             do {

@@ -29,7 +29,7 @@ struct RootView: View {
                 if let notice = model.notice {
                     NoticeBanner(notice: notice, onClose: model.dismissNotice)
                 }
-                stageContent
+                WizardStageContent(model: model, workflow: workflow)
             }
         }
         .frame(minWidth: 1100, minHeight: 700)
@@ -61,8 +61,16 @@ struct RootView: View {
         }
     }
 
-    @ViewBuilder
-    private var stageContent: some View {
+}
+
+/// Content for the active wizard stage. Isolated into its own view so that
+/// `WizardViewModel` is tracked via `@Bindable` instead of the parent's
+/// `TargetWorkflowViewModel`, which does not observe nested `wizard` mutations.
+private struct WizardStageContent: View {
+    @Bindable var model: WizardViewModel
+    var workflow: TargetWorkflowViewModel
+
+    var body: some View {
         switch model.stage {
         case .generate:
             Stage1View(workflow: workflow)
