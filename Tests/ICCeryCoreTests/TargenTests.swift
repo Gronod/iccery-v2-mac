@@ -162,6 +162,34 @@ struct TargenArgsTests {
         #expect(!args.contains("-p"))
     }
 
+    @Test("Whitespace-only preconditioning profile emits no -c")
+    func whitespacePreconditioner() throws {
+        let config = TargenConfig(
+            colourSpace: .rgb,
+            patchCount: 800,
+            whitePatches: 4,
+            blackPatches: 4,
+            preconditioningProfile: "   \n\t  ",
+            basename: "ws_pre"
+        )
+        let args = try TargenArgs.build(config: config)
+        #expect(!args.contains("-c"))
+    }
+
+    @Test("Preconditioning profile is trimmed before emission")
+    func preconditionerTrimmed() throws {
+        let config = TargenConfig(
+            colourSpace: .rgb,
+            patchCount: 800,
+            whitePatches: 4,
+            blackPatches: 4,
+            preconditioningProfile: "  /path/to/profile.icc  ",
+            basename: "trim_pre"
+        )
+        let args = try TargenArgs.build(config: config)
+        #expect(args[args.firstIndex(of: "-c")! + 1] == "/path/to/profile.icc")
+    }
+
     @Test("Invalid basename throws")
     func invalidBasenameThrows() {
         let config = TargenConfig(
