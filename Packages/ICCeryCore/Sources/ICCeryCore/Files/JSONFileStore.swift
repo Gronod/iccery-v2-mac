@@ -27,10 +27,7 @@ public struct JSONFileStore<T: Codable & Sendable>: Sendable {
         self.fileURL = fileURL
         self.corrupt = corrupt
         self.defaultValue = defaultValue
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        encoder.dateEncodingStrategy = dateEncoding
-        self.encoder = encoder
+        self.encoder = JSONEncoder.icceryPretty(dateEncoding: dateEncoding)
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = dateDecoding
         self.decoder = decoder
@@ -75,10 +72,14 @@ public struct JSONFileStore<T: Codable & Sendable>: Sendable {
 }
 
 extension JSONEncoder {
-    /// Pretty-printed, sorted-keys encoder used by preset export.
-    public static func icceryPretty() -> JSONEncoder {
+    /// Shared pretty-printed, sorted-keys encoder used by `JSONFileStore`
+    /// and preset export.
+    static func icceryPretty(
+        dateEncoding: JSONEncoder.DateEncodingStrategy = .deferredToDate
+    ) -> JSONEncoder {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = dateEncoding
         return encoder
     }
 }

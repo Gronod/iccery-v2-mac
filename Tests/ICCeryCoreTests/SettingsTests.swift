@@ -93,6 +93,28 @@ struct SettingsStoreTests {
         #expect(!FileManager.default.fileExists(atPath: url.path))
     }
 
+    @Test func invalidSaveOverValidFilePreservesBytesAndPostsNothing() throws {
+        let url = tempStoreURL()
+        let store = SettingsStore(fileURL: url)
+        var valid = AppSettings.default
+        valid.deltaEGoodMax = 1.5
+        try store.save(valid)
+        let originalBytes = try Data(contentsOf: url)
+
+        var fired = false
+        let token = NotificationCenter.default.addObserver(
+            forName: SettingsStore.settingsDidChange, object: nil, queue: nil
+        ) { _ in fired = true }
+        defer { NotificationCenter.default.removeObserver(token) }
+
+        var invalid = AppSettings.default
+        invalid.deltaEGoodMax = 9.0
+        #expect(throws: SettingsStore.SettingsError.self) { try store.save(invalid) }
+        #expect(try Data(contentsOf: url) == originalBytes)
+        #expect(!fired)
+        #expect(store.load() == valid)
+    }
+
     @Test func savePostsNotification() async throws {
         let url = tempStoreURL()
         let store = SettingsStore(fileURL: url)
