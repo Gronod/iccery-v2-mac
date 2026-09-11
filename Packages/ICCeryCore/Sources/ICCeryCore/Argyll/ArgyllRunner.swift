@@ -200,7 +200,7 @@ public struct ArgyllRunner: Sendable {
         await processManager.kill(id: id)
         var attempts = 0
         while await processManager.isRunning(id), attempts < 30 {
-            try? await Task.sleep(for: .milliseconds(100))
+            try? await Task.sleep(nanoseconds: 100_000_000)
             attempts += 1
         }
     }
@@ -243,7 +243,7 @@ public struct ArgyllRunner: Sendable {
         if flushPartialLines {
             dotFlushTask = Task { [processManager] in
                 while !Task.isCancelled {
-                    try? await Task.sleep(for: .milliseconds(500))
+                    try? await Task.sleep(nanoseconds: 500_000_000)
                     if Task.isCancelled { break }
                     await processManager.flushPartialLine(id: processId)
                 }
@@ -592,7 +592,7 @@ public struct ArgyllRunner: Sendable {
                 await processManager.setPreKillHook(id: processId) { [processManager] in
                     if isXY {
                         try? await processManager.sendStdin(id: processId, bytes: ChartreadInput.quit.bytes)
-                        try? await Task.sleep(for: .milliseconds(500))
+                        try? await Task.sleep(nanoseconds: 500_000_000)
                     }
                 }
 

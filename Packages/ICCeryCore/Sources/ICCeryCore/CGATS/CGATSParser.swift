@@ -72,7 +72,7 @@ public enum CGATSParser {
     public static func parse(
         _ contents: String,
         sourceURL: URL? = nil
-    ) throws(CGATSParseError) -> CGATSDataset {
+    ) throws -> CGATSDataset {
         guard !contents.isEmpty else { throw .emptyFile }
 
         let ext = sourceURL?.pathExtension.lowercased() ?? ""
@@ -213,7 +213,7 @@ public enum CGATSParser {
     private static func preprocess(
         _ contents: String,
         isCSV: Bool
-    ) throws(CGATSParseError) -> (CGATSFormat, [String]) {
+    ) throws -> (CGATSFormat, [String]) {
         let allLines = contents.components(separatedBy: .newlines)
         var lines = [String]()
 

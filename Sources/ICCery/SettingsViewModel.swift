@@ -33,7 +33,7 @@ final class SettingsViewModel {
             sink.applySettings(settings)
             savedFlash = true
             Task {
-                try? await Task.sleep(for: .seconds(1.5))
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
                 savedFlash = false
             }
             return true
