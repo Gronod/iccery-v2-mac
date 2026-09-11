@@ -3,7 +3,15 @@ import ICCeryCore
 
 /// Stage 4 — build an ICC/ICM profile from the canonical `.ti3`.
 struct Stage4View: View {
-    @Bindable var model: ProfileWorkflowViewModel
+    @ObservedObject var model: ProfileWorkflowViewModel
+    /// Header reads `model.wizard.basename`; observe the nested
+    /// ObservableObject directly.
+    @ObservedObject private var wizard: WizardViewModel
+
+    init(model: ProfileWorkflowViewModel) {
+        self.model = model
+        self._wizard = ObservedObject(wrappedValue: model.wizard)
+    }
 
     var body: some View {
         VStack(spacing: 0) {

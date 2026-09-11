@@ -3,7 +3,15 @@ import ICCeryCore
 
 /// Stage 5 — verify the generated profile, track drift, and install.
 struct Stage5View: View {
-    @Bindable var model: ProfileWorkflowViewModel
+    @ObservedObject var model: ProfileWorkflowViewModel
+    /// Header/buttons read `model.wizard.*`; observe the nested
+    /// ObservableObject directly.
+    @ObservedObject private var wizard: WizardViewModel
+
+    init(model: ProfileWorkflowViewModel) {
+        self.model = model
+        self._wizard = ObservedObject(wrappedValue: model.wizard)
+    }
 
     var body: some View {
         VStack(spacing: 0) {

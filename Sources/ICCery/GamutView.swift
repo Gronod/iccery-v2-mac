@@ -69,12 +69,12 @@ internal struct GamutSceneGeometryBuilder {
 /// a* (green-red) axis is horizontal, L* (lightness) is vertical, and b*
 /// (blue-yellow) is depth.
 struct GamutView: View {
-    @State private var viewModel: GamutViewModel
+    @StateObject private var viewModel: GamutViewModel
     @State private var pause: () -> Void = {}
     @FocusState private var isFocused: Bool
 
     init(profileGamURL: URL? = nil) {
-        _viewModel = State(wrappedValue: GamutViewModel(profileGamURL: profileGamURL))
+        _viewModel = StateObject(wrappedValue: GamutViewModel(profileGamURL: profileGamURL))
     }
 
     var body: some View {
@@ -87,11 +87,6 @@ struct GamutView: View {
             )
             .focusable()
             .focused($isFocused)
-            .focusEffectDisabled()
-            .onKeyPress(.init("R"), action: {
-                viewModel.resetCamera()
-                return .handled
-            })
             .onAppear { isFocused = true }
 
             VStack {
@@ -148,6 +143,7 @@ private struct GamutSceneView: NSViewRepresentable {
         context.coordinator.scnView = scnView
         context.coordinator.scene = scene
         context.coordinator.buildScene(profile: profileMesh, reference: referenceMesh)
+        context.coordinator.installKeyMonitor()
 
         return scnView
     }
@@ -168,6 +164,7 @@ private struct GamutSceneView: NSViewRepresentable {
     }
 
     static func dismantleNSView(_ nsView: SCNView, coordinator: Coordinator) {
+        coordinator.removeKeyMonitor()
         nsView.isPlaying = false
     }
 
@@ -175,6 +172,7 @@ private struct GamutSceneView: NSViewRepresentable {
     final class Coordinator: NSObject {
         weak var scnView: SCNView?
         weak var scene: SCNScene?
+        private var keyMonitor: Any?
 
         private let profileNode = SCNNode()
         private let referenceGroup = SCNNode()
@@ -429,6 +427,31 @@ private struct GamutSceneView: NSViewRepresentable {
 
         func pause() {
             scnView?.isPlaying = false
+        }
+
+        /// Local key-down monitor for the R camera-reset shortcut (the
+        /// SwiftUI key-press modifier is unavailable on macOS 12). Only
+        /// events aimed at this view's window are handled; everything
+        /// else passes through untouched.
+        func installKeyMonitor() {
+            guard keyMonitor == nil else { return }
+            keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) {
+                [weak self] event in
+                guard let self,
+                      let scnView = self.scnView,
+                      event.window === scnView.window,
+                      event.charactersIgnoringModifiers?.uppercased() == "R"
+                else { return event }
+                self.resetCamera()
+                return nil
+            }
+        }
+
+        func removeKeyMonitor() {
+            if let keyMonitor {
+                NSEvent.removeMonitor(keyMonitor)
+                self.keyMonitor = nil
+            }
         }
 
         func resetCamera() {

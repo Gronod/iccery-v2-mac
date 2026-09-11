@@ -4,7 +4,7 @@ import ICCeryCore
 /// `#savePresetDialog` — save the live Stage 1/2 form as a custom
 /// preset (issue #11). Names/descriptions render via `Text` only (#114).
 struct SavePresetDialog: View {
-    @Bindable var workflow: TargetWorkflowViewModel
+    @ObservedObject var workflow: TargetWorkflowViewModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -35,7 +35,7 @@ struct SavePresetDialog: View {
 
 /// `#managePresetsDialog` — list, delete (custom only), import, export.
 struct ManagePresetsDialog: View {
-    @Bindable var workflow: TargetWorkflowViewModel
+    @ObservedObject var workflow: TargetWorkflowViewModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {

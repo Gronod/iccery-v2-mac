@@ -1,12 +1,11 @@
+import Combine
 import Foundation
-import Observation
 import SwiftUI
 import ICCeryCore
 
 /// Stage 4/5 workflow: build a profile, verify it, track drift, and install.
 @MainActor
-@Observable
-final class ProfileWorkflowViewModel {
+final class ProfileWorkflowViewModel: ObservableObject {
 
     let wizard: WizardViewModel
     let environment: AppEnvironment
@@ -14,50 +13,50 @@ final class ProfileWorkflowViewModel {
 
     // MARK: - Stage 4 form
 
-    var algorithm: String = "l"      // l | x | X | m
-    var quality: String = "m"        // l | m | h | u
-    var intent: String = ""          // usually empty at Stage 4
-    var fwaSelection: ColprofFwaSelection = .none
-    var fwaCustomPath: String = ""
-    var illuminant: String = ""
-    var observer: String = ""
-    var inputViewingCond: String = ""
-    var outputViewingCond: String = ""
-    var profileDescription: String = ""
-    var copyright: String = ""
+    @Published var algorithm: String = "l"      // l | x | X | m
+    @Published var quality: String = "m"        // l | m | h | u
+    @Published var intent: String = ""          // usually empty at Stage 4
+    @Published var fwaSelection: ColprofFwaSelection = .none
+    @Published var fwaCustomPath: String = ""
+    @Published var illuminant: String = ""
+    @Published var observer: String = ""
+    @Published var inputViewingCond: String = ""
+    @Published var outputViewingCond: String = ""
+    @Published var profileDescription: String = ""
+    @Published var copyright: String = ""
 
     // MARK: - Run state
 
-    var isColprofRunning = false
-    var colprofLog: [String] = []
-    var colprofProgress: String?
-    var createdProfileURL: URL?
+    @Published var isColprofRunning = false
+    @Published var colprofLog: [String] = []
+    @Published var colprofProgress: String?
+    @Published var createdProfileURL: URL?
     /// Path to the `.gam` gamut mesh extracted post-`colprof` (issue #28).
-    var createdGamutURL: URL?
+    @Published var createdGamutURL: URL?
 
     // MARK: - Stage 4/5 calibration (issue #24)
 
-    var applyCalibration = false
-    var calibrationFile: String = ""
+    @Published var applyCalibration = false
+    @Published var calibrationFile: String = ""
 
     // MARK: - Stage 5 verification (issue #25)
 
-    var profcheckReport: ProfcheckReport?
-    var profcheckWarning: String?
-    var isProfcheckRunning = false
+    @Published var profcheckReport: ProfcheckReport?
+    @Published var profcheckWarning: String?
+    @Published var isProfcheckRunning = false
 
     // MARK: - History / drift (issue #26)
 
-    var verificationHistory: [VerificationRecord] = []
-    var driftPrinterFilter: String? = nil
-    var driftAlert: String?
-    var isHistoryStoreError: String?
+    @Published var verificationHistory: [VerificationRecord] = []
+    @Published var driftPrinterFilter: String? = nil
+    @Published var driftAlert: String?
+    @Published var isHistoryStoreError: String?
 
     // MARK: - Install (issue #27)
 
-    var installResult: InstallProfileResult?
-    var showingInstallCollision = false
-    var installCollisionMessage: String = ""
+    @Published var installResult: InstallProfileResult?
+    @Published var showingInstallCollision = false
+    @Published var installCollisionMessage: String = ""
     var pendingInstallOptions: InstallProfileOptions?
 
     init(wizard: WizardViewModel, environment: AppEnvironment) {
