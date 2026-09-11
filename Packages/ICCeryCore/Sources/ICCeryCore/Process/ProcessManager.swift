@@ -136,17 +136,14 @@ public actor ProcessManager {
     ) throws {
         guard !isRunning(id) else { throw ProcessError.duplicateID(id) }
 
-        let process = Process()
-        let stdinPipe = Pipe()
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        process.executableURL = binary
-        process.arguments = arguments
-        process.currentDirectoryURL = workingDirectory
-        process.standardInput = stdinPipe
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
-        process.environment = childEnvironment(extra: environment)
+        let prepared = makeProcess(
+            binary: binary,
+            arguments: arguments,
+            workingDirectory: workingDirectory,
+            environment: environment,
+            includeStdin: true
+        )
+        let process = prepared.process
 
         AppLogger(category: "process").debug(
             "spawn \(id): \(binary.path) \(LogSanitizer.sanitizeArgs(arguments))"
@@ -154,13 +151,13 @@ public actor ProcessManager {
 
         children[id] = RunningChild(
             process: process,
-            stdin: stdinPipe.fileHandleForWriting,
+            stdin: prepared.stdinPipe?.fileHandleForWriting,
             stdoutDecoder: ProcessLineDecoder(),
             stderrDecoder: ProcessLineDecoder()
         )
 
-        let stdoutHandle = stdoutPipe.fileHandleForReading
-        let stderrHandle = stderrPipe.fileHandleForReading
+        let stdoutHandle = prepared.stdoutPipe.fileHandleForReading
+        let stderrHandle = prepared.stderrPipe.fileHandleForReading
         stdoutHandle.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             guard let self else { return }
@@ -172,26 +169,22 @@ public actor ProcessManager {
             Task { await self.ingestOutput(data, id: id, isStderr: true, handle: handle) }
         }
 
-        process.terminationHandler = { [weak self] proc in
+        attachTerminationHandler(process) { [weak self] code in
             guard let self else { return }
-            Task { await self.didTerminate(id: id, code: proc.terminationStatus) }
+            Task { await self.didTerminate(id: id, code: code) }
         }
 
         do {
             try process.run()
-            // Fallback watchdog: very fast child exits can race past the
-            // terminationHandler delivery on a loaded host. waitUntilExit()
-            // blocks the detached thread and guarantees didTerminate runs.
-            Task.detached { [weak self, process] in
-                process.waitUntilExit()
-                guard let self else { return }
-                await self.didTerminate(id: id, code: process.terminationStatus)
-            }
         } catch {
             preKillHooks.removeValue(forKey: id)
             children.removeValue(forKey: id)
             emit(.error(id: id, message: error.localizedDescription))
             throw ProcessError.spawnFailed("\(binary.path): \(error.localizedDescription)")
+        }
+        startWaitUntilExitWatchdog(process) { [weak self] code in
+            guard let self else { return }
+            Task { await self.didTerminate(id: id, code: code) }
         }
     }
 
@@ -210,15 +203,16 @@ public actor ProcessManager {
     ) async throws -> CapturedResult {
         guard !isRunning(id) else { throw ProcessError.duplicateID(id) }
 
-        let process = Process()
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        process.executableURL = binary
-        process.arguments = arguments
-        process.currentDirectoryURL = workingDirectory
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
-        process.environment = childEnvironment(extra: environment)
+        let prepared = makeProcess(
+            binary: binary,
+            arguments: arguments,
+            workingDirectory: workingDirectory,
+            environment: environment,
+            includeStdin: false
+        )
+        let process = prepared.process
+        let stdoutPipe = prepared.stdoutPipe
+        let stderrPipe = prepared.stderrPipe
 
         AppLogger(category: "process").debug(
             "spawn(captured) \(id): \(binary.path) \(LogSanitizer.sanitizeArgs(arguments))"
@@ -275,26 +269,21 @@ public actor ProcessManager {
             }
         }
         let box = Box()
-        capturedProcess.terminationHandler = { proc in
-            _ = box.resume(with: proc.terminationStatus)
+        attachTerminationHandler(capturedProcess) { status in
+            _ = box.resume(with: status)
         }
 
         do {
             try process.run()
-            // Fallback watchdog: very fast child exits can race past the
-            // terminationHandler delivery on a loaded host. waitUntilExit()
-            // blocks the detached thread and resumes the box if the handler
-            // did not already do so (#50, #52).
-            Task.detached { [capturedProcess] in
-                capturedProcess.waitUntilExit()
-                _ = box.resume(with: capturedProcess.terminationStatus)
-            }
         } catch {
             _ = box.resume(with: -1)
             captured.removeValue(forKey: id)
             preKillHooks.removeValue(forKey: id)
             emit(.error(id: id, message: error.localizedDescription))
             throw ProcessError.spawnFailed("\(binary.path): \(error.localizedDescription)")
+        }
+        startWaitUntilExitWatchdog(capturedProcess) { status in
+            _ = box.resume(with: status)
         }
 
         // Close the parent write ends so readDataToEndOfFile() gets EOF
@@ -371,12 +360,7 @@ public actor ProcessManager {
         guard var child = children[id], !child.finalized else { return }
 
         if let tail = child.stdoutDecoder.flushPartial() {
-            if tail.hasPrefix(Self.rowColorsPrefix) {
-                let payload = Data(tail.dropFirst(Self.rowColorsPrefix.count).utf8)
-                emit(.jsonRow(id: id, payload: payload))
-            } else {
-                emit(.stdout(id: id, line: tail))
-            }
+            emitStdoutLine(id: id, line: tail)
         }
         if let tail = child.stderrDecoder.flushPartial() {
             emit(.stderr(id: id, line: tail))
@@ -447,6 +431,74 @@ public actor ProcessManager {
 
     // MARK: - Internals
 
+    private struct PreparedProcess {
+        let process: Process
+        let stdinPipe: Pipe?
+        let stdoutPipe: Pipe
+        let stderrPipe: Pipe
+    }
+
+    private func makeProcess(
+        binary: URL,
+        arguments: [String],
+        workingDirectory: URL?,
+        environment: [String: String],
+        includeStdin: Bool
+    ) -> PreparedProcess {
+        let process = Process()
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        let stdinPipe: Pipe? = includeStdin ? Pipe() : nil
+        process.executableURL = binary
+        process.arguments = arguments
+        process.currentDirectoryURL = workingDirectory
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
+        if let stdinPipe {
+            process.standardInput = stdinPipe
+        }
+        process.environment = childEnvironment(extra: environment)
+        return PreparedProcess(
+            process: process,
+            stdinPipe: stdinPipe,
+            stdoutPipe: stdoutPipe,
+            stderrPipe: stderrPipe
+        )
+    }
+
+    /// `terminationHandler` can lose a fast-exit race on a loaded host;
+    /// `waitUntilExit` on a detached thread is the fallback (#50, #52).
+    /// The handler is attached before `run()`; the wait thread starts
+    /// only after a successful launch — `terminationStatus` on an
+    /// unlaunched NSTask raises NSInvalidArgumentException.
+    private func attachTerminationHandler(
+        _ process: Process,
+        onExit: @escaping @Sendable (Int32) -> Void
+    ) {
+        process.terminationHandler = { proc in
+            onExit(proc.terminationStatus)
+        }
+    }
+
+    private func startWaitUntilExitWatchdog(
+        _ process: Process,
+        onExit: @escaping @Sendable (Int32) -> Void
+    ) {
+        Task.detached { [process] in
+            process.waitUntilExit()
+            onExit(process.terminationStatus)
+        }
+    }
+
+    private func emitStdoutLine(id: String, line: String) {
+        if line.hasPrefix(Self.rowColorsPrefix) {
+            let payload = Data(line.dropFirst(Self.rowColorsPrefix.count).utf8)
+            emit(.jsonRow(id: id, payload: payload))
+        } else {
+            emit(.stdout(id: id, line: line))
+        }
+    }
+
     private func childEnvironment(extra: [String: String]) -> [String: String] {
         var env = ProcessInfo.processInfo.environment
         env["ARGYLL_NOT_INTERACTIVE"] = "1"
@@ -478,15 +530,14 @@ public actor ProcessManager {
 
         let log = AppLogger(category: "subprocess")
         for line in lines {
-            if !isStderr, line.hasPrefix(Self.rowColorsPrefix) {
-                let payload = Data(line.dropFirst(Self.rowColorsPrefix.count).utf8)
-                emit(.jsonRow(id: id, payload: payload))
-            } else if isStderr {
+            if !isStderr {
+                emitStdoutLine(id: id, line: line)
+                if !line.hasPrefix(Self.rowColorsPrefix) {
+                    log.info("[\(id)] \(line)")
+                }
+            } else {
                 log.warn("[\(id)] \(line)")
                 emit(.stderr(id: id, line: line))
-            } else {
-                log.info("[\(id)] \(line)")
-                emit(.stdout(id: id, line: line))
             }
         }
     }
@@ -528,11 +579,7 @@ public actor ProcessManager {
         // Flush unterminated tail lines.
         if var decoder = Optional(child.stdoutDecoder),
            let tail = decoder.finish() {
-            if tail.hasPrefix(Self.rowColorsPrefix) {
-                emit(.jsonRow(id: id, payload: Data(tail.dropFirst(Self.rowColorsPrefix.count).utf8)))
-            } else {
-                emit(.stdout(id: id, line: tail))
-            }
+            emitStdoutLine(id: id, line: tail)
         }
         if var decoder = Optional(child.stderrDecoder),
            let tail = decoder.finish() {

@@ -122,3 +122,29 @@ struct ArtefactFilesTests {
         ))
     }
 }
+
+@Suite("ArtefactProbe profile resolve")
+struct ArtefactProbeProfileTests {
+    @Test("basename probe prefers .icm")
+    func icmWins() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("probe-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        try Data("icc".utf8).write(to: dir.appendingPathComponent("job.icc"))
+        try Data("icm".utf8).write(to: dir.appendingPathComponent("job.icm"))
+        let url = ArtefactProbe.resolveProfile(basename: "job", cwd: dir)
+        #expect(url?.pathExtension == "icm")
+    }
+
+    @Test("explicit missing .icc flips to sibling .icm")
+    func flipExtension() throws {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("probe-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let icc = dir.appendingPathComponent("job.icc")
+        let icm = dir.appendingPathComponent("job.icm")
+        try Data("icm".utf8).write(to: icm)
+        let resolved = ArtefactProbe.resolveProfile(icc)
+        #expect(resolved.path == icm.path)
+    }
+}

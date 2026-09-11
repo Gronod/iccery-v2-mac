@@ -123,11 +123,15 @@ final class ProfileWorkflowViewModel {
 
     func applyPreset(_ preset: ProfilingPreset?) {
         guard let preset else { return }
-        algorithm = preset.colprofAlgorithm ?? "l"
-        quality = preset.colprofQuality ?? "m"
-        intent = preset.colprofIntent ?? ""
-
-        if let fwa = preset.colprofFwa {
+        let config = ColprofConfig(
+            preset: preset,
+            basename: wizard.basename,
+            workingDirectory: wizard.effectiveWorkingDirectory
+        )
+        algorithm = config.algorithm
+        quality = config.quality
+        intent = config.intent ?? ""
+        if let fwa = config.fwa {
             switch fwa.lowercased() {
             case "none": fwaSelection = .none
             case "": fwaSelection = .empty
@@ -138,11 +142,10 @@ final class ProfileWorkflowViewModel {
                 fwaCustomPath = fwa
             }
         }
-
-        illuminant = preset.colprofIlluminant ?? ""
-        observer = preset.colprofObserver ?? ""
-        inputViewingCond = preset.colprofInputViewingCond ?? ""
-        outputViewingCond = preset.colprofOutputViewingCond ?? ""
+        illuminant = config.illuminant ?? ""
+        observer = config.observer ?? ""
+        inputViewingCond = config.inputViewingCond ?? ""
+        outputViewingCond = config.outputViewingCond ?? ""
     }
 
     /// Stage 4 form values for saving into a custom preset.
@@ -205,16 +208,13 @@ final class ProfileWorkflowViewModel {
             defer { self.isColprofRunning = false }
 
             do {
-                let url = try await runner.runColprof(config: config) { [weak self] batch in
-                    Task { @MainActor [weak self] in
-                        guard let self else { return }
-                        self.colprofLog.append(contentsOf: batch)
-                        if let last = batch.last {
-                            let progress = ColprofProgressClassifier.classify(line: last)
-                            self.updateProgress(progress)
-                        }
+                let url = try await runner.runColprof(config: config, onLogBatch: ProcessRunSupport.logSink { [weak self] batch in
+                    guard let self else { return }
+                    self.colprofLog.append(contentsOf: batch)
+                    if let last = batch.last {
+                        self.updateProgress(ColprofProgressClassifier.classify(line: last))
                     }
-                }
+                })
 
                 var finalProfileURL = url
 
@@ -231,11 +231,9 @@ final class ProfileWorkflowViewModel {
                 // Gamut extraction is best-effort for Stage 5 / M6 viewer.
                 do {
                     let gamConfig = IccgamutConfig(profileURL: finalProfileURL)
-                    let gamURL = try await runner.runIccgamut(config: gamConfig) { [weak self] batch in
-                        Task { @MainActor [weak self] in
-                            self?.colprofLog.append(contentsOf: batch)
-                        }
-                    }
+                    let gamURL = try await runner.runIccgamut(config: gamConfig, onLogBatch: ProcessRunSupport.logSink { [weak self] batch in
+                        self?.colprofLog.append(contentsOf: batch)
+                    })
                     self.createdGamutURL = gamURL
                     self.colprofLog.append("Gamut mesh extracted: \(gamURL.lastPathComponent)")
                 } catch {
@@ -327,11 +325,9 @@ final class ProfileWorkflowViewModel {
             defer { self.isProfcheckRunning = false }
 
             do {
-                let report = try await runner.runProfcheck(config: config) { [weak self] batch in
-                    Task { @MainActor [weak self] in
-                        self?.colprofLog.append(contentsOf: batch)
-                    }
-                }
+                let report = try await runner.runProfcheck(config: config, onLogBatch: ProcessRunSupport.logSink { [weak self] batch in
+                    self?.colprofLog.append(contentsOf: batch)
+                })
                 self.profcheckReport = report
                 if let record = self.makeVerificationRecord(from: report) {
                     let updated = try await self.environment.historyStore.append(record)

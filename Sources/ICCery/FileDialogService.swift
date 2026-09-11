@@ -29,13 +29,8 @@ final class FileDialogService {
 
     /// `selectTargetFile` — **save** panel for the new `.ti1` target.
     func selectTargetFile(startingAt start: URL? = nil) -> URL? {
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = "target.ti1"
-        panel.allowedContentTypes = utTypes(["ti1"])
-        panel.allowsOtherFileTypes = false
-        panel.directoryURL = start
-        panel.message = "Choose the .ti1 target file to create"
-        return run(panel)
+        save(named: "target.ti1", extensions: ["ti1"], startingAt: start,
+             message: "Choose the .ti1 target file to create")
     }
 
     /// `selectExistingTarget` — open `.ti1`/`.ti2` (docs/06 §Resume, #140).
@@ -66,12 +61,7 @@ final class FileDialogService {
 
     /// `selectCsvSavePath` — verification-history CSV export.
     func selectCsvSavePath(startingAt start: URL? = nil) -> URL? {
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = "verification-history.csv"
-        panel.allowedContentTypes = utTypes(["csv"])
-        panel.allowsOtherFileTypes = false
-        panel.directoryURL = start
-        return run(panel)
+        save(named: "verification-history.csv", extensions: ["csv"], startingAt: start)
     }
 
     /// `selectCalFile` — `.cal` calibration curves.
@@ -88,16 +78,26 @@ final class FileDialogService {
 
     /// `btnExportActivePreset` — save a `.json` preset file.
     func selectPresetSavePath(name: String, startingAt start: URL? = nil) -> URL? {
-        let panel = NSSavePanel()
-        panel.nameFieldStringValue = "\(name).json"
-        panel.allowedContentTypes = utTypes(["json"])
-        panel.allowsOtherFileTypes = false
-        panel.directoryURL = start
-        panel.message = "Export this preset as JSON"
-        return run(panel)
+        save(named: "\(name).json", extensions: ["json"], startingAt: start,
+             message: "Export this preset as JSON")
     }
 
     // MARK: - Internals (private — not a shared public picker API)
+
+    private func save(
+        named: String,
+        extensions: [String],
+        startingAt start: URL?,
+        message: String? = nil
+    ) -> URL? {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = named
+        panel.allowedContentTypes = utTypes(extensions)
+        panel.allowsOtherFileTypes = false
+        panel.directoryURL = start
+        if let message { panel.message = message }
+        return run(panel)
+    }
 
     private func open(
         extensions: [String],

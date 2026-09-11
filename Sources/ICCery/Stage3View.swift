@@ -371,9 +371,9 @@ struct Stage3View: View {
                 }
 
                 if let notice = model.finishNotice {
-                    Text(notice)
+                    Text(notice.text)
                         .font(.caption)
-                        .foregroundStyle(model.finishNoticeIsError ? .red : .green)
+                        .foregroundStyle(notice.kind == .error ? .red : .green)
                 }
             }
             .padding(16)

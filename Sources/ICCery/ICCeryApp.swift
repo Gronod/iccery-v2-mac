@@ -36,6 +36,17 @@ struct ICCeryApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var terminationRequested = false
 
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // SwiftUI `Window` scenes launched by XCTest stay
+        // `.runningBackground` unless the app takes regular activation
+        // and orders the window front (CI run 29804).
+        NSApp.setActivationPolicy(.regular)
+        for window in NSApp.windows {
+            window.makeKeyAndOrderFront(nil)
+        }
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
     }

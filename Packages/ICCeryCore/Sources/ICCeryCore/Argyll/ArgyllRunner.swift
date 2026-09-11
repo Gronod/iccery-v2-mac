@@ -2,43 +2,41 @@ import Foundation
 
 /// Errors from `ArgyllRunner` executions.
 public enum ArgyllRunnerError: LocalizedError, Equatable, Sendable {
-    case processFailed(code: Int32, logs: [String])
+    case toolFailed(tool: String, code: Int32, logs: [String])
     case missingArtefact(String)
     case malformedManifest(String)
     case instrumentDetectionFailed(String)
-    case chartreadFailed(String)
-    case averageFailed(String)
-    case colprofFailed(String)
-    case printcalFailed(String)
-    case applycalFailed(String)
-    case iccgamutFailed(String)
-    case profcheckFailed(String)
     case profcheckUnparseable
 
     public var errorDescription: String? {
         switch self {
-        case .processFailed(let code, _):
-            return "Process exited with code \(code)"
+        case .toolFailed(let tool, let code, let logs):
+            let detail = logs.last.flatMap { $0.isEmpty ? nil : $0 }
+                ?? "exited with code \(code)"
+            switch tool {
+            case "chartread":
+                return "Chartread failed: \(detail)"
+            case "average":
+                return "Averaging failed: \(detail)"
+            case "colprof":
+                return "Profile creation failed: \(detail)"
+            case "printcal":
+                return "Calibration curve computation failed: \(detail)"
+            case "applycal":
+                return "Apply calibration failed: \(detail)"
+            case "iccgamut":
+                return "Gamut extraction failed: \(detail)"
+            case "profcheck":
+                return "Profile verification failed: \(detail)"
+            default:
+                return "Process exited with code \(code)"
+            }
         case .missingArtefact(let path):
             return "Expected output file was not created: \(path)"
         case .malformedManifest(let reason):
             return "Failed to parse printtarg manifest: \(reason)"
         case .instrumentDetectionFailed(let reason):
             return "Instrument detection failed: \(reason)"
-        case .chartreadFailed(let reason):
-            return "Chartread failed: \(reason)"
-        case .averageFailed(let reason):
-            return "Averaging failed: \(reason)"
-        case .colprofFailed(let reason):
-            return "Profile creation failed: \(reason)"
-        case .printcalFailed(let reason):
-            return "Calibration curve computation failed: \(reason)"
-        case .applycalFailed(let reason):
-            return "Apply calibration failed: \(reason)"
-        case .iccgamutFailed(let reason):
-            return "Gamut extraction failed: \(reason)"
-        case .profcheckFailed(let reason):
-            return "Profile verification failed: \(reason)"
         case .profcheckUnparseable:
             return "Profile verification produced unparseable output"
         }
@@ -76,6 +74,48 @@ public struct ArgyllRunner: Sendable {
         self.binaryResolver = binaryResolver
     }
 
+    // MARK: - Shared streaming loop (issue #79)
+
+    private func runStreamingTool(
+        name: String,
+        id: String,
+        arguments: [String],
+        workingDirectory: URL?,
+        flushPartialLines: Bool = false,
+        onLogBatch: (@Sendable ([String]) -> Void)? = nil
+    ) async throws -> CollectedRun {
+        let binaryURL = binaryResolver.resolve(name)
+        await ensureNotRunning(id: id)
+        let events = processManager.events()
+        try await processManager.runStreaming(
+            id: id,
+            binary: binaryURL,
+            arguments: arguments,
+            workingDirectory: workingDirectory
+        )
+        let run = await collect(
+            id: id,
+            events: events,
+            onLogBatch: onLogBatch,
+            flushPartialLines: flushPartialLines
+        )
+        guard run.exitCode == 0 else {
+            throw ArgyllRunnerError.toolFailed(
+                tool: name,
+                code: run.exitCode ?? -1,
+                logs: run.lines
+            )
+        }
+        return run
+    }
+
+    private func requireArtefact(_ url: URL) throws -> URL {
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            throw ArgyllRunnerError.missingArtefact(url.path)
+        }
+        return url
+    }
+
     // MARK: - targen (Stage 1)
 
     /// Runs `targen` streaming, collecting logs and verifying `.ti1`
@@ -87,27 +127,16 @@ public struct ArgyllRunner: Sendable {
         let cleanBasename = try PathSecurity.sanitizeBasename(config.basename)
         let cwd = PathSecurity.resolveSafeCwd(config.workingDirectory)
         let args = try TargenArgs.build(config: config)
-        let binaryURL = binaryResolver.resolve("targen")
         let processId = ProcessID.targen(cleanBasename)
-
-        await ensureNotRunning(id: processId)
-        let events = processManager.events()
-        try await processManager.runStreaming(
+        _ = try await runStreamingTool(
+            name: "targen",
             id: processId,
-            binary: binaryURL,
             arguments: args,
-            workingDirectory: cwd
+            workingDirectory: cwd,
+            onLogBatch: onLogBatch
         )
-        let run = await collect(id: processId, events: events, onLogBatch: onLogBatch)
-
-        guard run.exitCode == 0 else {
-            throw ArgyllRunnerError.processFailed(code: run.exitCode ?? -1, logs: run.lines)
-        }
         let ti1URL = cwd.appendingPathComponent("\(cleanBasename).ti1")
-        guard FileManager.default.fileExists(atPath: ti1URL.path) else {
-            throw ArgyllRunnerError.missingArtefact(ti1URL.path)
-        }
-        return ti1URL
+        return try requireArtefact(ti1URL)
     }
 
     // MARK: - printtarg (Stage 2)
@@ -122,26 +151,15 @@ public struct ArgyllRunner: Sendable {
         let cleanBasename = try PathSecurity.sanitizeBasename(config.basename)
         let cwd = PathSecurity.resolveSafeCwd(config.workingDirectory)
         let args = try PrinttargArgs.build(config: config)
-        let binaryURL = binaryResolver.resolve("printtarg")
         let processId = ProcessID.printtarg(cleanBasename)
-
-        await ensureNotRunning(id: processId)
-        let events = processManager.events()
-        try await processManager.runStreaming(
+        let run = try await runStreamingTool(
+            name: "printtarg",
             id: processId,
-            binary: binaryURL,
             arguments: args,
-            workingDirectory: cwd
+            workingDirectory: cwd,
+            onLogBatch: onLogBatch
         )
-        let run = await collect(id: processId, events: events, onLogBatch: onLogBatch)
-
-        guard run.exitCode == 0 else {
-            throw ArgyllRunnerError.processFailed(code: run.exitCode ?? -1, logs: run.lines)
-        }
-        let ti2URL = cwd.appendingPathComponent("\(cleanBasename).ti2")
-        guard FileManager.default.fileExists(atPath: ti2URL.path) else {
-            throw ArgyllRunnerError.missingArtefact(ti2URL.path)
-        }
+        let ti2URL = try requireArtefact(cwd.appendingPathComponent("\(cleanBasename).ti2"))
 
         let manifest: PrinttargManifest
         do {
@@ -339,28 +357,16 @@ public struct ArgyllRunner: Sendable {
     ) async throws -> URL {
         let cwd = PathSecurity.resolveSafeCwd(config.workingDirectory)
         let args = try AverageArgs.build(config: config)
-        let binaryURL = binaryResolver.resolve("average")
         let processId = ProcessID.average(config.basename)
-
-        await ensureNotRunning(id: processId)
-        let events = processManager.events()
-        try await processManager.runStreaming(
+        _ = try await runStreamingTool(
+            name: "average",
             id: processId,
-            binary: binaryURL,
             arguments: args,
-            workingDirectory: cwd
+            workingDirectory: cwd,
+            onLogBatch: onLogBatch
         )
-        let run = await collect(id: processId, events: events, onLogBatch: onLogBatch)
-
-        guard run.exitCode == 0 else {
-            throw ArgyllRunnerError.averageFailed("average exited with code \(run.exitCode ?? -1)")
-        }
-
         let canonical = cwd.appendingPathComponent("\(config.basename).ti3")
-        guard FileManager.default.fileExists(atPath: canonical.path) else {
-            throw ArgyllRunnerError.missingArtefact(canonical.path)
-        }
-        return canonical
+        return try requireArtefact(canonical)
     }
 
     // MARK: - colprof (Stage 4)
@@ -374,29 +380,15 @@ public struct ArgyllRunner: Sendable {
         let cleanBasename = try PathSecurity.sanitizeBasename(config.basename)
         let cwd = PathSecurity.resolveSafeCwd(config.workingDirectory)
         let args = try ColprofArgs.build(config: config)
-        let binaryURL = binaryResolver.resolve("colprof")
         let processId = ProcessID.colprof(cleanBasename)
-
-        await ensureNotRunning(id: processId)
-        let events = processManager.events()
-        try await processManager.runStreaming(
+        _ = try await runStreamingTool(
+            name: "colprof",
             id: processId,
-            binary: binaryURL,
             arguments: args,
-            workingDirectory: cwd
+            workingDirectory: cwd,
+            flushPartialLines: true,
+            onLogBatch: onLogBatch
         )
-        let run = await collect(
-            id: processId,
-            events: events,
-            onLogBatch: onLogBatch,
-            flushPartialLines: true
-        )
-
-        guard run.exitCode == 0 else {
-            throw ArgyllRunnerError.colprofFailed(
-                "colprof exited with code \(run.exitCode ?? -1)"
-            )
-        }
 
         // Argyll may produce `.icm` on Windows, but on macOS we expect `.icc`.
         // `resolveProfile` checks `.icm` first, then `.icc`, matching #69.
@@ -456,16 +448,20 @@ public struct ArgyllRunner: Sendable {
             if Task.isCancelled {
                 throw CancellationError()
             }
-            throw ArgyllRunnerError.applycalFailed(
-                result.stderr.isEmpty
+            throw ArgyllRunnerError.toolFailed(
+                tool: "applycal",
+                code: result.exitCode,
+                logs: [result.stderr.isEmpty
                     ? "applycal exited with code \(result.exitCode)"
-                    : result.stderr
+                    : result.stderr]
             )
         }
 
         guard fm.fileExists(atPath: tmpURL.path) else {
-            throw ArgyllRunnerError.applycalFailed(
-                "applycal did not create temp profile"
+            throw ArgyllRunnerError.toolFailed(
+                tool: "applycal",
+                code: -1,
+                logs: ["applycal did not create temp profile"]
             )
         }
 
@@ -473,8 +469,10 @@ public struct ArgyllRunner: Sendable {
         let size = attrs?[.size] as? UInt64 ?? 0
         guard size >= 128 else {
             try? fm.removeItem(at: tmpURL)
-            throw ArgyllRunnerError.applycalFailed(
-                "calibrated profile is too small (\(size) bytes)"
+            throw ArgyllRunnerError.toolFailed(
+                tool: "applycal",
+                code: -1,
+                logs: ["calibrated profile is too small (\(size) bytes)"]
             )
         }
 
@@ -486,7 +484,11 @@ public struct ArgyllRunner: Sendable {
             }
         } catch {
             try? fm.removeItem(at: tmpURL)
-            throw ArgyllRunnerError.applycalFailed(error.localizedDescription)
+            throw ArgyllRunnerError.toolFailed(
+                tool: "applycal",
+                code: -1,
+                logs: [error.localizedDescription]
+            )
         }
 
         return inputURL
@@ -503,30 +505,16 @@ public struct ArgyllRunner: Sendable {
         let cwd = profileURL.deletingLastPathComponent()
         let stem = profileURL.deletingPathExtension().lastPathComponent
         let args = try IccgamutArgs.build(config: config)
-        let binaryURL = binaryResolver.resolve("iccgamut")
         let processId = ProcessID.iccgamut(stem: stem)
-
-        await ensureNotRunning(id: processId)
-        let events = processManager.events()
-        try await processManager.runStreaming(
+        _ = try await runStreamingTool(
+            name: "iccgamut",
             id: processId,
-            binary: binaryURL,
             arguments: args,
-            workingDirectory: cwd
+            workingDirectory: cwd,
+            onLogBatch: onLogBatch
         )
-        let run = await collect(id: processId, events: events, onLogBatch: onLogBatch)
-
-        guard run.exitCode == 0 else {
-            throw ArgyllRunnerError.iccgamutFailed(
-                "iccgamut exited with code \(run.exitCode ?? -1)"
-            )
-        }
-
         let gamURL = cwd.appendingPathComponent("\(stem).gam")
-        guard FileManager.default.fileExists(atPath: gamURL.path) else {
-            throw ArgyllRunnerError.missingArtefact(gamURL.path)
-        }
-        return gamURL
+        return try requireArtefact(gamURL)
     }
 
     // MARK: - profcheck (Stage 5 verification)
@@ -539,30 +527,18 @@ public struct ArgyllRunner: Sendable {
         let cwd = config.ti3URL.deletingLastPathComponent()
         let ti3Path = config.ti3URL.path
 
-        let iccURL = Self.resolveProfileForVerification(config.iccURL)
+        let iccURL = ArtefactProbe.resolveProfile(config.iccURL)
         let config = ProfcheckConfig(ti3URL: config.ti3URL, iccURL: iccURL)
 
         let args = try ProfcheckArgs.build(config: config)
-        let binaryURL = binaryResolver.resolve("profcheck")
         let processId = ProcessID.profcheck(ti3Path: ti3Path)
-
-        await ensureNotRunning(id: processId)
-        let events = processManager.events()
-        try await processManager.runStreaming(
+        let run = try await runStreamingTool(
+            name: "profcheck",
             id: processId,
-            binary: binaryURL,
             arguments: args,
-            workingDirectory: cwd
+            workingDirectory: cwd,
+            onLogBatch: onLogBatch
         )
-        let run = await collect(id: processId, events: events, onLogBatch: onLogBatch)
-
-        guard run.exitCode == 0 else {
-            throw ArgyllRunnerError.profcheckFailed(
-                run.stderr.isEmpty
-                    ? "profcheck exited with code \(run.exitCode ?? -1)"
-                    : run.stderr
-            )
-        }
 
         let output = (run.stdout + "\n" + run.stderr).trimmingCharacters(in: .whitespacesAndNewlines)
         let report = ProfcheckParser.parse(output)
@@ -570,15 +546,6 @@ public struct ArgyllRunner: Sendable {
             throw ArgyllRunnerError.profcheckUnparseable
         }
         return report
-    }
-
-    private static func resolveProfileForVerification(_ url: URL) -> URL {
-        let fm = FileManager.default
-        if fm.fileExists(atPath: url.path) { return url }
-        let alt = url.pathExtension.lowercased() == "icc"
-            ? url.deletingPathExtension().appendingPathExtension("icm")
-            : url.deletingPathExtension().appendingPathExtension("icc")
-        return fm.fileExists(atPath: alt.path) ? alt : url
     }
 
     // MARK: - chartread (Stage 3 interactive)
@@ -596,7 +563,7 @@ public struct ArgyllRunner: Sendable {
             cwd = PathSecurity.resolveSafeCwd(config.workingDirectory)
         } catch {
             return AsyncStream { continuation in
-                continuation.yield(.failed(ArgyllRunnerError.chartreadFailed(error.localizedDescription)))
+                continuation.yield(.failed(ArgyllRunnerError.toolFailed(tool: "chartread", code: -1, logs: [error.localizedDescription])))
                 continuation.finish()
             }
         }
@@ -606,7 +573,7 @@ public struct ArgyllRunner: Sendable {
             args = try ChartreadArgs.build(config: config)
         } catch {
             return AsyncStream { continuation in
-                continuation.yield(.failed(ArgyllRunnerError.chartreadFailed(error.localizedDescription)))
+                continuation.yield(.failed(ArgyllRunnerError.toolFailed(tool: "chartread", code: -1, logs: [error.localizedDescription])))
                 continuation.finish()
             }
         }
@@ -637,7 +604,7 @@ public struct ArgyllRunner: Sendable {
                         workingDirectory: cwd
                     )
                 } catch {
-                    continuation.yield(.failed(ArgyllRunnerError.chartreadFailed(error.localizedDescription)))
+                    continuation.yield(.failed(ArgyllRunnerError.toolFailed(tool: "chartread", code: -1, logs: [error.localizedDescription])))
                     continuation.finish()
                     return
                 }
@@ -724,7 +691,11 @@ public struct ArgyllRunner: Sendable {
                         continuation.yield(.failed(ArgyllRunnerError.missingArtefact(canonical.path)))
                     }
                 } else {
-                    continuation.yield(.failed(ArgyllRunnerError.chartreadFailed("chartread exited with code \(exitCode ?? -1)")))
+                    continuation.yield(.failed(ArgyllRunnerError.toolFailed(
+                        tool: "chartread",
+                        code: exitCode ?? -1,
+                        logs: ["chartread exited with code \(exitCode ?? -1)"]
+                    )))
                 }
                 continuation.finish()
             }
@@ -768,30 +739,19 @@ public struct ArgyllRunner: Sendable {
     ) async throws -> URL {
         let args = try CalibrationTargenArgs.build(config: config)
         let cwd = PathSecurity.resolveSafeCwd(config.workingDirectory)
-        let calBasename = config.basename.hasPrefix("CAL_") ? config.basename : "CAL_\(config.basename)"
-        let cleanBasename = try PathSecurity.sanitizeBasename(calBasename)
-        let binaryURL = binaryResolver.resolve("targen")
-        let processId = ProcessID.targen(cleanBasename)
-
-        await ensureNotRunning(id: processId)
-        let events = processManager.events()
-        try await processManager.runStreaming(
-            id: processId,
-            binary: binaryURL,
-            arguments: args,
-            workingDirectory: cwd
+        let cleanBasename = try PathSecurity.sanitizeBasename(
+            CalibrationIdentity.prefix(config.basename)
         )
-        let run = await collect(id: processId, events: events, onLogBatch: onLogBatch)
-
-        guard run.exitCode == 0 else {
-            throw ArgyllRunnerError.processFailed(code: run.exitCode ?? -1, logs: run.lines)
-        }
-
+        let processId = ProcessID.targen(cleanBasename)
+        _ = try await runStreamingTool(
+            name: "targen",
+            id: processId,
+            arguments: args,
+            workingDirectory: cwd,
+            onLogBatch: onLogBatch
+        )
         let ti1URL = cwd.appendingPathComponent("\(cleanBasename).ti1")
-        guard FileManager.default.fileExists(atPath: ti1URL.path) else {
-            throw ArgyllRunnerError.missingArtefact(ti1URL.path)
-        }
-        return ti1URL
+        return try requireArtefact(ti1URL)
     }
 
     /// Computes a `.cal` curve from a measured `CAL_*.ti3`.
@@ -805,7 +765,7 @@ public struct ArgyllRunner: Sendable {
         let args = try PrintcalArgs.build(config: config)
         let cwd = PathSecurity.resolveSafeCwd(config.workingDirectory)
         let binaryURL = binaryResolver.resolve("printcal")
-        let calBasename = config.ti3Basename.hasPrefix("CAL_") ? config.ti3Basename : "CAL_\(config.ti3Basename)"
+        let calBasename = CalibrationIdentity.prefix(config.ti3Basename)
         let processId = ProcessID.printcal(calBasename)
 
         await ensureNotRunning(id: processId)
@@ -821,10 +781,12 @@ public struct ArgyllRunner: Sendable {
         }
 
         guard result.exitCode == 0 else {
-            throw ArgyllRunnerError.printcalFailed(
-                result.stderr.isEmpty
+            throw ArgyllRunnerError.toolFailed(
+                tool: "printcal",
+                code: result.exitCode,
+                logs: [result.stderr.isEmpty
                     ? "printcal exited with code \(result.exitCode)"
-                    : result.stderr
+                    : result.stderr]
             )
         }
 

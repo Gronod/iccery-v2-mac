@@ -86,7 +86,7 @@ public enum CalibrationTargenArgs {
             args.append(contentsOf: ["-l", "\(inkLimit)"])
         }
 
-        let calBasename = cleanBasename.hasPrefix("CAL_") ? cleanBasename : "CAL_\(cleanBasename)"
+        let calBasename = CalibrationIdentity.prefix(cleanBasename)
         args.append(calBasename)
         return args
     }
