@@ -380,14 +380,18 @@ final class TargetWorkflowViewModel {
     func applyPreset(_ preset: ProfilingPreset) {
         let targen = TargenConfig(preset: preset, basename: targetBasename, workingDirectory: targetDirectory)
         applyTargenForm(targen)
+        // Stage 4 state (incl. calibration) is applied before Stage 2 so
+        // the layout config receives the preset's calibration path, not
+        // stale live state (#82).
+        profile.applyPreset(preset)
         let printtarg = PrinttargConfig(
             preset: preset,
             basename: wizard.basename,
             workingDirectory: wizard.effectiveWorkingDirectory,
-            calibrationFile: profile.applyCalibration ? profile.calibrationFile : nil
+            calibrationFile: profile.applyCalibration && !profile.calibrationFile.isEmpty
+                ? profile.calibrationFile : nil
         )
         applyPrinttargForm(printtarg)
-        profile.applyPreset(preset)
         selectedPresetID = preset.id
     }
 

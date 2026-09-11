@@ -287,4 +287,210 @@ struct PresetMappingTests {
         #expect(back.colprofFwa == "D50")
         #expect(back.greySteps == nil)
     }
+
+    @Test("Full preset round-trips through all three configs with every field asserted")
+    func fullRoundTrip() {
+        let preset = ProfilingPreset(
+            id: "custom-full",
+            name: "Full",
+            description: "All fields",
+            colourSpace: "cmyk",
+            patchCount: 1500,
+            whitePatches: 6,
+            blackPatches: 8,
+            greySteps: 9,
+            singleChannelSteps: 7,
+            neutralSteps: 4,
+            neutralConcentration: 0.7,
+            preconditioningProfile: "/tmp/pre.icm",
+            ofpsHighQuality: true,
+            ofpsAdaptation: 0.2,
+            fullSpreadAlgorithm: "R",
+            totalInkLimit: 280,
+            darkEmphasis: 1.3,
+            devicePower: 1.2,
+            instrument: "p3",
+            pageSize: "250x300",
+            bitDepth: 16,
+            dpi: 360,
+            randomSeed: 42,
+            noRandomize: false,
+            calibrationFile: "/tmp/a.cal",
+            applyCalibration: true,
+            colprofAlgorithm: "x",
+            colprofQuality: "u",
+            colprofIntent: "p",
+            colprofFwa: "D65",
+            colprofIlluminant: "D65",
+            colprofObserver: "1931_2",
+            colprofInputViewingCond: "D50_2",
+            colprofOutputViewingCond: "D65_2"
+        )
+
+        let targen = TargenConfig(preset: preset, basename: "j", workingDirectory: nil)
+        #expect(targen.colourSpace == .cmyk)
+        #expect(targen.patchCount == 1500)
+        #expect(targen.whitePatches == 6)
+        #expect(targen.blackPatches == 8)
+        #expect(targen.greySteps == 9)
+        #expect(targen.singleChannelSteps == 7)
+        #expect(targen.neutralSteps == 4)
+        #expect(targen.neutralConcentration == 0.7)
+        #expect(targen.preconditioningProfile == "/tmp/pre.icm")
+        #expect(targen.ofpsHighQuality == true)
+        #expect(targen.ofpsAdaptation == 0.2)
+        #expect(targen.fullSpreadAlgorithm == .uniformRandom)
+        #expect(targen.totalInkLimit == 280)
+        #expect(targen.darkEmphasis == 1.3)
+        #expect(targen.devicePower == 1.2)
+
+        let printtarg = PrinttargConfig(
+            preset: preset,
+            basename: "j",
+            workingDirectory: nil,
+            calibrationFile: preset.calibrationFile
+        )
+        #expect(printtarg.instrument == .p3)
+        #expect(printtarg.pageSize == .custom)
+        #expect(printtarg.customPageWidth == 250)
+        #expect(printtarg.customPageHeight == 300)
+        #expect(printtarg.bitDepth == .sixteen)
+        #expect(printtarg.dpi == 360)
+        #expect(printtarg.layoutOrder == .customSeed)
+        #expect(printtarg.customSeed == 42)
+        #expect(printtarg.calibrationFile == "/tmp/a.cal")
+
+        let colprof = ColprofConfig(preset: preset, basename: "j", workingDirectory: nil)
+        #expect(colprof.algorithm == "x")
+        #expect(colprof.quality == "u")
+        #expect(colprof.intent == "p")
+        #expect(colprof.fwa == "D65")
+        #expect(colprof.illuminant == "D65")
+        #expect(colprof.observer == "1931_2")
+        #expect(colprof.inputViewingCond == "D50_2")
+        #expect(colprof.outputViewingCond == "D65_2")
+
+        let back = ProfilingPreset(
+            id: preset.id,
+            name: preset.name,
+            description: preset.description,
+            targen: targen,
+            printtarg: printtarg,
+            colprof: colprof,
+            calibrationFile: preset.calibrationFile,
+            applyCalibration: preset.applyCalibration
+        )
+        #expect(back == preset)
+    }
+
+    @Test("Every full-spread algorithm round-trips", arguments: [
+        ("ofps", FullSpreadAlgorithm.ofps),
+        ("t", .target),
+        ("r", .random),
+        ("R", .uniformRandom),
+        ("q", .quasiRandom),
+        ("Q", .uniformQuasiRandom),
+        ("i", .invertedQuasiRandom),
+        ("I", .invertedUniformQuasiRandom)
+    ])
+    func fullSpreadAlgorithms(value: String, expected: FullSpreadAlgorithm) {
+        var preset = ProfilingPreset(id: "x", name: "n", patchCount: 100)
+        preset.fullSpreadAlgorithm = value
+        let cfg = TargenConfig(preset: preset, basename: "t", workingDirectory: nil)
+        if expected == .ofps {
+            // ofps is the default — no flag emitted, stored value is nil.
+            #expect(cfg.fullSpreadAlgorithm == nil)
+        } else {
+            #expect(cfg.fullSpreadAlgorithm == expected)
+        }
+        let back = ProfilingPreset(
+            id: "x", name: "n", description: "",
+            targen: cfg,
+            printtarg: PrinttargConfig(
+                preset: preset, basename: "t",
+                workingDirectory: nil, calibrationFile: nil
+            ),
+            colprof: ColprofConfig(preset: preset, basename: "t", workingDirectory: nil),
+            calibrationFile: nil,
+            applyCalibration: nil
+        )
+        #expect(back.fullSpreadAlgorithm == value)
+    }
+
+    @Test("Explicit ofpsHighQuality=false is preserved, distinct from nil")
+    func ofpsHighQualityFalse() {
+        var preset = ProfilingPreset(id: "x", name: "n", patchCount: 100)
+        preset.ofpsHighQuality = false
+        let cfg = TargenConfig(preset: preset, basename: "t", workingDirectory: nil)
+        #expect(cfg.ofpsHighQuality == false)
+
+        preset.ofpsHighQuality = nil
+        let nilCfg = TargenConfig(preset: preset, basename: "t", workingDirectory: nil)
+        #expect(nilCfg.ofpsHighQuality == nil)
+    }
+
+    @Test("noRandomize/seed layout mapping rules", arguments: [
+        (true, nil, LayoutOrder.raster, 1),
+        (true, 7, .raster, 7),
+        (false, nil, .deterministic, 1),
+        (false, 1, .deterministic, 1),
+        (nil, 1, .deterministic, 1),
+        (false, 5, .customSeed, 5)
+    ] as [(Bool?, Int?, LayoutOrder, Int)])
+    func layoutMapping(noRandomize: Bool?, seed: Int?, layout: LayoutOrder, expectedSeed: Int) {
+        var preset = ProfilingPreset(id: "x", name: "n", patchCount: 100)
+        preset.noRandomize = noRandomize
+        preset.randomSeed = seed
+        let cfg = PrinttargConfig(
+            preset: preset, basename: "t",
+            workingDirectory: nil, calibrationFile: nil
+        )
+        #expect(cfg.layoutOrder == layout)
+        #expect(cfg.customSeed == expectedSeed)
+    }
+
+    @Test("Custom page fallback matrix", arguments: [
+        ("250x300", PageSize.custom, 250.0, 300.0),
+        ("50x50", .custom, 50.0, 50.0),
+        ("foo", .a4, 210.0, 297.0),
+        ("30x40", .a4, 210.0, 297.0),
+        ("210x", .a4, 210.0, 297.0)
+    ] as [(String, PageSize, Double, Double)])
+    func customPageFallback(raw: String, page: PageSize, w: Double, h: Double) {
+        var preset = ProfilingPreset(id: "x", name: "n", patchCount: 100)
+        preset.pageSize = raw
+        let cfg = PrinttargConfig(
+            preset: preset, basename: "t",
+            workingDirectory: nil, calibrationFile: nil
+        )
+        #expect(cfg.pageSize == page)
+        #expect(cfg.customPageWidth == w)
+        #expect(cfg.customPageHeight == h)
+    }
+
+    @Test("FWA preset value → selection matrix", arguments: [
+        (nil, ColprofFwaSelection.none),
+        ("none", .none),
+        ("NONE", .none),
+        ("", .empty),
+        ("D50", .D50),
+        ("d50", .D50),
+        ("D65", .D65),
+        ("d65", .D65),
+        ("/tmp/fwa.sp", .custom)
+    ] as [(String?, ColprofFwaSelection)])
+    func fwaToSelection(raw: String?, expected: ColprofFwaSelection) {
+        #expect(ColprofFwaSelection(presetValue: raw) == expected)
+    }
+
+    @Test("FWA selection → preset value matrix", arguments: [
+        (ColprofFwaSelection.none, nil),
+        (.empty, ""),
+        (.D50, "D50"),
+        (.D65, "D65"),
+        (.custom, "/tmp/fwa.sp")
+    ] as [(ColprofFwaSelection, String?)])
+    func fwaToPresetValue(selection: ColprofFwaSelection, expected: String?) {
+        #expect(selection.presetValue(customPath: "/tmp/fwa.sp") == expected)
+    }
 }
