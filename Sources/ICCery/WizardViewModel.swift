@@ -201,7 +201,7 @@ final class WizardViewModel {
         self.notice = notice
         if let delay = notice.autoHideAfter {
             noticeDismissTask = Task { [weak self] in
-                try? await Task.sleep(for: .seconds(delay))
+                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                 guard !Task.isCancelled else { return }
                 if self?.notice?.id == notice.id {
                     self?.notice = nil
