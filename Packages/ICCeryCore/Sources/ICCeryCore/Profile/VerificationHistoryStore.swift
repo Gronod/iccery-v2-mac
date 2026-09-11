@@ -73,7 +73,11 @@ public actor VerificationHistoryStore {
     }
 
     /// Removes all history and updates disk.
+    ///
+    /// Loads the existing history first and propagates any load error so an
+    /// unparseable file is never overwritten.
     public func clear() throws {
+        try load()
         try write([])
         records = []
     }
