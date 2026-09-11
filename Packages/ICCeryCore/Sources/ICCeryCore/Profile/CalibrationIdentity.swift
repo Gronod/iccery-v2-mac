@@ -33,16 +33,16 @@ public struct CalibrationIdentity: Equatable, Sendable {
 
     /// Derive identity from the live wizard basename and the persisted
     /// original. A non-empty persisted original wins over a `CAL_` live
-    /// name (Force Quit mid-calibration).
+    /// name (Force Quit mid-calibration). An empty live basename always
+    /// produces an empty identity — a persisted original must never
+    /// resurrect a target that no longer exists (#83).
     public static func parse(liveBasename: String, persistedOriginal: String) -> CalibrationIdentity {
-        if liveBasename.isEmpty && persistedOriginal.isEmpty {
+        guard !liveBasename.isEmpty else {
             return CalibrationIdentity(originalBasename: "", calibrationBasename: "")
         }
         let original: String
         if liveBasename.hasPrefix("CAL_") {
             original = persistedOriginal.isEmpty ? strip(liveBasename) : persistedOriginal
-        } else if liveBasename.isEmpty {
-            original = persistedOriginal
         } else {
             original = liveBasename
         }
