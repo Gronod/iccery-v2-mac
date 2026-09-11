@@ -3,25 +3,6 @@ import Observation
 import SwiftUI
 import ICCeryCore
 
-/// User-facing FWA selection for the Stage 4 form.
-enum ColprofFwaSelection: String, CaseIterable, Sendable, Equatable {
-    case none = "none"
-    case empty = ""
-    case D50 = "D50"
-    case D65 = "D65"
-    case custom = "custom"
-
-    var displayName: String {
-        switch self {
-        case .none: return "None"
-        case .empty: return "Bare (-f)"
-        case .D50: return "D50"
-        case .D65: return "D65"
-        case .custom: return "Custom .sp"
-        }
-    }
-}
-
 /// Stage 4/5 workflow: build a profile, verify it, track drift, and install.
 @MainActor
 @Observable
@@ -110,13 +91,7 @@ final class ProfileWorkflowViewModel {
     }
 
     var fwaValue: String? {
-        switch fwaSelection {
-        case .none: return nil
-        case .empty: return ""
-        case .D50: return "D50"
-        case .D65: return "D65"
-        case .custom: return fwaCustomPath
-        }
+        fwaSelection.presetValue(customPath: fwaCustomPath)
     }
 
     // MARK: - Preset application
@@ -131,21 +106,16 @@ final class ProfileWorkflowViewModel {
         algorithm = config.algorithm
         quality = config.quality
         intent = config.intent ?? ""
-        if let fwa = config.fwa {
-            switch fwa.lowercased() {
-            case "none": fwaSelection = .none
-            case "": fwaSelection = .empty
-            case "d50": fwaSelection = .D50
-            case "d65": fwaSelection = .D65
-            default:
-                fwaSelection = .custom
-                fwaCustomPath = fwa
-            }
-        }
+        fwaSelection = ColprofFwaSelection(presetValue: config.fwa)
+        fwaCustomPath = fwaSelection == .custom ? (config.fwa ?? "") : ""
         illuminant = config.illuminant ?? ""
         observer = config.observer ?? ""
         inputViewingCond = config.inputViewingCond ?? ""
         outputViewingCond = config.outputViewingCond ?? ""
+        profileDescription = ""
+        copyright = ""
+        applyCalibration = preset.applyCalibration == true
+        calibrationFile = preset.calibrationFile ?? ""
     }
 
     /// Stage 4 form values for saving into a custom preset.
