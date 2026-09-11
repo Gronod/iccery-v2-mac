@@ -1,78 +1,67 @@
 import Foundation
-import Testing
+import XCTest
 @testable import ICCeryCore
 
 /// Issue #83 — canonical `CAL_` / original-stem pairing.
-@Suite("CalibrationIdentity")
-struct CalibrationIdentityTests {
-    @Test("live foo, no persisted")
-    func livePlain() {
+final class CalibrationIdentityTests: XCTestCase {
+    func testLivePlain() {
         let id = CalibrationIdentity.parse(liveBasename: "foo", persistedOriginal: "")
-        #expect(id.originalBasename == "foo")
-        #expect(id.calibrationBasename == "CAL_foo")
+        XCTAssertEqual(id.originalBasename, "foo")
+        XCTAssertEqual(id.calibrationBasename, "CAL_foo")
     }
 
-    @Test("live foo ignores stale persisted")
-    func livePlainIgnoresPersisted() {
+    func testLivePlainIgnoresPersisted() {
         let id = CalibrationIdentity.parse(liveBasename: "foo", persistedOriginal: "bar")
-        #expect(id.originalBasename == "foo")
-        #expect(id.calibrationBasename == "CAL_foo")
+        XCTAssertEqual(id.originalBasename, "foo")
+        XCTAssertEqual(id.calibrationBasename, "CAL_foo")
     }
 
-    @Test("live CAL_foo, persisted foo")
-    func liveCalPersisted() {
+    func testLiveCalPersisted() {
         let id = CalibrationIdentity.parse(liveBasename: "CAL_foo", persistedOriginal: "foo")
-        #expect(id.originalBasename == "foo")
-        #expect(id.calibrationBasename == "CAL_foo")
+        XCTAssertEqual(id.originalBasename, "foo")
+        XCTAssertEqual(id.calibrationBasename, "CAL_foo")
     }
 
-    @Test("live CAL_foo, empty persisted strips prefix")
-    func liveCalNoPersist() {
+    func testLiveCalNoPersist() {
         let id = CalibrationIdentity.parse(liveBasename: "CAL_foo", persistedOriginal: "")
-        #expect(id.originalBasename == "foo")
-        #expect(id.calibrationBasename == "CAL_foo")
+        XCTAssertEqual(id.originalBasename, "foo")
+        XCTAssertEqual(id.calibrationBasename, "CAL_foo")
     }
 
-    @Test("persisted original wins over CAL_ live")
-    func persistedWins() {
+    func testPersistedWins() {
         let id = CalibrationIdentity.parse(liveBasename: "CAL_foo", persistedOriginal: "bar")
-        #expect(id.originalBasename == "bar")
-        #expect(id.calibrationBasename == "CAL_bar")
+        XCTAssertEqual(id.originalBasename, "bar")
+        XCTAssertEqual(id.calibrationBasename, "CAL_bar")
     }
 
-    @Test("empty live yields empty identity even with persisted original")
-    func emptyLiveWithPersisted() {
+    func testEmptyLiveWithPersisted() {
         let id = CalibrationIdentity.parse(liveBasename: "", persistedOriginal: "foo")
-        #expect(id.originalBasename.isEmpty)
-        #expect(id.calibrationBasename.isEmpty)
+        XCTAssertTrue(id.originalBasename.isEmpty)
+        XCTAssertTrue(id.calibrationBasename.isEmpty)
     }
 
-    @Test("empty live, empty persisted")
-    func emptyLive() {
+    func testEmptyLive() {
         let id = CalibrationIdentity.parse(liveBasename: "", persistedOriginal: "")
-        #expect(id.originalBasename.isEmpty)
-        #expect(id.calibrationBasename.isEmpty)
+        XCTAssertTrue(id.originalBasename.isEmpty)
+        XCTAssertTrue(id.calibrationBasename.isEmpty)
     }
 
-    @Test("prefix is idempotent on already-prefixed input")
-    func alreadyPrefixed() {
-        #expect(CalibrationIdentity.prefix("CAL_foo") == "CAL_foo")
-        #expect(CalibrationIdentity.prefix("foo") == "CAL_foo")
+    func testAlreadyPrefixed() {
+        XCTAssertEqual(CalibrationIdentity.prefix("CAL_foo"), "CAL_foo")
+        XCTAssertEqual(CalibrationIdentity.prefix("foo"), "CAL_foo")
         let id = CalibrationIdentity.parse(liveBasename: "CAL_CAL_foo", persistedOriginal: "")
-        #expect(id.originalBasename == "CAL_foo")
-        #expect(id.calibrationBasename == "CAL_foo")
+        XCTAssertEqual(id.originalBasename, "CAL_foo")
+        XCTAssertEqual(id.calibrationBasename, "CAL_foo")
     }
 
-    @Test("prefix never invents a name from empty input")
-    func prefixEmpty() {
-        #expect(CalibrationIdentity.prefix("").isEmpty)
-        #expect(CalibrationIdentity.strip("foo") == "foo")
-        #expect(CalibrationIdentity.strip("CAL_foo") == "foo")
+    func testPrefixEmpty() {
+        XCTAssertTrue(CalibrationIdentity.prefix("").isEmpty)
+        XCTAssertEqual(CalibrationIdentity.strip("foo"), "foo")
+        XCTAssertEqual(CalibrationIdentity.strip("CAL_foo"), "foo")
     }
 
-    @Test("runner process id for a calibration targen is targen_CAL_*")
-    func processIdMatches() {
+    func testProcessIdMatches() {
         let cal = CalibrationIdentity.prefix("foo")
-        #expect(ProcessID.targen(cal) == "targen_CAL_foo")
+        XCTAssertEqual(ProcessID.targen(cal), "targen_CAL_foo")
     }
 }
