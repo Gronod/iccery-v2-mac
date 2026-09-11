@@ -25,7 +25,6 @@ final class CalibrationViewModel {
     var calibrationLog: [String] = []
     var isGenerating = false
     var isComputing = false
-    var lastError: String?
 
     init(workflow: TargetWorkflowViewModel, profile: ProfileWorkflowViewModel, environment: AppEnvironment) {
         self.workflow = workflow
@@ -77,10 +76,6 @@ final class CalibrationViewModel {
         wizard.basename = identity.calibrationBasename
         wizard.sessionMode = .calibration
 
-        isGenerating = true
-        calibrationLog = []
-        lastError = nil
-
         let config = CalibrationTargenConfig(
             colourSpace: colourSpace,
             steps: steps,
@@ -92,17 +87,19 @@ final class CalibrationViewModel {
         )
 
         Task { @MainActor in
-            defer { self.isGenerating = false }
-
             do {
-                _ = try await self.environment.runner.runCalibrationTargen(config: config, onLogBatch: ProcessRunSupport.logSink { [weak self] batch in
-                    self?.calibrationLog.append(contentsOf: batch)
-                })
+                _ = try await ProcessRunSupport.runLogged(
+                    setRunning: { self.isGenerating = $0 },
+                    resetLog: { self.calibrationLog = [] },
+                    onLog: { self.calibrationLog.append(contentsOf: $0) }
+                ) { onLog in
+                    try await self.environment.runner.runCalibrationTargen(
+                        config: config, onLogBatch: onLog)
+                }
                 self.wizard.refreshGating()
                 self.wizard.showNotice("Calibration target generated.")
                 self.wizard.go(to: .layOutPrint)
             } catch {
-                self.lastError = error.localizedDescription
                 self.wizard.showNotice(
                     "Calibration target failed: \(error.localizedDescription)",
                     kind: .error
@@ -137,14 +134,12 @@ final class CalibrationViewModel {
         // "already exists" when the user declines overwrite. We do not
         // silently clobber.
         if FileManager.default.fileExists(atPath: outputURL.path) {
-            lastError = "\(outputURL.lastPathComponent) already exists. Rename or overwrite it first."
-            wizard.showNotice(lastError!, kind: .error)
+            wizard.showNotice(
+                "\(outputURL.lastPathComponent) already exists. Rename or overwrite it first.",
+                kind: .error
+            )
             return
         }
-
-        isComputing = true
-        calibrationLog = []
-        lastError = nil
 
         let config = PrintcalConfig(
             ti3Basename: calBasename,
@@ -158,19 +153,21 @@ final class CalibrationViewModel {
         )
 
         Task { @MainActor in
-            defer { self.isComputing = false }
-
             do {
-                let url = try await self.environment.runner.runPrintcal(config: config, onLogBatch: ProcessRunSupport.logSink { [weak self] batch in
-                    self?.calibrationLog.append(contentsOf: batch)
-                })
+                let url = try await ProcessRunSupport.runLogged(
+                    setRunning: { self.isComputing = $0 },
+                    resetLog: { self.calibrationLog = [] },
+                    onLog: { self.calibrationLog.append(contentsOf: $0) }
+                ) { onLog in
+                    try await self.environment.runner.runPrintcal(
+                        config: config, onLogBatch: onLog)
+                }
                 self.computedCalURL = url
                 self.profile.calibrationFile = url.path
                 self.profile.applyCalibration = self.applyToProfile
                 self.wizard.showNotice("Calibration curves computed.")
                 self.wizard.restoreCalibration()
             } catch {
-                self.lastError = error.localizedDescription
                 self.wizard.showNotice(
                     "Calibration curve computation failed: \(error.localizedDescription)",
                     kind: .error

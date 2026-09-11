@@ -133,6 +133,18 @@ final class Milestone2UITests: XCTestCase {
         XCTAssertTrue(element("targenInkLimitGroup").waitForExistence(timeout: 5))
     }
 
+    /// Stage 1/2 process-log containers resolve under the shared
+    /// `ProcessLogView` identifiers (issue #80).
+    func testProcessLogContainersResolve() throws {
+        launchApp()
+        XCTAssertTrue(waitFor("targenLogContainer").exists)
+
+        app.buttons["btnBrowse"].click()
+        app.buttons["btnGenerate"].click()
+        XCTAssertTrue(waitFor("btnCreateLayout", timeout: 20).exists)
+        XCTAssertTrue(element("printtargLogContainer").exists)
+    }
+
     /// Fixture-backed targen run creates .ti1 and unlocks Stage 2.
     func testTargenFixtureUnlocksStage2() throws {
         launchApp()

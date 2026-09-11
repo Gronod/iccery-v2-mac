@@ -166,27 +166,14 @@ struct Stage4View: View {
                 }
 
                 Spacer()
-
-                if let lastError = model.lastError {
-                    Text(lastError)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .accessibilityIdentifier("colprofLastError")
-                }
             }
 
             if !model.colprofLog.isEmpty {
-                DisclosureGroup("Log") {
-                    VStack(alignment: .leading) {
-                        ForEach(model.colprofLog, id: \.self) { line in
-                            Text(line)
-                                .font(.system(.caption, design: .monospaced))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                .foregroundStyle(Theme.text)
-                .accessibilityIdentifier("colprofLogContainer")
+                ProcessLogView(
+                    lines: model.colprofLog,
+                    containerId: "colprofLogContainer",
+                    logId: "colprofLog"
+                )
             }
         }
         .padding(16)

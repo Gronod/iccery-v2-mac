@@ -206,8 +206,6 @@ final class TargetWorkflowViewModel {
     func generateTarget() {
         guard canGenerate, !targenRunning else { return }
         let config = buildTargenConfig()
-        targenRunning = true
-        targenLog = []
         resumedFromTi2 = false
         let runner = environment.runner
         Task { @MainActor in
@@ -228,7 +226,6 @@ final class TargetWorkflowViewModel {
             } catch {
                 wizard.showNotice(
                     "targen failed: \(error.localizedDescription)", kind: .error)
-                targenRunning = false
             }
         }
     }
@@ -242,7 +239,12 @@ final class TargetWorkflowViewModel {
             ? UITestHooks.datasetImportURL
             : fileDialogs.selectDatasetFile()
         guard let url else { return }
+        importMeasurementDataset(from: url)
+    }
 
+    /// Test seam (issue #80): unit tests pass missing or malformed URLs
+    /// directly instead of mutating the global environment.
+    func importMeasurementDataset(from url: URL) {
         do {
             let dataset = try CGATSParser.parse(url: url)
             guard let directory = targetDirectory ?? wizard.effectiveWorkingDirectory else {
@@ -339,8 +341,6 @@ final class TargetWorkflowViewModel {
     func createLayout() {
         guard wizard.isUnlocked(.layOutPrint), !printtargRunning else { return }
         let config = buildPrinttargConfig()
-        printtargRunning = true
-        printtargLog = []
         printtargResult = nil
         let runner = environment.runner
         Task { @MainActor in
