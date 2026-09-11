@@ -41,6 +41,34 @@ struct ArgyllRunnerCalibrationTests {
         try? FileManager.default.removeItem(at: testRoot)
     }
 
+    @Test("Calibration targen from foo runs as process id targen_CAL_foo")
+    func calibrationTargenProcessId() async throws {
+        let testRoot = try makeTestDir()
+        let runner = makeRunner()
+        let events = ProcessManager.shared.events()
+        // Subscribed before spawn; the exit event is emitted before
+        // runCalibrationTargen returns, so this always terminates.
+        let sawExit = Task {
+            for await event in events {
+                guard event.id == "targen_CAL_foo" else { continue }
+                if case .exit = event { return true }
+            }
+            return false
+        }
+        let config = CalibrationTargenConfig(
+            colourSpace: .rgb,
+            steps: 21,
+            basename: "foo",
+            workingDirectory: testRoot
+        )
+
+        let url = try await runner.runCalibrationTargen(config: config)
+
+        #expect(url.lastPathComponent == "CAL_foo.ti1")
+        #expect(await sawExit.value)
+        try? FileManager.default.removeItem(at: testRoot)
+    }
+
     @Test("printcal captured run creates .cal")
     func printcalProducesCal() async throws {
         let testRoot = try makeTestDir()
