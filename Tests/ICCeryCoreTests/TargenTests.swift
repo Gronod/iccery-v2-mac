@@ -1,4 +1,3 @@
-import Testing
 import XCTest
 import Foundation
 @testable import ICCeryCore
@@ -220,11 +219,9 @@ final class TargenArgsTests: XCTestCase {
     }
 }
 
-@Suite("ArgyllRunner Targen")
-struct ArgyllRunnerTargenTests {
+final class ArgyllRunnerTargenTests: XCTestCase {
 
-    @Test("Successful targen execution creates .ti1 and returns URL")
-    func successfulTargenExecution() async throws {
+    func testSuccessfulTargenExecution() async throws {
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
@@ -270,14 +267,13 @@ struct ArgyllRunnerTargenTests {
             box.append(batch)
         }
         logLines = box.lines
-        #expect(logLines.contains("Generating patches..."))
+        XCTAssertTrue(logLines.contains("Generating patches..."))
 
-        #expect(FileManager.default.fileExists(atPath: ti1URL.path))
-        #expect(ti1URL.lastPathComponent == "mock_test.ti1")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: ti1URL.path))
+        XCTAssertEqual(ti1URL.lastPathComponent, "mock_test.ti1")
     }
 
-    @Test("Failed targen execution throws toolFailed")
-    func failedTargenExecution() async throws {
+    func testFailedTargenExecution() async throws {
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
@@ -304,14 +300,15 @@ struct ArgyllRunnerTargenTests {
             workingDirectory: tempDir
         )
 
-        await #expect(throws: ArgyllRunnerError.toolFailed(
-            tool: "targen", code: 1, logs: ["Error: something went wrong"])) {
+        await assertAsyncThrows(expectedType: ArgyllRunnerError.self) {
             try await runner.runTargen(config: config)
+        } errorHandler: { error in
+            XCTAssertEqual(error, .toolFailed(
+                tool: "targen", code: 1, logs: ["Error: something went wrong"]))
         }
     }
 
-    @Test("Targen exit 0 without .ti1 throws missingArtefact")
-    func missingArtefactThrows() async throws {
+    func testMissingArtefactThrows() async throws {
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
@@ -338,9 +335,11 @@ struct ArgyllRunnerTargenTests {
             workingDirectory: tempDir
         )
 
-        await #expect(throws: ArgyllRunnerError.missingArtefact(
-            tempDir.appendingPathComponent("no_file.ti1").path)) {
+        await assertAsyncThrows(expectedType: ArgyllRunnerError.self) {
             try await runner.runTargen(config: config)
+        } errorHandler: { error in
+            XCTAssertEqual(error, .missingArtefact(
+                tempDir.appendingPathComponent("no_file.ti1").path))
         }
     }
 }

@@ -1,5 +1,5 @@
-import Testing
 import Foundation
+import XCTest
 @testable import ICCeryCore
 
 private func tempStoreURL() -> URL {
@@ -8,92 +8,90 @@ private func tempStoreURL() -> URL {
         .appendingPathComponent("settings.json")
 }
 
-@Suite("AppSettings")
-struct AppSettingsTests {
-    @Test func defaults() {
+final class AppSettingsTests: XCTestCase {
+    func testDefaults() {
         let s = AppSettings.default
-        #expect(s.argyllBinaryDir == nil)
-        #expect(s.defaultInstrument == nil)
-        #expect(s.logLevel == nil)
-        #expect(s.deltaEGoodMax == 2.0)
-        #expect(s.deltaEWarningMax == 5.0)
-        #expect(s.customPresets.isEmpty)
-        #expect(!s.enableI1Pro2Leds)
-        #expect(s.calibrationStaleDays == 30)
-        #expect(s.defaultInstallLocation == .user)
-        #expect(s.askBeforeOverwriteProfile)
-        #expect(!s.openColorPanelAfterInstall)
-        #expect(s.isValid)
+        XCTAssertNil(s.argyllBinaryDir)
+        XCTAssertNil(s.defaultInstrument)
+        XCTAssertNil(s.logLevel)
+        XCTAssertEqual(s.deltaEGoodMax, 2.0)
+        XCTAssertEqual(s.deltaEWarningMax, 5.0)
+        XCTAssertTrue(s.customPresets.isEmpty)
+        XCTAssertFalse(s.enableI1Pro2Leds)
+        XCTAssertEqual(s.calibrationStaleDays, 30)
+        XCTAssertEqual(s.defaultInstallLocation, .user)
+        XCTAssertTrue(s.askBeforeOverwriteProfile)
+        XCTAssertFalse(s.openColorPanelAfterInstall)
+        XCTAssertTrue(s.isValid)
     }
 
-    @Test func negativeThresholds() {
+    func testNegativeThresholds() {
         var s = AppSettings.default
         s.deltaEGoodMax = -1
-        #expect(s.validate() == [AppSettings.errorNegativeDeltaE])
+        XCTAssertEqual(s.validate(), [AppSettings.errorNegativeDeltaE])
         s.deltaEGoodMax = 2.0
         s.deltaEWarningMax = -0.5
         // -0.5 < 0 → negative error; good(2.0) >= warn(-0.5) → order error too
-        #expect(s.validate() == [
+        XCTAssertTrue(s.validate() == [
             AppSettings.errorNegativeDeltaE,
             AppSettings.errorThresholdOrder,
         ])
     }
 
-    @Test func goodMustBeStrictlyLessThanWarning() {
+    func testGoodMustBeStrictlyLessThanWarning() {
         var s = AppSettings.default
         s.deltaEGoodMax = 5.0
-        #expect(s.validate() == [AppSettings.errorThresholdOrder])
+        XCTAssertEqual(s.validate(), [AppSettings.errorThresholdOrder])
         s.deltaEGoodMax = 6.0
-        #expect(s.validate() == [AppSettings.errorThresholdOrder])
+        XCTAssertEqual(s.validate(), [AppSettings.errorThresholdOrder])
         s.deltaEGoodMax = 4.9
-        #expect(s.isValid)
+        XCTAssertTrue(s.isValid)
     }
 
-    @Test func snakeCaseKeys() throws {
+    func testSnakeCaseKeys() throws {
         let s = AppSettings.default
         let data = try JSONEncoder().encode(s)
         let json = String(data: data, encoding: .utf8)!
-        #expect(json.contains("\"delta_e_good_max\""))
-        #expect(json.contains("\"default_install_location\""))
-        #expect(json.contains("\"enable_i1pro2_leds\""))
+        XCTAssertTrue(json.contains("\"delta_e_good_max\""))
+        XCTAssertTrue(json.contains("\"default_install_location\""))
+        XCTAssertTrue(json.contains("\"enable_i1pro2_leds\""))
     }
 }
 
-@Suite("SettingsStore")
-struct SettingsStoreTests {
-    @Test func roundTrip() throws {
+final class SettingsStoreTests: XCTestCase {
+    func testRoundTrip() throws {
         let url = tempStoreURL()
         let store = SettingsStore(fileURL: url)
         var s = AppSettings.default
         s.deltaEGoodMax = 1.5
         s.defaultInstrument = "p3"
         try store.save(s)
-        #expect(store.load() == s)
+        XCTAssertEqual(store.load(), s)
     }
 
-    @Test func corruptJsonFallsBackToDefaults() throws {
+    func testCorruptJsonFallsBackToDefaults() throws {
         let url = tempStoreURL()
         try FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true
         )
         try "{ not json".write(to: url, atomically: true, encoding: .utf8)
-        #expect(SettingsStore(fileURL: url).load() == .default)
+        XCTAssertEqual(SettingsStore(fileURL: url).load(), .default)
     }
 
-    @Test func missingFileReturnsDefaults() {
-        #expect(SettingsStore(fileURL: tempStoreURL()).load() == .default)
+    func testMissingFileReturnsDefaults() {
+        XCTAssertEqual(SettingsStore(fileURL: tempStoreURL()).load(), .default)
     }
 
-    @Test func invalidSettingsNotPersisted() throws {
+    func testInvalidSettingsNotPersisted() throws {
         let url = tempStoreURL()
         let store = SettingsStore(fileURL: url)
         var s = AppSettings.default
         s.deltaEGoodMax = 9.0 // >= warning 5.0
-        #expect(throws: SettingsStore.SettingsError.self) { try store.save(s) }
-        #expect(!FileManager.default.fileExists(atPath: url.path))
+        XCTAssertThrowsError(try store.save(s)) { error in XCTAssertTrue(error is SettingsStore.SettingsError) }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
     }
 
-    @Test func invalidSaveOverValidFilePreservesBytesAndPostsNothing() throws {
+    func testInvalidSaveOverValidFilePreservesBytesAndPostsNothing() throws {
         let url = tempStoreURL()
         let store = SettingsStore(fileURL: url)
         var valid = AppSettings.default
@@ -109,13 +107,13 @@ struct SettingsStoreTests {
 
         var invalid = AppSettings.default
         invalid.deltaEGoodMax = 9.0
-        #expect(throws: SettingsStore.SettingsError.self) { try store.save(invalid) }
-        #expect(try Data(contentsOf: url) == originalBytes)
-        #expect(!fired)
-        #expect(store.load() == valid)
+        XCTAssertThrowsError(try store.save(invalid)) { error in XCTAssertTrue(error is SettingsStore.SettingsError) }
+        XCTAssertEqual(try Data(contentsOf: url), originalBytes)
+        XCTAssertFalse(fired)
+        XCTAssertEqual(store.load(), valid)
     }
 
-    @Test func savePostsNotification() async throws {
+    func testSavePostsNotification() async throws {
         let url = tempStoreURL()
         let store = SettingsStore(fileURL: url)
         var fired = false
@@ -124,12 +122,11 @@ struct SettingsStoreTests {
         ) { _ in fired = true }
         defer { NotificationCenter.default.removeObserver(token) }
         try store.save(.default)
-        #expect(fired)
+        XCTAssertTrue(fired)
     }
 }
 
-@Suite("LogSink")
-struct LogSinkTests {
+final class LogSinkTests: XCTestCase {
     private func tempLog() -> (URL, LogSink) {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("iccery-log-\(UUID().uuidString)")
@@ -137,26 +134,26 @@ struct LogSinkTests {
         return (url, LogSink(fileURL: url))
     }
 
-    @Test func writesFormattedLines() {
+    func testWritesFormattedLines() {
         let (url, sink) = tempLog()
         sink.setLevel(.debug)
         sink.write(level: .info, category: "test", message: "hello")
         let content = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-        #expect(content.contains("[INFO] test: hello"))
+        XCTAssertTrue(content.contains("[INFO] test: hello"))
     }
 
-    @Test func levelFilteringIsLive() {
+    func testLevelFilteringIsLive() {
         let (url, sink) = tempLog()
         sink.setLevel(.error)
         sink.write(level: .info, category: "t", message: "hidden")
         sink.setLevel(.info)   // runtime change, no restart (#158)
         sink.write(level: .info, category: "t", message: "shown")
         let content = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-        #expect(!content.contains("hidden"))
-        #expect(content.contains("shown"))
+        XCTAssertFalse(content.contains("hidden"))
+        XCTAssertTrue(content.contains("shown"))
     }
 
-    @Test func rotatesAt5MiBKeeping5Segments() throws {
+    func testRotatesAt5MiBKeeping5Segments() throws {
         let (url, sink) = tempLog()
         sink.setLevel(.trace)
         // Pre-fill the active log just under the cap, then cross it.
@@ -167,20 +164,20 @@ struct LogSinkTests {
         try big.write(to: url, atomically: true, encoding: .utf8)
 
         sink.write(level: .info, category: "t", message: "trigger rotation")
-        #expect(FileManager.default.fileExists(
+        XCTAssertTrue(FileManager.default.fileExists(
             atPath: url.appendingPathExtension("1").path
         ))
         // Active log is small again.
         let size = try FileManager.default.attributesOfItem(
             atPath: url.path
         )[.size] as? UInt64
-        #expect((size ?? 0) < 1024)
+        XCTAssertTrue((size ?? 0) < 1024)
     }
 
-    @Test func tailExcerptCaps() throws {
+    func testTailExcerptCaps() throws {
         let (url, sink) = tempLog()
         sink.setLevel(.debug)
         sink.write(level: .info, category: "t", message: "line")
-        #expect(sink.tailExcerpt(maxBytes: 8).count <= 8)
+        XCTAssertTrue(sink.tailExcerpt(maxBytes: 8).count <= 8)
     }
 }

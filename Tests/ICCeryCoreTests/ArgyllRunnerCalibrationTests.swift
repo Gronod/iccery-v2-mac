@@ -1,9 +1,8 @@
 import Foundation
-import Testing
+import XCTest
 @testable import ICCeryCore
 
-@Suite("ArgyllRunner Calibration")
-struct ArgyllRunnerCalibrationTests {
+final class ArgyllRunnerCalibrationTests: XCTestCase {
 
     private func makeRunner(processManager: ProcessManager = ProcessManager()) -> ArgyllRunner {
         let binDir = URL(fileURLWithPath: #filePath)
@@ -23,8 +22,7 @@ struct ArgyllRunnerCalibrationTests {
         return root
     }
 
-    @Test("Calibration targen produces CAL_*.ti1")
-    func calibrationTargenProducesTi1() async throws {
+    func testCalibrationTargenProducesTi1() async throws {
         let testRoot = try makeTestDir()
         let runner = makeRunner()
         let config = CalibrationTargenConfig(
@@ -36,13 +34,12 @@ struct ArgyllRunnerCalibrationTests {
 
         let url = try await runner.runCalibrationTargen(config: config)
 
-        #expect(url.lastPathComponent == "CAL_demo.ti1")
-        #expect(FileManager.default.fileExists(atPath: url.path))
+        XCTAssertEqual(url.lastPathComponent, "CAL_demo.ti1")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
         try? FileManager.default.removeItem(at: testRoot)
     }
 
-    @Test("Calibration targen from foo runs as process id targen_CAL_foo")
-    func calibrationTargenProcessId() async throws {
+    func testCalibrationTargenProcessId() async throws {
         let testRoot = try makeTestDir()
         let pm = ProcessManager()
         let runner = makeRunner(processManager: pm)
@@ -65,13 +62,13 @@ struct ArgyllRunnerCalibrationTests {
 
         let url = try await runner.runCalibrationTargen(config: config)
 
-        #expect(url.lastPathComponent == "CAL_foo.ti1")
-        #expect(await sawExit.value)
+        XCTAssertEqual(url.lastPathComponent, "CAL_foo.ti1")
+        let sawExitEvent = await sawExit.value
+        XCTAssertTrue(sawExitEvent)
         try? FileManager.default.removeItem(at: testRoot)
     }
 
-    @Test("printcal captured run creates .cal")
-    func printcalProducesCal() async throws {
+    func testPrintcalProducesCal() async throws {
         let testRoot = try makeTestDir()
         let runner = makeRunner()
         let output = testRoot.appendingPathComponent("CAL_demo.cal")
@@ -83,13 +80,12 @@ struct ArgyllRunnerCalibrationTests {
 
         let url = try await runner.runPrintcal(config: config)
 
-        #expect(url.lastPathComponent == "CAL_demo.cal")
-        #expect(FileManager.default.fileExists(atPath: url.path))
+        XCTAssertEqual(url.lastPathComponent, "CAL_demo.cal")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
         try? FileManager.default.removeItem(at: testRoot)
     }
 
-    @Test("printcal failure throws toolFailed")
-    func printcalFailureThrows() async throws {
+    func testPrintcalFailureThrows() async throws {
         let testRoot = try makeTestDir()
         defer { try? FileManager.default.removeItem(at: testRoot) }
 
@@ -117,9 +113,11 @@ struct ArgyllRunnerCalibrationTests {
             outputURL: output
         )
 
-        await #expect(throws: ArgyllRunnerError.toolFailed(
-            tool: "printcal", code: 1, logs: ["printcal mock failure\n"])) {
+        await assertAsyncThrows(expectedType: ArgyllRunnerError.self) {
             _ = try await runner.runPrintcal(config: config)
+        } errorHandler: { error in
+            XCTAssertEqual(error, .toolFailed(
+                tool: "printcal", code: 1, logs: ["printcal mock failure\n"]))
         }
     }
 }
