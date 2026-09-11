@@ -32,6 +32,7 @@ final class Milestone6CalibrationUITests: XCTestCase {
             "ICCERY_TEST_WORKDIR": testWorkDir.path
         ]
         app.launch()
+        app.activate()
     }
 
     override func tearDown() async throws {
@@ -104,6 +105,7 @@ final class Milestone6CalibrationUITests: XCTestCase {
         app.launchEnvironment["ICCERY_TEST_ROOT"] = testRoot.path
         app.launchEnvironment["ICCERY_MOCK_TARGEN_EXIT"] = "2"
         app.launch()
+        app.activate()
 
         let calButton = app.buttons["btnCalibratePrinter"]
         XCTAssertTrue(calButton.waitForExistence(timeout: 10))
