@@ -21,6 +21,14 @@ struct Notice: Identifiable, Equatable {
             case .error:   return .red
             }
         }
+
+        var accessibilityValue: String {
+            switch self {
+            case .info:    return "info"
+            case .warning: return "warning"
+            case .error:   return "error"
+            }
+        }
     }
 
     let id = UUID()

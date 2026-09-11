@@ -125,26 +125,102 @@ struct ArtefactFilesTests {
 
 @Suite("ArtefactProbe profile resolve")
 struct ArtefactProbeProfileTests {
-    @Test("basename probe prefers .icm")
-    func icmWins() throws {
+    private func makeDir() throws -> URL {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("probe-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    // MARK: Basename probe matrix (#69)
+
+    @Test("basename probe: only .icc exists")
+    func onlyIcc() throws {
+        let dir = try makeDir()
+        let icc = dir.appendingPathComponent("job.icc")
+        try Data("icc".utf8).write(to: icc)
+        #expect(ArtefactProbe.resolveProfile(basename: "job", cwd: dir)?.path == icc.path)
+    }
+
+    @Test("basename probe: only .icm exists")
+    func onlyIcm() throws {
+        let dir = try makeDir()
+        let icm = dir.appendingPathComponent("job.icm")
+        try Data("icm".utf8).write(to: icm)
+        #expect(ArtefactProbe.resolveProfile(basename: "job", cwd: dir)?.path == icm.path)
+    }
+
+    @Test("basename probe prefers .icm")
+    func icmWins() throws {
+        let dir = try makeDir()
         try Data("icc".utf8).write(to: dir.appendingPathComponent("job.icc"))
-        try Data("icm".utf8).write(to: dir.appendingPathComponent("job.icm"))
+        let icm = dir.appendingPathComponent("job.icm")
+        try Data("icm".utf8).write(to: icm)
         let url = ArtefactProbe.resolveProfile(basename: "job", cwd: dir)
-        #expect(url?.pathExtension == "icm")
+        #expect(url?.path == icm.path)
+    }
+
+    @Test("basename probe: neither exists returns nil")
+    func neitherExists() throws {
+        let dir = try makeDir()
+        #expect(ArtefactProbe.resolveProfile(basename: "job", cwd: dir) == nil)
+    }
+
+    // MARK: Explicit URL matrix (#69 / #83)
+
+    @Test("explicit existing .icc wins even when .icm exists")
+    func explicitIccWins() throws {
+        let dir = try makeDir()
+        let icc = dir.appendingPathComponent("job.icc")
+        try Data("icc".utf8).write(to: icc)
+        try Data("icm".utf8).write(to: dir.appendingPathComponent("job.icm"))
+        #expect(ArtefactProbe.resolveProfile(icc).path == icc.path)
+    }
+
+    @Test("explicit existing .icm wins even when .icc exists")
+    func explicitIcmWins() throws {
+        let dir = try makeDir()
+        try Data("icc".utf8).write(to: dir.appendingPathComponent("job.icc"))
+        let icm = dir.appendingPathComponent("job.icm")
+        try Data("icm".utf8).write(to: icm)
+        #expect(ArtefactProbe.resolveProfile(icm).path == icm.path)
     }
 
     @Test("explicit missing .icc flips to sibling .icm")
     func flipExtension() throws {
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("probe-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let dir = try makeDir()
         let icc = dir.appendingPathComponent("job.icc")
         let icm = dir.appendingPathComponent("job.icm")
         try Data("icm".utf8).write(to: icm)
         let resolved = ArtefactProbe.resolveProfile(icc)
         #expect(resolved.path == icm.path)
+    }
+
+    @Test("explicit missing .icm flips to sibling .icc")
+    func flipToIcc() throws {
+        let dir = try makeDir()
+        let icc = dir.appendingPathComponent("job.icc")
+        let icm = dir.appendingPathComponent("job.icm")
+        try Data("icc".utf8).write(to: icc)
+        #expect(ArtefactProbe.resolveProfile(icm).path == icc.path)
+    }
+
+    @Test("explicit missing both returns the original URL")
+    func missingBoth() throws {
+        let dir = try makeDir()
+        let icc = dir.appendingPathComponent("job.icc")
+        #expect(ArtefactProbe.resolveProfile(icc).path == icc.path)
+    }
+
+    @Test("unrelated extension is never rewritten")
+    func unrelatedExtension() throws {
+        let dir = try makeDir()
+        let mpp = dir.appendingPathComponent("job.mpp")
+        let icc = dir.appendingPathComponent("job.icc")
+        try Data("icc".utf8).write(to: icc)
+        // Even though a sibling .icc exists, a missing .mpp stays .mpp.
+        #expect(ArtefactProbe.resolveProfile(mpp).path == mpp.path)
+        let txt = dir.appendingPathComponent("job.txt")
+        #expect(ArtefactProbe.resolveProfile(txt).path == txt.path)
     }
 }

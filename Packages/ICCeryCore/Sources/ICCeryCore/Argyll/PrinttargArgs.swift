@@ -56,23 +56,19 @@ public enum PrinttargArgs {
             }
             args.append(contentsOf: ["-R", "\(config.customSeed)"])
         case .raster:
-            args.append("-r")
+            args.append(contentsOf: ArgsBuilder.flag("-r", when: true))
         }
 
-        if let label = config.label?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !label.isEmpty {
-            args.append(contentsOf: ["-d", label])
-        }
+        args.append(contentsOf: ArgsBuilder.optionIfNonEmpty("-d", config.label))
 
         guard (72...600).contains(config.dpi) else {
             throw PrinttargArgError.invalidDPI(config.dpi)
         }
         args.append(contentsOf: [config.bitDepth.flag, "\(config.dpi)"])
 
-        if !CalibrationIdentity.isCalibration(cleanBasename),
-           let cal = config.calibrationFile?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !cal.isEmpty {
-            args.append(contentsOf: [config.calibrationEmbedOnly ? "-I" : "-K", cal])
+        if !CalibrationIdentity.isCalibration(cleanBasename) {
+            args.append(contentsOf: ArgsBuilder.optionIfNonEmpty(
+                config.calibrationEmbedOnly ? "-I" : "-K", config.calibrationFile))
         }
 
         args.append(cleanBasename)

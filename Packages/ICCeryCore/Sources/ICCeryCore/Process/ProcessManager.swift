@@ -145,9 +145,7 @@ public actor ProcessManager {
         )
         let process = prepared.process
 
-        AppLogger(category: "process").debug(
-            "spawn \(id): \(binary.path) \(LogSanitizer.sanitizeArgs(arguments))"
-        )
+        logSpawn(id: id, binary: binary, arguments: arguments, captured: false)
 
         children[id] = RunningChild(
             process: process,
@@ -214,9 +212,7 @@ public actor ProcessManager {
         let stdoutPipe = prepared.stdoutPipe
         let stderrPipe = prepared.stderrPipe
 
-        AppLogger(category: "process").debug(
-            "spawn(captured) \(id): \(binary.path) \(LogSanitizer.sanitizeArgs(arguments))"
-        )
+        logSpawn(id: id, binary: binary, arguments: arguments, captured: true)
 
         // Register and set up the termination hand-off before run() so
         // a very fast exit is never missed (#50, #52).
@@ -463,6 +459,18 @@ public actor ProcessManager {
             stdinPipe: stdinPipe,
             stdoutPipe: stdoutPipe,
             stderrPipe: stderrPipe
+        )
+    }
+
+    private nonisolated func logSpawn(
+        id: String,
+        binary: URL,
+        arguments: [String],
+        captured: Bool
+    ) {
+        let prefix = captured ? "spawn(captured)" : "spawn"
+        AppLogger(category: "process").debug(
+            "\(prefix) \(id): \(binary.path) \(LogSanitizer.sanitizeArgs(arguments))"
         )
     }
 

@@ -79,14 +79,17 @@ public enum ArtefactProbe {
     }
 
     /// Resolve an explicit profile URL, flipping `.icc` ↔ `.icm` when the
-    /// requested path is missing (#69 / issue #83).
+    /// requested path is missing (#69 / issue #83). Any other extension
+    /// (`.mpp`, `.txt`, …) is returned unchanged — never rewritten.
     public static func resolveProfile(
         _ url: URL,
         fileManager: FileManager = .default
     ) -> URL {
         if fileManager.fileExists(atPath: url.path) { return url }
-        let altExt = url.pathExtension.lowercased() == "icc" ? "icm" : "icc"
-        let alt = url.deletingPathExtension().appendingPathExtension(altExt)
+        let ext = url.pathExtension.lowercased()
+        guard ext == "icc" || ext == "icm" else { return url }
+        let alt = url.deletingPathExtension()
+            .appendingPathExtension(ext == "icc" ? "icm" : "icc")
         return fileManager.fileExists(atPath: alt.path) ? alt : url
     }
 

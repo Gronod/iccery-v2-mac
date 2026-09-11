@@ -164,28 +164,22 @@ struct Stage3View: View {
                     .foregroundStyle(Theme.accent)
             }
 
-            if let lastError = model.lastError {
-                Text(lastError)
+            if let notice = model.chartreadNotice {
+                Text(notice.text)
                     .font(.caption)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(notice.kind.tint)
                     .accessibilityIdentifier("chartreadLastError")
-                    .accessibilityValue(lastError)
+                    .accessibilityValue(notice.text)
             }
 
             controlButtons
 
             if !model.chartreadLog.isEmpty {
-                DisclosureGroup("Log") {
-                    VStack(alignment: .leading) {
-                        ForEach(model.chartreadLog, id: \.self) { line in
-                            Text(line)
-                                .font(.system(.caption, design: .monospaced))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                .foregroundStyle(Theme.text)
-                .accessibilityIdentifier("chartreadLogContainer")
+                ProcessLogView(
+                    lines: model.chartreadLog,
+                    containerId: "chartreadLogContainer",
+                    logId: "chartreadLog"
+                )
             }
         }
         .padding(16)
@@ -374,6 +368,8 @@ struct Stage3View: View {
                     Text(notice.text)
                         .font(.caption)
                         .foregroundStyle(notice.kind == .error ? .red : .green)
+                        .accessibilityIdentifier("chartreadFinishNotice")
+                        .accessibilityValue(notice.kind.accessibilityValue)
                 }
             }
             .padding(16)

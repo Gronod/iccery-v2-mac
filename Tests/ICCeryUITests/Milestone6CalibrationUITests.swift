@@ -32,6 +32,7 @@ final class Milestone6CalibrationUITests: XCTestCase {
             "ICCERY_TEST_WORKDIR": testWorkDir.path
         ]
         app.launch()
+        app.activate()
     }
 
     override func tearDown() async throws {
@@ -76,5 +77,61 @@ final class Milestone6CalibrationUITests: XCTestCase {
         // a CAL_ .ti1 now exists and the session is in calibration mode.
         let layout = app.buttons["btnCreateLayout"]
         XCTAssertTrue(layout.waitForExistence(timeout: 25))
+    }
+
+    /// A failing calibration targen surfaces the error through the
+    /// wizard notice and restores the original basename (issue #80).
+    func testCalibrationTargenFailureRestoresBasename() throws {
+        let testRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cal-fail-\(UUID().uuidString)")
+        let appData = testRoot.appendingPathComponent("AppData")
+        try FileManager.default.createDirectory(
+            at: appData, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: testRoot) }
+
+        // Pre-stage wizard state so the failing mock targen is only
+        // exercised by the calibration run, not target generation.
+        let state: [String: Any] = [
+            "currentStage": 1,
+            "basename": "DemoTarget",
+            "cwd": testWorkDir.path,
+            "sessionMode": "profile",
+            "calibrationOriginalBasename": ""
+        ]
+        let stateURL = appData.appendingPathComponent("wizard_state.json")
+        try JSONSerialization.data(withJSONObject: state).write(to: stateURL)
+
+        app.terminate()
+        app.launchEnvironment["ICCERY_TEST_ROOT"] = testRoot.path
+        app.launchEnvironment["ICCERY_MOCK_TARGEN_EXIT"] = "2"
+        app.launch()
+        app.activate()
+
+        let calButton = app.buttons["btnCalibratePrinter"]
+        XCTAssertTrue(calButton.waitForExistence(timeout: 10))
+        calButton.tap()
+
+        let calGenerate = app.buttons["btnCalGenerate"]
+        XCTAssertTrue(calGenerate.waitForExistence(timeout: 10))
+        calGenerate.tap()
+
+        let notice = app.descendants(matching: .any)["noticeText"]
+        XCTAssertTrue(notice.waitForExistence(timeout: 20))
+        XCTAssertTrue((notice.value as? String ?? "")
+            .contains("Calibration target failed"))
+
+        // The pre-CAL_ basename is restored and persisted.
+        let deadline = Date().addingTimeInterval(10)
+        var restoredBasename: String?
+        while Date() < deadline {
+            if let data = try? Data(contentsOf: stateURL),
+               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let basename = object["basename"] as? String {
+                restoredBasename = basename
+                if basename == "DemoTarget" { break }
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        XCTAssertEqual(restoredBasename, "DemoTarget")
     }
 }

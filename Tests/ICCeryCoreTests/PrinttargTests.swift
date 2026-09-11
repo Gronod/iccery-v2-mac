@@ -131,6 +131,23 @@ struct PrinttargArgsTests {
         #expect(!args.contains("-I"))
     }
 
+    @Test("Whitespace-only label emits no -d; whitespace-only calibration emits no -K/-I")
+    func whitespaceOptions() throws {
+        let args = try PrinttargArgs.build(
+            config: config(label: "   \n ", calFile: " \t "))
+        #expect(!args.contains("-d"))
+        #expect(!args.contains("-K"))
+        #expect(!args.contains("-I"))
+    }
+
+    @Test("Label and calibration values are trimmed before emission")
+    func trimmedOptions() throws {
+        let args = try PrinttargArgs.build(
+            config: config(label: "  My Label  ", calFile: "  /tmp/a.cal  "))
+        #expect(args[args.firstIndex(of: "-d")! + 1] == "My Label")
+        #expect(args[args.firstIndex(of: "-K")! + 1] == "/tmp/a.cal")
+    }
+
     @Test("Unsafe basename throws")
     func unsafeBasename() {
         #expect(throws: PathSecurity.Error.self) {
@@ -349,7 +366,7 @@ struct ArgyllRunnerPrinttargTests {
         }
     }
 
-    @Test("Non-zero exit throws processFailed and stays on stage")
+    @Test("Non-zero exit throws toolFailed and stays on stage")
     func failure() async throws {
         let dir = try makeFixture("""
             #!/bin/sh
@@ -360,7 +377,8 @@ struct ArgyllRunnerPrinttargTests {
         let runner = ArgyllRunner(
             processManager: ProcessManager(),
             binaryResolver: BinaryResolver(bundledRoot: dir, overrideDir: dir))
-        await #expect(throws: ArgyllRunnerError.self) {
+        await #expect(throws: ArgyllRunnerError.toolFailed(
+            tool: "printtarg", code: 3, logs: ["oops"])) {
             try await runner.runPrinttarg(
                 config: PrinttargConfig(basename: "x", workingDirectory: dir))
         }

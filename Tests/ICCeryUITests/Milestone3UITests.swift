@@ -146,6 +146,8 @@ final class Milestone3UITests: XCTestCase {
         XCTAssertTrue(notice.waitForExistence(timeout: 10))
         XCTAssertTrue((notice.value as? String ?? "")
             .contains("cancelled"))
+        // Cancellation is informational, never an error (#80).
+        XCTAssertEqual(element("printNotificationIcon").value as? String, "info")
     }
 
     /// Preferences OK → captured options are replayed verbatim in the
@@ -214,6 +216,8 @@ final class Milestone3UITests: XCTestCase {
         let notice = app.staticTexts.containing(predicate).firstMatch
         XCTAssertTrue(notice.waitForExistence(timeout: 10))
         XCTAssertTrue(notice.label.contains("Print failed"))
+        // Spool failure exposes the .error kind on the icon (#80).
+        XCTAssertEqual(element("printNotificationIcon").value as? String, "error")
     }
 
     /// wizardState.printerName records the queue used for spooling (#95).

@@ -131,6 +131,57 @@ struct VerificationHistoryStoreTests {
         }
     }
 
+    @Test("Clear does not overwrite an unparseable file")
+    func clearPreservesUnparseableFile() async {
+        let fm = FileManager.default
+        let tmp = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try? fm.createDirectory(at: tmp, withIntermediateDirectories: true)
+        let url = tmp.appendingPathComponent("verification_history.json")
+
+        let badJSON = "not json"
+        try? badJSON.write(to: url, atomically: true, encoding: .utf8)
+
+        let store = VerificationHistoryStore(url: url)
+        do {
+            try await store.clear()
+            Issue.record("clear() should propagate the load error")
+        } catch {
+            let contents = try? String(contentsOf: url, encoding: .utf8)
+            #expect(contents == badJSON)
+        }
+    }
+
+    @Test("ISO-8601 timestamps round-trip through a fresh store")
+    func iso8601RoundTrip() async throws {
+        let fm = FileManager.default
+        let tmp = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try fm.createDirectory(at: tmp, withIntermediateDirectories: true)
+        let url = tmp.appendingPathComponent("verification_history.json")
+
+        let timestamp = Date(timeIntervalSince1970: 1_700_000_000)
+        let record = VerificationRecord(
+            id: "vr-iso",
+            profileName: "p",
+            printerName: "",
+            avgDE: 1.0,
+            maxDE: 2.0,
+            rmsDE: 1.5,
+            patchCount: 1,
+            status: .good,
+            timestamp: timestamp
+        )
+        let store1 = VerificationHistoryStore(url: url)
+        _ = try await store1.append(record)
+
+        let text = try String(contentsOf: url, encoding: .utf8)
+        #expect(text.contains(ISO8601DateFormatter().string(from: timestamp)))
+
+        let store2 = VerificationHistoryStore(url: url)
+        let loaded = try await store2.load()
+        #expect(loaded.count == 1)
+        #expect(loaded.first?.timestamp == timestamp)
+    }
+
     @Test("CSV export quoting")
     func csvQuoting() async throws {
         let fm = FileManager.default

@@ -3,25 +3,6 @@ import Observation
 import SwiftUI
 import ICCeryCore
 
-/// User-facing FWA selection for the Stage 4 form.
-enum ColprofFwaSelection: String, CaseIterable, Sendable, Equatable {
-    case none = "none"
-    case empty = ""
-    case D50 = "D50"
-    case D65 = "D65"
-    case custom = "custom"
-
-    var displayName: String {
-        switch self {
-        case .none: return "None"
-        case .empty: return "Bare (-f)"
-        case .D50: return "D50"
-        case .D65: return "D65"
-        case .custom: return "Custom .sp"
-        }
-    }
-}
-
 /// Stage 4/5 workflow: build a profile, verify it, track drift, and install.
 @MainActor
 @Observable
@@ -50,7 +31,6 @@ final class ProfileWorkflowViewModel {
     var isColprofRunning = false
     var colprofLog: [String] = []
     var colprofProgress: String?
-    var lastError: String?
     var createdProfileURL: URL?
     /// Path to the `.gam` gamut mesh extracted post-`colprof` (issue #28).
     var createdGamutURL: URL?
@@ -110,13 +90,7 @@ final class ProfileWorkflowViewModel {
     }
 
     var fwaValue: String? {
-        switch fwaSelection {
-        case .none: return nil
-        case .empty: return ""
-        case .D50: return "D50"
-        case .D65: return "D65"
-        case .custom: return fwaCustomPath
-        }
+        fwaSelection.presetValue(customPath: fwaCustomPath)
     }
 
     // MARK: - Preset application
@@ -131,21 +105,16 @@ final class ProfileWorkflowViewModel {
         algorithm = config.algorithm
         quality = config.quality
         intent = config.intent ?? ""
-        if let fwa = config.fwa {
-            switch fwa.lowercased() {
-            case "none": fwaSelection = .none
-            case "": fwaSelection = .empty
-            case "d50": fwaSelection = .D50
-            case "d65": fwaSelection = .D65
-            default:
-                fwaSelection = .custom
-                fwaCustomPath = fwa
-            }
-        }
+        fwaSelection = ColprofFwaSelection(presetValue: config.fwa)
+        fwaCustomPath = fwaSelection == .custom ? (config.fwa ?? "") : ""
         illuminant = config.illuminant ?? ""
         observer = config.observer ?? ""
         inputViewingCond = config.inputViewingCond ?? ""
         outputViewingCond = config.outputViewingCond ?? ""
+        profileDescription = ""
+        copyright = ""
+        applyCalibration = preset.applyCalibration == true
+        calibrationFile = preset.calibrationFile ?? ""
     }
 
     /// Stage 4 form values for saving into a custom preset.
@@ -195,60 +164,59 @@ final class ProfileWorkflowViewModel {
         guard canCreateProfile, let _ = wizard.effectiveWorkingDirectory else { return }
         let config = buildColprofConfig()
 
-        isColprofRunning = true
-        colprofLog = []
         colprofProgress = nil
-        lastError = nil
         createdProfileURL = nil
         createdGamutURL = nil
 
         let runner = environment.runner
         Task { @MainActor [weak self] in
             guard let self else { return }
-            defer { self.isColprofRunning = false }
-
             do {
-                let url = try await runner.runColprof(config: config, onLogBatch: ProcessRunSupport.logSink { [weak self] batch in
-                    guard let self else { return }
-                    self.colprofLog.append(contentsOf: batch)
-                    if let last = batch.last {
-                        self.updateProgress(ColprofProgressClassifier.classify(line: last))
+                let outcome = try await ProcessRunSupport.runLogged(
+                    setRunning: { self.isColprofRunning = $0 },
+                    resetLog: { self.colprofLog = [] },
+                    onLog: { batch in
+                        self.colprofLog.append(contentsOf: batch)
+                        if let last = batch.last {
+                            self.updateProgress(ColprofProgressClassifier.classify(line: last))
+                        }
                     }
-                })
+                ) { onLog in
+                    let url = try await runner.runColprof(config: config, onLogBatch: onLog)
 
-                var finalProfileURL = url
+                    var finalProfileURL = url
 
-                if self.applyCalibration, !self.calibrationFile.isEmpty {
-                    let applyConfig = ApplycalConfig(
-                        calibrationPath: self.calibrationFile,
-                        inputProfileURL: url
-                    )
-                    assert(!applyConfig.unapply, "applycal unapply is not supported in v2.0")
-                    finalProfileURL = try await runner.runApplycal(config: applyConfig)
-                    self.colprofLog.append("Calibration embedded: \(self.calibrationFile)")
+                    if self.applyCalibration, !self.calibrationFile.isEmpty {
+                        let applyConfig = ApplycalConfig(
+                            calibrationPath: self.calibrationFile,
+                            inputProfileURL: url
+                        )
+                        assert(!applyConfig.unapply, "applycal unapply is not supported in v2.0")
+                        finalProfileURL = try await runner.runApplycal(config: applyConfig)
+                        self.colprofLog.append("Calibration embedded: \(self.calibrationFile)")
+                    }
+
+                    // Gamut extraction is best-effort for Stage 5 / M6 viewer.
+                    var gamutURL: URL?
+                    do {
+                        let gamConfig = IccgamutConfig(profileURL: finalProfileURL)
+                        let url = try await runner.runIccgamut(config: gamConfig, onLogBatch: onLog)
+                        gamutURL = url
+                        self.colprofLog.append("Gamut mesh extracted: \(url.lastPathComponent)")
+                    } catch {
+                        self.wizard.showNotice(
+                            "Gamut extraction skipped: \(error.localizedDescription)",
+                            kind: .info
+                        )
+                    }
+                    return (profileURL: finalProfileURL, gamutURL: gamutURL)
                 }
-
-                // Gamut extraction is best-effort for Stage 5 / M6 viewer.
-                do {
-                    let gamConfig = IccgamutConfig(profileURL: finalProfileURL)
-                    let gamURL = try await runner.runIccgamut(config: gamConfig, onLogBatch: ProcessRunSupport.logSink { [weak self] batch in
-                        self?.colprofLog.append(contentsOf: batch)
-                    })
-                    self.createdGamutURL = gamURL
-                    self.colprofLog.append("Gamut mesh extracted: \(gamURL.lastPathComponent)")
-                } catch {
-                    self.wizard.showNotice(
-                        "Gamut extraction skipped: \(error.localizedDescription)",
-                        kind: .info
-                    )
-                }
-
-                self.createdProfileURL = finalProfileURL
+                self.createdProfileURL = outcome.profileURL
+                self.createdGamutURL = outcome.gamutURL
                 self.wizard.refreshGating()
-                self.wizard.showNotice("Profile created: \(finalProfileURL.lastPathComponent)")
+                self.wizard.showNotice("Profile created: \(outcome.profileURL.lastPathComponent)")
                 self.wizard.go(to: .verifyInstall)
             } catch {
-                self.lastError = error.localizedDescription
                 self.wizard.showNotice(
                     "Profile creation failed: \(error.localizedDescription)",
                     kind: .error
@@ -315,23 +283,28 @@ final class ProfileWorkflowViewModel {
         let ti3URL = ArtefactProbe.artefact(wizard.basename, "ti3", cwd)
         let config = ProfcheckConfig(ti3URL: ti3URL, iccURL: profileURL)
 
-        isProfcheckRunning = true
         profcheckReport = nil
         profcheckWarning = nil
 
         let runner = environment.runner
         Task { @MainActor [weak self] in
             guard let self else { return }
-            defer { self.isProfcheckRunning = false }
-
             do {
-                let report = try await runner.runProfcheck(config: config, onLogBatch: ProcessRunSupport.logSink { [weak self] batch in
-                    self?.colprofLog.append(contentsOf: batch)
-                })
-                self.profcheckReport = report
-                if let record = self.makeVerificationRecord(from: report) {
-                    let updated = try await self.environment.historyStore.append(record)
-                    self.verificationHistory = updated
+                let outcome = try await ProcessRunSupport.runLogged(
+                    setRunning: { self.isProfcheckRunning = $0 },
+                    resetLog: {},
+                    onLog: { self.colprofLog.append(contentsOf: $0) }
+                ) { onLog in
+                    let report = try await runner.runProfcheck(config: config, onLogBatch: onLog)
+                    var history: [VerificationRecord]?
+                    if let record = self.makeVerificationRecord(from: report) {
+                        history = try await self.environment.historyStore.append(record)
+                    }
+                    return (report: report, history: history)
+                }
+                self.profcheckReport = outcome.report
+                if let history = outcome.history {
+                    self.verificationHistory = history
                     self.driftAlert = DriftAlert.compute(from: self.filteredHistory)
                 }
             } catch let error as ArgyllRunnerError where error == .profcheckUnparseable {

@@ -11,7 +11,8 @@ All measurement, chart generation, and profile mathematics live in the [Gronod A
 | Floor | macOS 14 Sonoma, universal `arm64` + `x86_64` |
 | Default branch | `develop` |
 | M6 | Stage 0 calibration, CGATS import, SceneKit gamut viewer, packaging — shipped on `develop` |
-| M7 | UAT-ready hardening of the v2.0 wizard paths |
+| M7 | Pre-UAT hardening & baseline consolidation — shipped on `develop` |
+| M8 | Deduplication/consolidation contracts & UAT-ready hardening (#79–#86) — in flight on `milestone/m8-consolidation` |
 | Licence | Proprietary source in [`LICENCE.md`](LICENCE.md); bundled Argyll sidecars remain AGPLv3 |
 
 ## What it does
@@ -170,11 +171,11 @@ Agent / branch rules: [`AGENTS.md`](AGENTS.md), [`BUILD-PLAN.md`](BUILD-PLAN.md)
 
 ```
 develop
-  └── milestone/mN-<slug>          # integration only
+  └── milestone/m8-consolidation   # integration branch
         └── feat/<issue>-<slug>    # one issue per branch
 ```
 
-Feature PRs target the current milestone branch, not `develop`. The milestone branch merges to `develop` when its issues are green. M7 is small; its PRs target `develop` directly. Do not open umbrella "bugfix" branches that mix tickets.
+Feature PRs target the current milestone branch, not `develop`. The milestone branch merges to `develop` when its issues are green. Completion PRs for issues #79–#86 target `milestone/m8-consolidation`; `milestone/m8-consolidation` merges into `develop` once all milestone gates pass. Do not open umbrella "bugfix" branches that mix tickets.
 
 ## Licence
 

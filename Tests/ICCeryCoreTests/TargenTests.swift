@@ -162,6 +162,34 @@ struct TargenArgsTests {
         #expect(!args.contains("-p"))
     }
 
+    @Test("Whitespace-only preconditioning profile emits no -c")
+    func whitespacePreconditioner() throws {
+        let config = TargenConfig(
+            colourSpace: .rgb,
+            patchCount: 800,
+            whitePatches: 4,
+            blackPatches: 4,
+            preconditioningProfile: "   \n\t  ",
+            basename: "ws_pre"
+        )
+        let args = try TargenArgs.build(config: config)
+        #expect(!args.contains("-c"))
+    }
+
+    @Test("Preconditioning profile is trimmed before emission")
+    func preconditionerTrimmed() throws {
+        let config = TargenConfig(
+            colourSpace: .rgb,
+            patchCount: 800,
+            whitePatches: 4,
+            blackPatches: 4,
+            preconditioningProfile: "  /path/to/profile.icc  ",
+            basename: "trim_pre"
+        )
+        let args = try TargenArgs.build(config: config)
+        #expect(args[args.firstIndex(of: "-c")! + 1] == "/path/to/profile.icc")
+    }
+
     @Test("Invalid basename throws")
     func invalidBasenameThrows() {
         let config = TargenConfig(
@@ -262,7 +290,7 @@ struct ArgyllRunnerTargenTests {
         #expect(ti1URL.lastPathComponent == "mock_test.ti1")
     }
 
-    @Test("Failed targen execution throws processFailed")
+    @Test("Failed targen execution throws toolFailed")
     func failedTargenExecution() async throws {
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
@@ -290,7 +318,8 @@ struct ArgyllRunnerTargenTests {
             workingDirectory: tempDir
         )
 
-        await #expect(throws: ArgyllRunnerError.self) {
+        await #expect(throws: ArgyllRunnerError.toolFailed(
+            tool: "targen", code: 1, logs: ["Error: something went wrong"])) {
             try await runner.runTargen(config: config)
         }
     }
@@ -323,7 +352,8 @@ struct ArgyllRunnerTargenTests {
             workingDirectory: tempDir
         )
 
-        await #expect(throws: ArgyllRunnerError.self) {
+        await #expect(throws: ArgyllRunnerError.missingArtefact(
+            tempDir.appendingPathComponent("no_file.ti1").path)) {
             try await runner.runTargen(config: config)
         }
     }

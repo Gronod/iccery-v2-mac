@@ -79,16 +79,9 @@ public enum PrintcalArgs {
 
         var args: [String] = ["-v", "-e"]
 
-        if config.noInkLimit {
-            args.append("-I")
-        }
-        if config.verify {
-            args.append("-z")
-        }
-        if let previous = config.previousCalPath?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !previous.isEmpty {
-            args.append(contentsOf: ["-a", previous])
-        }
+        args.append(contentsOf: ArgsBuilder.flag("-I", when: config.noInkLimit))
+        args.append(contentsOf: ArgsBuilder.flag("-z", when: config.verify))
+        args.append(contentsOf: ArgsBuilder.optionIfNonEmpty("-a", config.previousCalPath))
         if let tac = config.totalInkLimit, tac > 0 {
             args.append(contentsOf: ["-m", String(format: "%.1f", tac)])
         } else if let tac = config.totalInkLimit {

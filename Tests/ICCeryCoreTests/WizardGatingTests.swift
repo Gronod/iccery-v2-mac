@@ -117,6 +117,17 @@ struct WizardStateStoreTests {
         #expect(WizardStateStore(fileURL: url).load().stage == .generate)
     }
 
+    @Test func corruptJsonReturnsDefaultAndKeepsBytes() throws {
+        let url = tempURL()
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(), withIntermediateDirectories: true
+        )
+        try "not json".write(to: url, atomically: true, encoding: .utf8)
+        #expect(WizardStateStore(fileURL: url).load() == .default)
+        let kept = try String(contentsOf: url, encoding: .utf8)
+        #expect(kept == "not json")
+    }
+
     @Test func sessionModeCalibrationRoundTrips() throws {
         var s = WizardState(sessionMode: .calibration)
         let data = try JSONEncoder().encode(s)

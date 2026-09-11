@@ -140,4 +140,57 @@ final class Milestone4UITests: XCTestCase {
         }
         XCTAssertTrue(FileManager.default.fileExists(atPath: ti3.path))
     }
+
+    /// Two passes + a failing `average` run promote pass 1 to the
+    /// canonical .ti3 and show the sticky finish error notice via
+    /// `chartreadFinishNotice` (issue #80).
+    func testTwoPassAverageFailurePromotesFirstPass() throws {
+        app.launchEnvironment["MOCK_AVERAGE_FAIL"] = "1"
+        reachStage3()
+
+        app.buttons["btnDetectInstruments"].click()
+        _ = waitFor("chartreadInstrumentSelect", timeout: 20)
+
+        driveOnePass(startButton: "btnStartRead")
+        _ = waitFor("chartreadAveragingPanel", timeout: 20)
+
+        driveOnePass(startButton: "btnMeasureAnotherSheet")
+
+        XCTAssertTrue(waitFor("btnFinishAndAverage", timeout: 20).exists)
+        app.buttons["btnFinishAndAverage"].click()
+
+        // Averaging failed → pass 1 is promoted to the canonical .ti3
+        // and the sticky error notice stays on Stage 3.
+        let ti3 = workDir.appendingPathComponent("mytarget.ti3")
+        let deadline = Date().addingTimeInterval(20)
+        while Date() < deadline, !FileManager.default.fileExists(atPath: ti3.path) {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: ti3.path))
+
+        let notice = element("chartreadFinishNotice")
+        XCTAssertTrue(notice.waitForExistence(timeout: 10))
+        XCTAssertEqual(notice.value as? String, "error")
+    }
+
+    /// Runs the mock handheld chartread session to completion
+    /// (start → calibrate → strip A → strip B → Done & Save).
+    private func driveOnePass(startButton: String) {
+        let start = app.buttons[startButton]
+        XCTAssertTrue(start.waitForExistence(timeout: 10))
+        let deadline = Date().addingTimeInterval(10)
+        while Date() < deadline, !start.isEnabled {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        XCTAssertTrue(start.isEnabled)
+        start.click()
+        _ = waitFor("btnCalibrate", timeout: 25)
+        app.buttons["btnCalibrate"].click()
+        _ = waitFor("btnTrigger", timeout: 20)
+        app.buttons["btnTrigger"].click()
+        _ = waitFor("btnTrigger", timeout: 20)
+        app.buttons["btnTrigger"].click()
+        _ = waitFor("btnDoneRead", timeout: 20)
+        app.buttons["btnDoneRead"].firstMatch.click()
+    }
 }

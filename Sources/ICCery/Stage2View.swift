@@ -218,6 +218,7 @@ struct Stage2View: View {
                         .foregroundStyle(notice.kind == .error
                                          ? .red : .blue)
                         .accessibilityIdentifier("printNotificationIcon")
+                        .accessibilityValue(notice.kind.accessibilityValue)
                     Text(notice.text)
                         .font(.caption)
                         .foregroundStyle(notice.kind == .error

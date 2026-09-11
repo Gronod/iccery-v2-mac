@@ -14,7 +14,9 @@ extension TargenConfig {
             neutralSteps: preset.neutralSteps,
             neutralConcentration: preset.neutralConcentration,
             preconditioningProfile: preset.preconditioningProfile,
-            ofpsHighQuality: preset.ofpsHighQuality == true ? true : nil,
+            // An explicit `false` is preserved — distinguishable from a
+            // missing key; `-G` is only emitted for `true` (#82).
+            ofpsHighQuality: preset.ofpsHighQuality,
             ofpsAdaptation: preset.ofpsAdaptation,
             fullSpreadAlgorithm: preset.fullSpreadAlgorithm.flatMap { FullSpreadAlgorithm(presetValue: $0) }.flatMap { $0 == .ofps ? nil : $0 },
             totalInkLimit: preset.totalInkLimit,
@@ -106,6 +108,51 @@ extension ColprofConfig {
     private static func nilIfEmpty(_ value: String?) -> String? {
         guard let value, !value.isEmpty else { return nil }
         return value
+    }
+}
+
+/// User-facing FWA selection for the Stage 4 form, plus the two
+/// directions of `colprof_fwa` conversion centralised here so the view
+/// models carry no mapping switches of their own (#82).
+public enum ColprofFwaSelection: String, CaseIterable, Sendable, Equatable {
+    case none = "none"
+    case empty = ""
+    case D50 = "D50"
+    case D65 = "D65"
+    case custom = "custom"
+
+    public var displayName: String {
+        switch self {
+        case .none: return "None"
+        case .empty: return "Bare (-f)"
+        case .D50: return "D50"
+        case .D65: return "D65"
+        case .custom: return "Custom .sp"
+        }
+    }
+
+    /// Preset `colprof_fwa` → selection. `nil`/`"none"` map to `.none`,
+    /// `""` to `.empty`, `D50`/`D65` case-insensitively, and any other
+    /// string is a custom `.sp` path.
+    public init(presetValue: String?) {
+        switch presetValue?.lowercased() {
+        case nil, "none": self = .none
+        case "": self = .empty
+        case "d50": self = .D50
+        case "d65": self = .D65
+        default: self = .custom
+        }
+    }
+
+    /// Selection → `colprof_fwa` value. `.custom` returns `customPath`.
+    public func presetValue(customPath: String) -> String? {
+        switch self {
+        case .none: return nil
+        case .empty: return ""
+        case .D50: return "D50"
+        case .D65: return "D65"
+        case .custom: return customPath
+        }
     }
 }
 
