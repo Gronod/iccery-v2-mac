@@ -44,6 +44,29 @@ struct PrintcalArgsTests {
         ])
     }
 
+    @Test("Whitespace-only previous calibration path emits no -a")
+    func whitespacePreviousCal() throws {
+        let config = PrintcalConfig(
+            ti3Basename: "demo",
+            outputURL: tmp,
+            previousCalPath: "   \n\t "
+        )
+        let args = try PrintcalArgs.build(config: config)
+        #expect(!args.contains("-a"))
+        #expect(args == ["-v", "-e", "-o", "/tmp/out.cal", "CAL_demo"])
+    }
+
+    @Test("Previous calibration path is trimmed before emission")
+    func previousCalTrimmed() throws {
+        let config = PrintcalConfig(
+            ti3Basename: "demo",
+            outputURL: tmp,
+            previousCalPath: "  /tmp/old.cal  "
+        )
+        let args = try PrintcalArgs.build(config: config)
+        #expect(args[args.firstIndex(of: "-a")! + 1] == "/tmp/old.cal")
+    }
+
     @Test("Rejects invalid per-channel limit")
     func rejectsBadChannelLimit() {
         let config = PrintcalConfig(

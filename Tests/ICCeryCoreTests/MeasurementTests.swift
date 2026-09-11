@@ -159,6 +159,51 @@ struct ChartreadRowTests {
         #expect(row.patchCount == 1)
         #expect(row.patches[0].measured.lab?.l == 51)
     }
+
+    @Test("Decodes a row carrying both XYZ and Lab arrays")
+    func decodeXYZAndLab() throws {
+        let json = """
+        {"event": "row_complete", "row_id": "B", "row_index": 1, "total_rows": 2,
+         "patch_count": 1, "patches": [
+           {"id": "7", "loc": "B7", "is_pad": false, "device": [10, 20, 30, 40],
+            "measured": {"XYZ": [30.5, 32.1, 25.9], "Lab": [63.4, 2.5, -8.2]}}
+         ]}
+        """
+        let row = try JSONDecoder().decode(ChartreadRow.self, from: Data(json.utf8))
+        let measured = row.patches[0].measured
+        #expect(measured.xyz == CIEXYZ(x: 30.5, y: 32.1, z: 25.9))
+        #expect(measured.lab == CIELab(l: 63.4, a: 2.5, b: -8.2))
+    }
+
+    @Test("XYZColor/CIEXYZ encode as an unkeyed three-number array")
+    func xyzWireEncoding() throws {
+        for color in [XYZColor(x: 1.5, y: 2.5, z: 3.5), CIEXYZ(x: 1.5, y: 2.5, z: 3.5)] {
+            let value = try JSONSerialization.jsonObject(
+                with: JSONEncoder().encode(color))
+            #expect(value as? [Double] == [1.5, 2.5, 3.5])
+        }
+    }
+
+    @Test("LabColor/CIELab encode as an unkeyed three-number array")
+    func labWireEncoding() throws {
+        for color in [LabColor(l: 50, a: -1, b: 2), CIELab(l: 50, a: -1, b: 2)] {
+            let value = try JSONSerialization.jsonObject(
+                with: JSONEncoder().encode(color))
+            #expect(value as? [Double] == [50, -1, 2])
+        }
+    }
+
+    @Test("PatchColor keeps the XYZ and Lab keys over unkeyed arrays")
+    func patchColorKeys() throws {
+        let color = PatchColor(
+            xyz: CIEXYZ(x: 10, y: 20, z: 30),
+            lab: CIELab(l: 55, a: 1, b: -2))
+        let object = try JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(color)) as? [String: Any]
+        #expect(object?["XYZ"] as? [Double] == [10, 20, 30])
+        #expect(object?["Lab"] as? [Double] == [55, 1, -2])
+        #expect(object?["spectral"] == nil)
+    }
 }
 
 @Suite("ColourMath")

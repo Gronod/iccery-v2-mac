@@ -70,18 +70,12 @@ public enum TargenArgs {
         if let n = config.neutralSteps, n > 0 {
             args.append(contentsOf: ["-n", "\(n)"])
         }
-        if let nConc = config.neutralConcentration, abs(nConc - 0.50) >= 0.001 {
-            args.append(contentsOf: ["-N", String(format: "%.2f", locale: Locale(identifier: "en_US_POSIX"), nConc)])
-        }
-        if let c = config.preconditioningProfile?.trimmingCharacters(in: .whitespacesAndNewlines), !c.isEmpty {
-            args.append(contentsOf: ["-c", c])
-        }
-        if config.ofpsHighQuality == true {
-            args.append("-G")
-        }
-        if let a = config.ofpsAdaptation {
-            args.append(contentsOf: ["-A", String(format: "%.2f", locale: Locale(identifier: "en_US_POSIX"), a)])
-        }
+        args.append(contentsOf: ArgsBuilder.optionUnlessApprox("-N", config.neutralConcentration, skip: 0.50))
+        args.append(contentsOf: ArgsBuilder.optionIfNonEmpty("-c", config.preconditioningProfile))
+        args.append(contentsOf: ArgsBuilder.flag("-G", when: config.ofpsHighQuality == true))
+        args.append(contentsOf: ArgsBuilder.option("-A", config.ofpsAdaptation.map {
+            String(format: "%.2f", locale: Locale(identifier: "en_US_POSIX"), $0)
+        }))
         if let algFlag = config.fullSpreadAlgorithm?.flag {
             args.append(algFlag)
         }
@@ -91,11 +85,9 @@ public enum TargenArgs {
             }
             args.append(contentsOf: ["-l", "\(inkLimit)"])
         }
-        if let v = config.darkEmphasis, abs(v - 1.0) >= 0.001 {
-            args.append(contentsOf: ["-V", String(format: "%.2f", locale: Locale(identifier: "en_US_POSIX"), v)])
-        }
-        if let p = config.devicePower, p > 0, abs(p - 1.0) >= 0.001 {
-            args.append(contentsOf: ["-p", String(format: "%.2f", locale: Locale(identifier: "en_US_POSIX"), p)])
+        args.append(contentsOf: ArgsBuilder.optionUnlessApprox("-V", config.darkEmphasis, skip: 1.0))
+        if let p = config.devicePower, p > 0 {
+            args.append(contentsOf: ArgsBuilder.optionUnlessApprox("-p", p, skip: 1.0))
         }
 
         args.append(cleanBasename)
