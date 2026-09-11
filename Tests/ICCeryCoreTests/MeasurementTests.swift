@@ -1,12 +1,10 @@
 import Foundation
-import Testing
+import XCTest
 @testable import ICCeryCore
 
-@Suite("InstrumentParser")
-struct InstrumentParserTests {
+final class InstrumentParserTests: XCTestCase {
 
-    @Test("Parses pretty-printed instlist JSON")
-    func json() throws {
+    func testJson() throws {
         let json = """
         {
           "event": "instruments",
@@ -18,134 +16,118 @@ struct InstrumentParserTests {
         }
         """
         let devices = try InstrumentParser.parse(json)
-        #expect(devices.count == 3)
-        #expect(devices[0].port == 1)
-        #expect(devices[0].name == "X-Rite i1Pro")
-        #expect(devices[2].port == 3)
+        XCTAssertEqual(devices.count, 3)
+        XCTAssertEqual(devices[0].port, 1)
+        XCTAssertEqual(devices[0].name, "X-Rite i1Pro")
+        XCTAssertEqual(devices[2].port, 3)
     }
 
-    @Test("Falls back to regex for legacy instlist text")
-    func regexFallback() throws {
+    func testRegexFallback() throws {
         let text = """
         1: 'X-Rite i1Pro' on usb
         2: 'ColorMunki Smile'
         """ + "\n"
         let devices = try InstrumentParser.parse(text)
-        #expect(devices.count == 2)
-        #expect(devices[0].port == 1)
-        #expect(devices[1].name == "ColorMunki Smile")
+        XCTAssertEqual(devices.count, 2)
+        XCTAssertEqual(devices[0].port, 1)
+        XCTAssertEqual(devices[1].name, "ColorMunki Smile")
     }
 
-    @Test("Empty output returns no devices")
-    func empty() throws {
-        #expect(try InstrumentParser.parse("").isEmpty)
+    func testEmpty() throws {
+        XCTAssertTrue(try InstrumentParser.parse("").isEmpty)
     }
 }
 
-@Suite("ChartreadArgs")
-struct ChartreadArgsTests {
+final class ChartreadArgsTests: XCTestCase {
 
-    @Test("Baseline argv and port 1 omits -c")
-    func baseline() throws {
+    func testBaseline() throws {
         let config = ChartreadConfig(basename: "target", selectedPort: 1)
         let args = try ChartreadArgs.build(config: config)
-        #expect(args == ["-v", "-u", "target"])
+        XCTAssertEqual(args, ["-v", "-u", "target"])
     }
 
-    @Test("Port > 1 emits -c")
-    func portArgument() throws {
+    func testPortArgument() throws {
         let config = ChartreadConfig(basename: "target", selectedPort: 3)
         let args = try ChartreadArgs.build(config: config)
-        #expect(args == ["-v", "-u", "-c", "3", "target"])
+        XCTAssertEqual(args, ["-v", "-u", "-c", "3", "target"])
     }
 
-    @Test("LEDs emit -Y l")
-    func leds() throws {
+    func testLeds() throws {
         let config = ChartreadConfig(
             basename: "target",
             selectedPort: 2,
             enableLEDs: true
         )
         let args = try ChartreadArgs.build(config: config)
-        #expect(args.contains("-Y"))
-        #expect(args.contains("l"))
+        XCTAssertTrue(args.contains("-Y"))
+        XCTAssertTrue(args.contains("l"))
     }
 
-    @Test("Auto omits -c")
-    func autoPort() throws {
+    func testAutoPort() throws {
         let config = ChartreadConfig(basename: "target")
         let args = try ChartreadArgs.build(config: config)
-        #expect(!args.contains("-c"))
+        XCTAssertFalse(args.contains("-c"))
     }
 }
 
-@Suite("ChartreadClassifier")
-struct ChartreadClassifierTests {
+final class ChartreadClassifierTests: XCTestCase {
 
-    @Test("Calibration prompt")
-    func calibration() {
+    func testCalibration() {
         let r = ChartreadClassifier.classify(
             line: "Place instrument on calibration tile and hit [Space] to calibrate.",
             previousState: .idle
         )
-        #expect(r.state == .calibrating)
+        XCTAssertEqual(r.state, .calibrating)
     }
 
-    @Test("Strip awaiting")
-    func awaitingStrip() {
+    func testAwaitingStrip() {
         let r = ChartreadClassifier.classify(
             line: "Hit [Space] to read strip A",
             previousState: .calibrating
         )
-        #expect(r.state == .awaitingStrip)
+        XCTAssertEqual(r.state, .awaitingStrip)
     }
 
-    @Test("Done prompt")
-    func done() {
+    func testDone() {
         let r = ChartreadClassifier.classify(
             line: "'d' if/when done",
             previousState: .awaitingStrip
         )
-        #expect(r.state == .allStripsRead)
+        XCTAssertEqual(r.state, .allStripsRead)
     }
 
-    @Test("XY place sheet")
-    func placeSheet() {
+    func testPlaceSheet() {
         let r = ChartreadClassifier.classify(
             line: "Please place sheet 1 of 2 on the table",
             previousState: .idle
         )
-        #expect(r.state == .tablePlaceSheet)
-        #expect(r.sheetNumber == 1)
-        #expect(r.sheetTotal == 2)
+        XCTAssertEqual(r.state, .tablePlaceSheet)
+        XCTAssertEqual(r.sheetNumber, 1)
+        XCTAssertEqual(r.sheetTotal, 2)
     }
 
-    @Test("XY locate patch")
-    func locatePatch() {
+    func testLocatePatch() {
         let r = ChartreadClassifier.classify(
             line: "locate patch A1 with the sight,",
             previousState: .tablePlaceSheet
         )
-        #expect(r.state == .tableAlign)
-        #expect(r.alignmentPatch == "A1")
+        XCTAssertEqual(r.state, .tableAlign)
+        XCTAssertEqual(r.alignmentPatch, "A1")
     }
 
-    @Test("Remove sheet notice preserves state")
-    func removeNotice() {
+    func testRemoveNotice() {
         let r = ChartreadClassifier.classify(
             line: "Please remove last sheet from table",
             previousState: .tablePlaceSheet
         )
-        #expect(r.state == .tablePlaceSheet)
-        #expect(r.isRemoveSheetNotice == true)
+        XCTAssertEqual(r.state, .tablePlaceSheet)
+        XCTAssertEqual(r.isRemoveSheetNotice, true)
     }
 }
 
-@Suite("ChartreadRow")
-struct ChartreadRowTests {
+final class ChartreadRowTests: XCTestCase {
 
-    @Test("Decodes row JSON")
-    func decode() throws {
+    func testDecode() throws {
         let json = """
         {"event": "row_complete", "row_id": "A", "row_index": 0, "total_rows": 2,
          "patch_count": 1, "patches": [
@@ -155,13 +137,12 @@ struct ChartreadRowTests {
          ]}
         """
         let row = try JSONDecoder().decode(ChartreadRow.self, from: Data(json.utf8))
-        #expect(row.rowId == "A")
-        #expect(row.patchCount == 1)
-        #expect(row.patches[0].measured.lab?.l == 51)
+        XCTAssertEqual(row.rowId, "A")
+        XCTAssertEqual(row.patchCount, 1)
+        XCTAssertEqual(row.patches[0].measured.lab?.l, 51)
     }
 
-    @Test("Decodes a row carrying both XYZ and Lab arrays")
-    func decodeXYZAndLab() throws {
+    func testDecodeXYZAndLab() throws {
         let json = """
         {"event": "row_complete", "row_id": "B", "row_index": 1, "total_rows": 2,
          "patch_count": 1, "patches": [
@@ -171,88 +152,78 @@ struct ChartreadRowTests {
         """
         let row = try JSONDecoder().decode(ChartreadRow.self, from: Data(json.utf8))
         let measured = row.patches[0].measured
-        #expect(measured.xyz == CIEXYZ(x: 30.5, y: 32.1, z: 25.9))
-        #expect(measured.lab == CIELab(l: 63.4, a: 2.5, b: -8.2))
+        XCTAssertEqual(measured.xyz, CIEXYZ(x: 30.5, y: 32.1, z: 25.9))
+        XCTAssertEqual(measured.lab, CIELab(l: 63.4, a: 2.5, b: -8.2))
     }
 
-    @Test("XYZColor/CIEXYZ encode as an unkeyed three-number array")
-    func xyzWireEncoding() throws {
+    func testXyzWireEncoding() throws {
         for color in [XYZColor(x: 1.5, y: 2.5, z: 3.5), CIEXYZ(x: 1.5, y: 2.5, z: 3.5)] {
             let value = try JSONSerialization.jsonObject(
                 with: JSONEncoder().encode(color))
-            #expect(value as? [Double] == [1.5, 2.5, 3.5])
+            XCTAssertEqual(value as? [Double], [1.5, 2.5, 3.5])
         }
     }
 
-    @Test("LabColor/CIELab encode as an unkeyed three-number array")
-    func labWireEncoding() throws {
+    func testLabWireEncoding() throws {
         for color in [LabColor(l: 50, a: -1, b: 2), CIELab(l: 50, a: -1, b: 2)] {
             let value = try JSONSerialization.jsonObject(
                 with: JSONEncoder().encode(color))
-            #expect(value as? [Double] == [50, -1, 2])
+            XCTAssertEqual(value as? [Double], [50, -1, 2])
         }
     }
 
-    @Test("PatchColor keeps the XYZ and Lab keys over unkeyed arrays")
-    func patchColorKeys() throws {
+    func testPatchColorKeys() throws {
         let color = PatchColor(
             xyz: CIEXYZ(x: 10, y: 20, z: 30),
             lab: CIELab(l: 55, a: 1, b: -2))
         let object = try JSONSerialization.jsonObject(
             with: JSONEncoder().encode(color)) as? [String: Any]
-        #expect(object?["XYZ"] as? [Double] == [10, 20, 30])
-        #expect(object?["Lab"] as? [Double] == [55, 1, -2])
-        #expect(object?["spectral"] == nil)
+        XCTAssertEqual(object?["XYZ"] as? [Double], [10, 20, 30])
+        XCTAssertEqual(object?["Lab"] as? [Double], [55, 1, -2])
+        XCTAssertNil(object?["spectral"])
     }
 }
 
-@Suite("ColourMath")
-struct ColourMathTests {
+final class ColourMathTests: XCTestCase {
 
-    @Test("White XYZ to Lab")
-    func whiteLab() {
+    func testWhiteLab() {
         let white = XYZColor(x: 96.4212, y: 100.0, z: 82.5188)
         let lab = LabColorMath.xyzToLab(white)
-        #expect(abs(lab.l - 100) < 0.5)
-        #expect(abs(lab.a) < 0.5)
-        #expect(abs(lab.b) < 0.5)
+        XCTAssertTrue(abs(lab.l - 100) < 0.5)
+        XCTAssertTrue(abs(lab.a) < 0.5)
+        XCTAssertTrue(abs(lab.b) < 0.5)
     }
 
-    @Test("Lab to sRGB roundtrip is clamped")
-    func labToSRGB() {
+    func testLabToSRGB() {
         let red = LabColor(l: 55, a: 80, b: 70)
         let rgb = LabColorMath.labToSRGB(red)
-        #expect(rgb.r > 0.8)
-        #expect(rgb.g < 0.2)
-        #expect(rgb.b < 0.2)
+        XCTAssertTrue(rgb.r > 0.8)
+        XCTAssertTrue(rgb.g < 0.2)
+        XCTAssertTrue(rgb.b < 0.2)
     }
 
-    @Test("Pad white returns DisplayRGB")
-    func padWhite() {
+    func testPadWhite() {
         let white = LabColor(l: 95, a: 0, b: 0)
         let rgb = LabColorMath.labToSRGB(white)
-        #expect(rgb.r > 0.9)
-        #expect(rgb.g > 0.9)
-        #expect(rgb.b > 0.9)
+        XCTAssertTrue(rgb.r > 0.9)
+        XCTAssertTrue(rgb.g > 0.9)
+        XCTAssertTrue(rgb.b > 0.9)
     }
 
-    @Test("Standard CIEDE2000 vector (Sharma)")
-    func ciede2000() {
+    func testCiede2000() {
         let a = LabColor(l: 50, a: -1.3802, b: -84.2814)
         let b = LabColor(l: 50, a: 0.0000, b: -82.7485)
-        #expect(abs(ColorDifference.deltaE00(a, b) - 1.00) < 0.001)
+        XCTAssertTrue(abs(ColorDifference.deltaE00(a, b) - 1.00) < 0.001)
     }
 
-    @Test("Classification respects thresholds")
-    func classify() {
-        #expect(ColorDifference.classify(deltaE: 0.5, goodMax: 2.0, warningMax: 5.0) == .good)
-        #expect(ColorDifference.classify(deltaE: 3.0, goodMax: 2.0, warningMax: 5.0) == .warning)
-        #expect(ColorDifference.classify(deltaE: 6.0, goodMax: 2.0, warningMax: 5.0) == .bad)
+    func testClassify() {
+        XCTAssertEqual(ColorDifference.classify(deltaE: 0.5, goodMax: 2.0, warningMax: 5.0), .good)
+        XCTAssertEqual(ColorDifference.classify(deltaE: 3.0, goodMax: 2.0, warningMax: 5.0), .warning)
+        XCTAssertEqual(ColorDifference.classify(deltaE: 6.0, goodMax: 2.0, warningMax: 5.0), .bad)
     }
 }
 
-@Suite("MeasurementArtefacts")
-struct MeasurementArtefactTests {
+final class MeasurementArtefactTests: XCTestCase {
 
     private func makeCwd() throws -> URL {
         let url = FileManager.default.temporaryDirectory
@@ -261,8 +232,7 @@ struct MeasurementArtefactTests {
         return url
     }
 
-    @Test("Discovers passes in order")
-    func discovery() throws {
+    func testDiscovery() throws {
         let cwd = try makeCwd()
         defer { try? FileManager.default.removeItem(at: cwd) }
 
@@ -271,11 +241,10 @@ struct MeasurementArtefactTests {
         try "C".write(to: cwd.appendingPathComponent("target_pass10.ti3"), atomically: true, encoding: .utf8)
 
         let passes = MeasurementArtefacts.passSnapshots(basename: "target", cwd: cwd)
-        #expect(passes.map(\.lastPathComponent) == ["target_pass1.ti3", "target_pass3.ti3", "target_pass10.ti3"])
+        XCTAssertEqual(passes.map(\.lastPathComponent), ["target_pass1.ti3", "target_pass3.ti3", "target_pass10.ti3"])
     }
 
-    @Test("Snapshot and promote are atomic")
-    func snapshotPromote() throws {
+    func testSnapshotPromote() throws {
         let cwd = try makeCwd()
         defer { try? FileManager.default.removeItem(at: cwd) }
 
@@ -283,16 +252,15 @@ struct MeasurementArtefactTests {
         try "canonical".write(to: canonical, atomically: true, encoding: .utf8)
 
         let pass = try MeasurementArtefacts.snapshotPass(basename: "target", cwd: cwd)
-        #expect(pass.lastPathComponent == "target_pass1.ti3")
-        #expect(!FileManager.default.fileExists(atPath: canonical.path))
+        XCTAssertEqual(pass.lastPathComponent, "target_pass1.ti3")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: canonical.path))
 
         let promoted = try MeasurementArtefacts.promotePass(pass: pass, basename: "target", cwd: cwd)
-        #expect(promoted.lastPathComponent == "target.ti3")
-        #expect(FileManager.default.fileExists(atPath: promoted.path))
+        XCTAssertEqual(promoted.lastPathComponent, "target.ti3")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: promoted.path))
     }
 
-    @Test("Pass collisions handled")
-    func collision() throws {
+    func testCollision() throws {
         let cwd = try makeCwd()
         defer { try? FileManager.default.removeItem(at: cwd) }
 
@@ -302,28 +270,25 @@ struct MeasurementArtefactTests {
 
         try "v2".write(to: canonical, atomically: true, encoding: .utf8)
         let pass2 = try MeasurementArtefacts.snapshotPass(basename: "target", cwd: cwd)
-        #expect(pass2.lastPathComponent == "target_pass2.ti3")
+        XCTAssertEqual(pass2.lastPathComponent, "target_pass2.ti3")
     }
 }
 
-@Suite("AverageArgs")
-struct AverageArgsTests {
+final class AverageArgsTests: XCTestCase {
 
-    @Test("Requires at least two pass files")
-    func passCount() {
+    func testPassCount() {
         let cwd = URL(fileURLWithPath: "/tmp")
         let config = AverageConfig(
             workingDirectory: cwd,
             basename: "target",
             passFiles: [URL(fileURLWithPath: "target_pass1.ti3")]
         )
-        #expect(throws: AverageArgError.self) {
-            _ = try AverageArgs.build(config: config)
+        XCTAssertThrowsError(try AverageArgs.build(config: config)) { error in
+            XCTAssertTrue(error is AverageArgError)
         }
     }
 
-    @Test("Output is last and inputs are relative")
-    func ordering() throws {
+    func testOrdering() throws {
         let cwd = URL(fileURLWithPath: "/tmp")
         let config = AverageConfig(
             workingDirectory: cwd,
@@ -334,8 +299,8 @@ struct AverageArgsTests {
             ]
         )
         let args = try AverageArgs.build(config: config)
-        #expect(args.first == "-v")
-        #expect(args.last == "target.ti3")
-        #expect(args == ["-v", "target_pass1.ti3", "target_pass2.ti3", "target.ti3"])
+        XCTAssertEqual(args.first, "-v")
+        XCTAssertEqual(args.last, "target.ti3")
+        XCTAssertEqual(args, ["-v", "target_pass1.ti3", "target_pass2.ti3", "target.ti3"])
     }
 }

@@ -1,24 +1,21 @@
 import Foundation
-import Testing
+import XCTest
 @testable import ICCeryCore
 
-@Suite("PrintcalArgs")
-struct PrintcalArgsTests {
+final class PrintcalArgsTests: XCTestCase {
 
     private let tmp = URL(fileURLWithPath: "/tmp/out.cal")
 
-    @Test("Default printcal argv")
-    func defaults() throws {
+    func testDefaults() throws {
         let config = PrintcalConfig(
             ti3Basename: "CAL_demo",
             outputURL: tmp
         )
         let args = try PrintcalArgs.build(config: config)
-        #expect(args == ["-v", "-e", "-o", "/tmp/out.cal", "CAL_demo"])
+        XCTAssertEqual(args, ["-v", "-e", "-o", "/tmp/out.cal", "CAL_demo"])
     }
 
-    @Test("All options and channel limits")
-    func allOptions() throws {
+    func testAllOptions() throws {
         let config = PrintcalConfig(
             ti3Basename: "demo",
             outputURL: tmp,
@@ -32,7 +29,7 @@ struct PrintcalArgsTests {
             ]
         )
         let args = try PrintcalArgs.build(config: config)
-        #expect(args == [
+        XCTAssertEqual(args, [
             "-v", "-e",
             "-I", "-z",
             "-a", "/tmp/old.cal",
@@ -44,39 +41,34 @@ struct PrintcalArgsTests {
         ])
     }
 
-    @Test("Whitespace-only previous calibration path emits no -a")
-    func whitespacePreviousCal() throws {
+    func testWhitespacePreviousCal() throws {
         let config = PrintcalConfig(
             ti3Basename: "demo",
             outputURL: tmp,
             previousCalPath: "   \n\t "
         )
         let args = try PrintcalArgs.build(config: config)
-        #expect(!args.contains("-a"))
-        #expect(args == ["-v", "-e", "-o", "/tmp/out.cal", "CAL_demo"])
+        XCTAssertFalse(args.contains("-a"))
+        XCTAssertEqual(args, ["-v", "-e", "-o", "/tmp/out.cal", "CAL_demo"])
     }
 
-    @Test("Previous calibration path is trimmed before emission")
-    func previousCalTrimmed() throws {
+    func testPreviousCalTrimmed() throws {
         let config = PrintcalConfig(
             ti3Basename: "demo",
             outputURL: tmp,
             previousCalPath: "  /tmp/old.cal  "
         )
         let args = try PrintcalArgs.build(config: config)
-        #expect(args[args.firstIndex(of: "-a")! + 1] == "/tmp/old.cal")
+        XCTAssertEqual(args[args.firstIndex(of: "-a")! + 1], "/tmp/old.cal")
     }
 
-    @Test("Rejects invalid per-channel limit")
-    func rejectsBadChannelLimit() {
+    func testRejectsBadChannelLimit() {
         let config = PrintcalConfig(
             ti3Basename: "demo",
             outputURL: tmp,
             channelLimits: [PrintcalChannelLimit(channel: "K", percent: 150)]
         )
-        #expect(throws: (any Error).self) {
-            _ = try PrintcalArgs.build(config: config)
-        }
+        XCTAssertThrowsError(try PrintcalArgs.build(config: config))
     }
 
 }

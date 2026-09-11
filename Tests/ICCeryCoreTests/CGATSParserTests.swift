@@ -1,9 +1,8 @@
 import Foundation
-import Testing
+import XCTest
 @testable import ICCeryCore
 
-@Suite("CGATS Parser & Writer")
-struct CGATSParserTests {
+final class CGATSParserTests: XCTestCase {
 
     private static let canonicalCTI3 = """
     CTI3
@@ -21,44 +20,40 @@ struct CGATSParserTests {
     END_DATA
     """
 
-    @Test("Parses CTI3 with canonical field names")
-    func parseCTI3() throws {
+    func testParseCTI3() throws {
         let dataset = try CGATSParser.parse(Self.canonicalCTI3)
-        #expect(dataset.format == .cti3)
-        #expect(dataset.samples.count == 2)
-        #expect(dataset.colorRep == "RGB")
-        #expect(dataset.deviceClass == "DISPLAY")
-        #expect(dataset.samples[0].id == "1")
-        #expect(dataset.samples[0].loc == "A1")
-        #expect(dataset.samples[1].values["RGB_G"] == "50.0000")
+        XCTAssertEqual(dataset.format, .cti3)
+        XCTAssertEqual(dataset.samples.count, 2)
+        XCTAssertEqual(dataset.colorRep, "RGB")
+        XCTAssertEqual(dataset.deviceClass, "DISPLAY")
+        XCTAssertEqual(dataset.samples[0].id, "1")
+        XCTAssertEqual(dataset.samples[0].loc, "A1")
+        XCTAssertEqual(dataset.samples[1].values["RGB_G"], "50.0000")
     }
 
-    @Test("Round-trips parse, write, reparse")
-    func roundTrip() throws {
+    func testRoundTrip() throws {
         let first = try CGATSParser.parse(Self.canonicalCTI3)
         let text = try CGATSWriter.write(first)
         let second = try CGATSParser.parse(text)
-        #expect(second.format == first.format)
-        #expect(second.samples.count == first.samples.count)
-        #expect(second.colorRep == first.colorRep)
-        #expect(second.deviceClass == first.deviceClass)
+        XCTAssertEqual(second.format, first.format)
+        XCTAssertEqual(second.samples.count, first.samples.count)
+        XCTAssertEqual(second.colorRep, first.colorRep)
+        XCTAssertEqual(second.deviceClass, first.deviceClass)
     }
 
-    @Test("Parses CSV with comma delimiters")
-    func parseCSV() throws {
+    func testParseCSV() throws {
         let csv = """
         SAMPLE_ID,SAMPLE_LOC,RGB_R,RGB_G,RGB_B,XYZ_X,XYZ_Y,XYZ_Z,LAB_L,LAB_A,LAB_B
         1,A1,50,0,0,20,10,5,50,60,30
         2,A2,0,50,0,10,30,5,60,-50,40
         """
         let dataset = try CGATSParser.parse(csv, sourceURL: URL(fileURLWithPath: "/tmp/sample.csv"))
-        #expect(dataset.format == .csv)
-        #expect(dataset.samples.count == 2)
-        #expect(dataset.samples[0].values["RGB_R"] == "50.0000")
+        XCTAssertEqual(dataset.format, .csv)
+        XCTAssertEqual(dataset.samples.count, 2)
+        XCTAssertEqual(dataset.samples[0].values["RGB_R"], "50.0000")
     }
 
-    @Test("Converts 0-255 device values to 0-100")
-    func converts255To100() throws {
+    func testConverts255To100() throws {
         let rgb = """
         CTI3
         COLOR_REP RGB
@@ -72,12 +67,11 @@ struct CGATSParserTests {
         END_DATA
         """
         let dataset = try CGATSParser.parse(rgb)
-        #expect(dataset.samples[0].values["RGB_R"] == "100.0000")
-        #expect(dataset.samples[0].values["RGB_G"] == "50.1961")
+        XCTAssertEqual(dataset.samples[0].values["RGB_R"], "100.0000")
+        XCTAssertEqual(dataset.samples[0].values["RGB_G"], "50.1961")
     }
 
-    @Test("Synthesizes COLOR_REP and DEVICE_CLASS when missing")
-    func synthesizesMetadata() throws {
+    func testSynthesizesMetadata() throws {
         let cmyk = """
         CTI3
         NUMBER_OF_FIELDS 6
@@ -90,19 +84,15 @@ struct CGATSParserTests {
         END_DATA
         """
         let dataset = try CGATSParser.parse(cmyk)
-        #expect(dataset.colorRep == "CMYK")
-        #expect(dataset.deviceClass == "PRINTER")
+        XCTAssertEqual(dataset.colorRep, "CMYK")
+        XCTAssertEqual(dataset.deviceClass, "PRINTER")
     }
 
-    @Test("Rejects empty file")
-    func rejectsEmpty() {
-        #expect(throws: (any Error).self) {
-            _ = try CGATSParser.parse("")
-        }
+    func testRejectsEmpty() {
+        XCTAssertThrowsError(try CGATSParser.parse(""))
     }
 
-    @Test("Rejects malformed arity")
-    func rejectsArity() {
+    func testRejectsArity() {
         let bad = """
         CTI3
         NUMBER_OF_FIELDS 2
@@ -114,21 +104,18 @@ struct CGATSParserTests {
         1
         END_DATA
         """
-        #expect(throws: (any Error).self) {
-            _ = try CGATSParser.parse(bad)
-        }
+        XCTAssertThrowsError(try CGATSParser.parse(bad))
     }
 
-    @Test("Writer emits valid .ti3 with tabs and required keywords")
-    func writerFormat() throws {
+    func testWriterFormat() throws {
         let dataset = try CGATSParser.parse(Self.canonicalCTI3)
         let text = try CGATSWriter.write(dataset)
-        #expect(text.contains("CTI3"))
-        #expect(text.contains("BEGIN_DATA_FORMAT"))
-        #expect(text.contains("BEGIN_DATA"))
-        #expect(text.contains("END_DATA"))
-        #expect(text.contains("COLOR_REP"))
-        #expect(text.contains("DEVICE_CLASS"))
-        #expect(text.contains("\t"))
+        XCTAssertTrue(text.contains("CTI3"))
+        XCTAssertTrue(text.contains("BEGIN_DATA_FORMAT"))
+        XCTAssertTrue(text.contains("BEGIN_DATA"))
+        XCTAssertTrue(text.contains("END_DATA"))
+        XCTAssertTrue(text.contains("COLOR_REP"))
+        XCTAssertTrue(text.contains("DEVICE_CLASS"))
+        XCTAssertTrue(text.contains("\t"))
     }
 }

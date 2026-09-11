@@ -1,4 +1,5 @@
 import Testing
+import XCTest
 import Foundation
 @testable import ICCeryCore
 
@@ -408,65 +409,62 @@ struct ProcessManagerTests {
     }
 }
 
-@Suite("ProcessLineDecoder")
-struct ProcessLineDecoderTests {
-    @Test func splitsAcrossChunkBoundaries() {
+final class ProcessLineDecoderTests: XCTestCase {
+    func testSplitsAcrossChunkBoundaries() {
         var d = ProcessLineDecoder()
-        #expect(d.feed(Data("he".utf8)) == [])
-        #expect(d.feed(Data("llo\nwor".utf8)) == ["hello"])
-        #expect(d.feed(Data("ld\n".utf8)) == ["world"])
-        #expect(d.finish() == nil)
+        XCTAssertEqual(d.feed(Data("he".utf8)), [])
+        XCTAssertEqual(d.feed(Data("llo\nwor".utf8)), ["hello"])
+        XCTAssertEqual(d.feed(Data("ld\n".utf8)), ["world"])
+        XCTAssertNil(d.finish())
     }
 
-    @Test func crlfIsStripped() {
+    func testCrlfIsStripped() {
         var d = ProcessLineDecoder()
-        #expect(d.feed(Data("a\r\nb\r\n".utf8)) == ["a", "b"])
+        XCTAssertEqual(d.feed(Data("a\r\nb\r\n".utf8)), ["a", "b"])
     }
 
-    @Test func finishReturnsRemainder() {
+    func testFinishReturnsRemainder() {
         var d = ProcessLineDecoder()
         _ = d.feed(Data("x".utf8))
-        #expect(d.finish() == "x")
-        #expect(d.finish() == nil)
+        XCTAssertEqual(d.finish(), "x")
+        XCTAssertNil(d.finish())
     }
 }
 
-@Suite("JSONAccumulator")
-struct JSONAccumulatorTests {
-    @Test func multilinePrettyJSON() {
+final class JSONAccumulatorTests: XCTestCase {
+    func testMultilinePrettyJSON() {
         var acc = JSONAccumulator()
-        #expect(acc.feed(line: "{") == nil)
-        #expect(acc.feed(line: "  \"k\": 1") == nil)
+        XCTAssertNil(acc.feed(line: "{"))
+        XCTAssertNil(acc.feed(line: "  \"k\": 1"))
         let done = acc.feed(line: "}")
-        #expect(done != nil)
+        XCTAssertNotNil(done)
         let obj = try? JSONSerialization.jsonObject(with: done!) as? [String: Int]
-        #expect(obj?["k"] == 1)
+        XCTAssertEqual(obj?["k"], 1)
     }
 
-    @Test func nonJSONLinesIgnored() {
+    func testNonJSONLinesIgnored() {
         var acc = JSONAccumulator()
-        #expect(acc.feed(line: "Reading instrument...") == nil)
-        #expect(acc.feed(line: "still text") == nil)
-        #expect(acc.completeData == nil)
+        XCTAssertNil(acc.feed(line: "Reading instrument..."))
+        XCTAssertNil(acc.feed(line: "still text"))
+        XCTAssertNil(acc.completeData)
     }
 
-    @Test func decodeTyped() {
+    func testDecodeTyped() {
         struct Doc: Decodable { let n: Int }
         var acc = JSONAccumulator()
         // Split so the doc completes on the second feed.
-        #expect(acc.feed(line: "{\"n\":") == nil)
+        XCTAssertNil(acc.feed(line: "{\"n\":"))
         let data = acc.feed(line: "7}")
-        #expect(data != nil)
+        XCTAssertNotNil(data)
         let doc = data.flatMap { try? JSONDecoder().decode(Doc.self, from: $0) }
-        #expect(doc?.n == 7)
-        #expect(acc.isEmpty)
+        XCTAssertEqual(doc?.n, 7)
+        XCTAssertTrue(acc.isEmpty)
     }
 }
 
-@Suite("LogSanitizer")
-struct LogSanitizerTests {
-    @Test func homeIsRewritten() {
+final class LogSanitizerTests: XCTestCase {
+    func testHomeIsRewritten() {
         let path = "\(NSHomeDirectory())/Documents/foo.ti1"
-        #expect(LogSanitizer.sanitize(path) == "~/Documents/foo.ti1")
+        XCTAssertEqual(LogSanitizer.sanitize(path), "~/Documents/foo.ti1")
     }
 }

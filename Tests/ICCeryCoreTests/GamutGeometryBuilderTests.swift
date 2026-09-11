@@ -1,15 +1,13 @@
-import Testing
+import XCTest
 import SceneKit
 import ICCeryCore
 @testable import ICCery
 
 /// ``GamutSceneGeometryBuilder`` edge-case tests.
-@Suite("Gamut scene geometry builder")
 @MainActor
-struct GamutGeometryBuilderTests {
+final class GamutGeometryBuilderTests: XCTestCase {
 
-    @Test("Drops out-of-bounds faces from the element without crashing")
-    func dropsOutOfBoundsFaces() {
+    func testDropsOutOfBoundsFaces() {
         let white = GamutVertex(
             lab: LabColor(l: 100, a: 0, b: 0),
             rgb: DisplayRGB(r: 1, g: 1, b: 1)
@@ -28,6 +26,6 @@ struct GamutGeometryBuilderTests {
 
         let (_, element) = GamutSceneGeometryBuilder.geometry(for: mesh)
 
-        #expect(element.primitiveCount == 1, "Only the in-bounds face should be in the index buffer")
+        XCTAssertEqual(element.primitiveCount, 1, "Only the in-bounds face should be in the index buffer")
     }
 }

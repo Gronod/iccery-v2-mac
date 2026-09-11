@@ -1,12 +1,11 @@
 import Testing
+import XCTest
 import Foundation
 @testable import ICCeryCore
 
-@Suite("TargenArgs")
-struct TargenArgsTests {
+final class TargenArgsTests: XCTestCase {
 
-    @Test("RGB baseline: -v -d 2 -f 800 -e 4 -B 4")
-    func rgbBaseline() throws {
+    func testRgbBaseline() throws {
         let config = TargenConfig(
             colourSpace: .rgb,
             patchCount: 800,
@@ -15,12 +14,11 @@ struct TargenArgsTests {
             basename: "test_rgb"
         )
         let args = try TargenArgs.build(config: config)
-        #expect(args == ["-v", "-d", "2", "-f", "800", "-e", "4", "-B", "4", "test_rgb"])
-        #expect(!args.contains("-u"))
+        XCTAssertEqual(args, ["-v", "-d", "2", "-f", "800", "-e", "4", "-B", "4", "test_rgb"])
+        XCTAssertFalse(args.contains("-u"))
     }
 
-    @Test("CMYK baseline: -v -d 4 -f 1500 -e 4 -B 0")
-    func cmykBaseline() throws {
+    func testCmykBaseline() throws {
         let config = TargenConfig(
             colourSpace: .cmyk,
             patchCount: 1500,
@@ -29,11 +27,10 @@ struct TargenArgsTests {
             basename: "test_cmyk"
         )
         let args = try TargenArgs.build(config: config)
-        #expect(args == ["-v", "-d", "4", "-f", "1500", "-e", "4", "-B", "0", "test_cmyk"])
+        XCTAssertEqual(args, ["-v", "-d", "4", "-f", "1500", "-e", "4", "-B", "0", "test_cmyk"])
     }
 
-    @Test("Custom patch count honours -f (#44)")
-    func customPatchCount() throws {
+    func testCustomPatchCount() throws {
         let config = TargenConfig(
             colourSpace: .rgb,
             patchCount: 2500,
@@ -42,12 +39,11 @@ struct TargenArgsTests {
             basename: "custom_patches"
         )
         let args = try TargenArgs.build(config: config)
-        #expect(args.contains("-f"))
-        #expect(args[args.firstIndex(of: "-f")! + 1] == "2500")
+        XCTAssertTrue(args.contains("-f"))
+        XCTAssertEqual(args[args.firstIndex(of: "-f")! + 1], "2500")
     }
 
-    @Test("All advanced flags in stable order")
-    func allAdvancedFlags() throws {
+    func testAllAdvancedFlags() throws {
         let config = TargenConfig(
             colourSpace: .cmyk,
             patchCount: 1200,
@@ -85,11 +81,10 @@ struct TargenArgsTests {
             "-p", "2.00",
             "advanced_cmyk"
         ]
-        #expect(args == expected)
+        XCTAssertEqual(args, expected)
     }
 
-    @Test("RGB ignores total ink limit")
-    func rgbIgnoresInkLimit() throws {
+    func testRgbIgnoresInkLimit() throws {
         let config = TargenConfig(
             colourSpace: .rgb,
             patchCount: 800,
@@ -99,11 +94,10 @@ struct TargenArgsTests {
             basename: "rgb_no_ink"
         )
         let args = try TargenArgs.build(config: config)
-        #expect(!args.contains("-l"))
+        XCTAssertFalse(args.contains("-l"))
     }
 
-    @Test("Neutral concentration omitted when approximately 0.50")
-    func neutralConcentrationOmittedWhenDefault() throws {
+    func testNeutralConcentrationOmittedWhenDefault() throws {
         let config = TargenConfig(
             colourSpace: .rgb,
             patchCount: 800,
@@ -113,11 +107,10 @@ struct TargenArgsTests {
             basename: "n_default"
         )
         let args = try TargenArgs.build(config: config)
-        #expect(!args.contains("-N"))
+        XCTAssertFalse(args.contains("-N"))
     }
 
-    @Test("Adaptation emitted even at 0.10 (no default-skip)")
-    func adaptationEmittedAtPointOne() throws {
+    func testAdaptationEmittedAtPointOne() throws {
         let config = TargenConfig(
             colourSpace: .rgb,
             patchCount: 800,
@@ -127,12 +120,11 @@ struct TargenArgsTests {
             basename: "a_flag"
         )
         let args = try TargenArgs.build(config: config)
-        #expect(args.contains("-A"))
-        #expect(args[args.firstIndex(of: "-A")! + 1] == "0.10")
+        XCTAssertTrue(args.contains("-A"))
+        XCTAssertEqual(args[args.firstIndex(of: "-A")! + 1], "0.10")
     }
 
-    @Test("OFPS full spread algorithm emits no flag")
-    func ofpsEmitsNoFlag() throws {
+    func testOfpsEmitsNoFlag() throws {
         let config = TargenConfig(
             colourSpace: .rgb,
             patchCount: 800,
@@ -142,12 +134,11 @@ struct TargenArgsTests {
             basename: "ofps_test"
         )
         let args = try TargenArgs.build(config: config)
-        #expect(!args.contains("ofps"))
-        #expect(!args.contains("-t"))
+        XCTAssertFalse(args.contains("ofps"))
+        XCTAssertFalse(args.contains("-t"))
     }
 
-    @Test("Dark emphasis and device power omitted when 1.0")
-    func darkEmphasisAndPowerOmittedWhenOne() throws {
+    func testDarkEmphasisAndPowerOmittedWhenOne() throws {
         let config = TargenConfig(
             colourSpace: .rgb,
             patchCount: 800,
@@ -158,12 +149,11 @@ struct TargenArgsTests {
             basename: "defaults_omitted"
         )
         let args = try TargenArgs.build(config: config)
-        #expect(!args.contains("-V"))
-        #expect(!args.contains("-p"))
+        XCTAssertFalse(args.contains("-V"))
+        XCTAssertFalse(args.contains("-p"))
     }
 
-    @Test("Whitespace-only preconditioning profile emits no -c")
-    func whitespacePreconditioner() throws {
+    func testWhitespacePreconditioner() throws {
         let config = TargenConfig(
             colourSpace: .rgb,
             patchCount: 800,
@@ -173,11 +163,10 @@ struct TargenArgsTests {
             basename: "ws_pre"
         )
         let args = try TargenArgs.build(config: config)
-        #expect(!args.contains("-c"))
+        XCTAssertFalse(args.contains("-c"))
     }
 
-    @Test("Preconditioning profile is trimmed before emission")
-    func preconditionerTrimmed() throws {
+    func testPreconditionerTrimmed() throws {
         let config = TargenConfig(
             colourSpace: .rgb,
             patchCount: 800,
@@ -187,11 +176,10 @@ struct TargenArgsTests {
             basename: "trim_pre"
         )
         let args = try TargenArgs.build(config: config)
-        #expect(args[args.firstIndex(of: "-c")! + 1] == "/path/to/profile.icc")
+        XCTAssertEqual(args[args.firstIndex(of: "-c")! + 1], "/path/to/profile.icc")
     }
 
-    @Test("Invalid basename throws")
-    func invalidBasenameThrows() {
+    func testInvalidBasenameThrows() {
         let config = TargenConfig(
             colourSpace: .rgb,
             patchCount: 800,
@@ -199,13 +187,12 @@ struct TargenArgsTests {
             blackPatches: 4,
             basename: "../bad_name"
         )
-        #expect(throws: PathSecurity.Error.self) {
-            try TargenArgs.build(config: config)
+        XCTAssertThrowsError(try TargenArgs.build(config: config)) { error in
+            XCTAssertTrue(error is PathSecurity.Error)
         }
     }
 
-    @Test("Invalid patch count throws")
-    func invalidPatchCountThrows() {
+    func testInvalidPatchCountThrows() {
         let config = TargenConfig(
             colourSpace: .rgb,
             patchCount: 0,
@@ -213,13 +200,12 @@ struct TargenArgsTests {
             blackPatches: 4,
             basename: "bad_count"
         )
-        #expect(throws: TargenArgError.self) {
-            try TargenArgs.build(config: config)
+        XCTAssertThrowsError(try TargenArgs.build(config: config)) { error in
+            XCTAssertTrue(error is TargenArgError)
         }
     }
 
-    @Test("Invalid ink limit throws for CMYK")
-    func invalidInkLimitThrows() {
+    func testInvalidInkLimitThrows() {
         let config = TargenConfig(
             colourSpace: .cmyk,
             patchCount: 800,
@@ -228,8 +214,8 @@ struct TargenArgsTests {
             totalInkLimit: 450,
             basename: "bad_ink"
         )
-        #expect(throws: TargenArgError.self) {
-            try TargenArgs.build(config: config)
+        XCTAssertThrowsError(try TargenArgs.build(config: config)) { error in
+            XCTAssertTrue(error is TargenArgError)
         }
     }
 }
