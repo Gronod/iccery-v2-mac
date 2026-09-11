@@ -1,26 +1,25 @@
+import Combine
 import Foundation
 import ICCeryCore
-import Observation
 
 /// View model for the native SceneKit gamut viewer.
 ///
 /// Loads the bundled `sRGB.gam` reference immediately and, optionally, a
 /// printer/profile `.gam` from the current working directory.
 @MainActor
-@Observable
-final class GamutViewModel {
+final class GamutViewModel: ObservableObject {
 
     /// Parsed reference sRGB gamut mesh.
-    var sRGBMesh: GamutMesh?
+    @Published var sRGBMesh: GamutMesh?
 
     /// Parsed printer/profile gamut mesh.
-    var profileMesh: GamutMesh?
+    @Published var profileMesh: GamutMesh?
 
     /// User-facing status line.
-    var status = "Loading gamut…"
+    @Published var status = "Loading gamut…"
 
     /// Closure injected into the SceneKit view to request a camera reset.
-    var resetCamera: () -> Void = {}
+    @Published var resetCamera: () -> Void = {}
 
     private let profileGamURL: URL?
 

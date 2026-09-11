@@ -4,12 +4,28 @@ import ICCeryCore
 /// 270 pt sidebar (docs/21 §Shell): logo, settings/about buttons, preset
 /// select, Calibrate Printer + status chip, and the 1–5 stepper.
 struct SidebarView: View {
-    @Bindable var workflow: TargetWorkflowViewModel
+    @ObservedObject var workflow: TargetWorkflowViewModel
+    /// Observed directly: nested ObservableObjects are not tracked
+    /// through the parent's `objectWillChange`.
+    @ObservedObject private var model: WizardViewModel
+    @ObservedObject private var profile: ProfileWorkflowViewModel
     var onOpenSettings: () -> Void
     var onOpenAbout: () -> Void
     @Binding var showingAllHelp: Bool
 
-    private var model: WizardViewModel { workflow.wizard }
+    init(
+        workflow: TargetWorkflowViewModel,
+        onOpenSettings: @escaping () -> Void,
+        onOpenAbout: @escaping () -> Void,
+        showingAllHelp: Binding<Bool>
+    ) {
+        self.workflow = workflow
+        self._model = ObservedObject(wrappedValue: workflow.wizard)
+        self._profile = ObservedObject(wrappedValue: workflow.profile)
+        self.onOpenSettings = onOpenSettings
+        self.onOpenAbout = onOpenAbout
+        self._showingAllHelp = showingAllHelp
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {

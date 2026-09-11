@@ -1,5 +1,5 @@
+import Combine
 import Foundation
-import Observation
 import ICCeryCore
 
 /// Wizard state machine + artefact gating (issue #4, docs/06).
@@ -10,47 +10,46 @@ import ICCeryCore
 /// `wizard_state.json`; unlocks come from `ArtefactProbe.verify` —
 /// navigation is disk, not buttons.
 @MainActor
-@Observable
-final class WizardViewModel {
+final class WizardViewModel: ObservableObject {
 
     // MARK: - wizardState fields (persisted)
 
-    var stage: WizardStage {
+    @Published var stage: WizardStage {
         didSet { if stage != oldValue { persist() } }
     }
     /// `wizardState.basename` — empty until a real artefact names it (#60).
-    var basename: String {
+    @Published var basename: String {
         didSet { if basename != oldValue { refreshGating(); persist() } }
     }
     /// `wizardState.cwd` — resolved via `resolveSafeCwd` (#59).
-    var workingDirectory: URL? {
+    @Published var workingDirectory: URL? {
         didSet { if workingDirectory != oldValue { refreshGating(); persist() } }
     }
-    var printerName: String? {
+    @Published var printerName: String? {
         didSet { if printerName != oldValue { persist() } }
     }
-    var sessionMode: SessionMode {
+    @Published var sessionMode: SessionMode {
         didSet { if sessionMode != oldValue { persist() } }
     }
     /// `profileBasename` may differ after a `.ti3` import (#94).
-    var profileBasename: String? {
+    @Published var profileBasename: String? {
         didSet { if profileBasename != oldValue { persist() } }
     }
     /// Pre-`CAL_` basename, persisted so relaunch/Force Quit can restore it (#29).
-    var calibrationOriginalBasename: String {
+    @Published var calibrationOriginalBasename: String {
         didSet { if calibrationOriginalBasename != oldValue { persist() } }
     }
 
     // MARK: - Ephemeral
 
     /// Banner notice currently displayed (`#wizardNotification`).
-    var notice: Notice?
+    @Published var notice: Notice?
     /// Current artefact probe result; recomputed on `refreshGating()`.
-    private(set) var artefacts = StageArtefacts()
+    @Published private(set) var artefacts = StageArtefacts()
     /// Whether the 3D gamut viewer sheet is open (issue #28).
-    var showingGamutViewer = false
+    @Published var showingGamutViewer = false
     /// Optional `.gam` URL to show alongside the sRGB reference.
-    var gamutProfileURL: URL?
+    @Published var gamutProfileURL: URL?
 
     private let stateStore: WizardStateStore
     private var noticeDismissTask: Task<Void, Never>?

@@ -5,7 +5,19 @@ import ICCeryCore
 /// issues #9/#10, docs/09). Print controls are visible but inert —
 /// real spooling lands in M3.
 struct Stage2View: View {
-    @Bindable var workflow: TargetWorkflowViewModel
+    @ObservedObject var workflow: TargetWorkflowViewModel
+    /// Observed directly: nested ObservableObjects are not tracked
+    /// through the parent's `objectWillChange`.
+    @ObservedObject private var printSession: PrintSessionViewModel
+    @ObservedObject private var wizard: WizardViewModel
+
+    @State private var printGenerationTask: Task<Void, Never>?
+
+    init(workflow: TargetWorkflowViewModel) {
+        self.workflow = workflow
+        self._printSession = ObservedObject(wrappedValue: workflow.print)
+        self._wizard = ObservedObject(wrappedValue: workflow.wizard)
+    }
 
     var body: some View {
         ScrollView {
@@ -240,7 +252,7 @@ struct Stage2View: View {
                 }
                 .frame(maxWidth: 320)
                 .accessibilityIdentifier("printerSelect")
-                .onChange(of: workflow.print.selectedPrinter) { _, _ in
+                .onChange(of: workflow.print.selectedPrinter) { _ in
                     workflow.print.selectedTray = nil
                     workflow.print.selectedMediaType = nil
                     Task { @MainActor in await workflow.print.reloadSelectedCapabilities() }
@@ -328,9 +340,18 @@ struct Stage2View: View {
         .clipShape(RoundedRectangle(cornerRadius: Theme.Metrics.cornerMedium))
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("rawPrintPanel")
-        .task(id: workflow.printtargResult?.pages.count) {
-            // Auto-enumerate once a manifest exists and whenever it
-            // changes (e.g. resume from .ti2).
+        .onAppear { schedulePrinterRefresh() }
+        .onChange(of: workflow.printtargResult?.pages.count) { _ in
+            schedulePrinterRefresh()
+        }
+    }
+
+    /// Auto-enumerates printers once a manifest exists and whenever it
+    /// changes (e.g. resume from .ti2). The explicit task handle keeps
+    /// a superseded run from racing the next one.
+    private func schedulePrinterRefresh() {
+        printGenerationTask?.cancel()
+        printGenerationTask = Task { @MainActor in
             if workflow.print.printers.isEmpty, workflow.printtargResult != nil {
                 workflow.print.refreshPrinters()
             }
@@ -341,7 +362,16 @@ struct Stage2View: View {
 /// One gallery cell: PNG preview + per-page Print button.
 private struct GalleryPageView: View {
     let page: GalleryPage
-    let workflow: TargetWorkflowViewModel
+    @ObservedObject var workflow: TargetWorkflowViewModel
+    /// Observed directly: `print` is a nested ObservableObject and its
+    /// `isPrinting`/`selectedPrinter` changes drive this cell's button.
+    @ObservedObject private var printSession: PrintSessionViewModel
+
+    init(page: GalleryPage, workflow: TargetWorkflowViewModel) {
+        self.page = page
+        self.workflow = workflow
+        self._printSession = ObservedObject(wrappedValue: workflow.print)
+    }
 
     var body: some View {
         VStack(spacing: 6) {

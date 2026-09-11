@@ -5,12 +5,18 @@ import ICCeryCore
 /// Root layout: 270 pt sidebar + main stage area with the notification
 /// banner pinned to the top (docs/21 §Shell).
 struct RootView: View {
-    @Bindable var workflow: TargetWorkflowViewModel
+    @ObservedObject var workflow: TargetWorkflowViewModel
+    /// Observed directly: nested ObservableObjects are not tracked
+    /// through the parent's `objectWillChange`.
+    @ObservedObject private var model: WizardViewModel
     @State private var showingSettings = false
     @State private var showingAbout = false
     @State private var showingAllHelp = false
 
-    private var model: WizardViewModel { workflow.wizard }
+    init(workflow: TargetWorkflowViewModel) {
+        self.workflow = workflow
+        self._model = ObservedObject(wrappedValue: workflow.wizard)
+    }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -64,11 +70,11 @@ struct RootView: View {
 }
 
 /// Content for the active wizard stage. Isolated into its own view so that
-/// `WizardViewModel` is tracked via `@Bindable` instead of the parent's
+/// `WizardViewModel` is tracked via `@ObservedObject` instead of the parent's
 /// `TargetWorkflowViewModel`, which does not observe nested `wizard` mutations.
 private struct WizardStageContent: View {
-    @Bindable var model: WizardViewModel
-    var workflow: TargetWorkflowViewModel
+    @ObservedObject var model: WizardViewModel
+    @ObservedObject var workflow: TargetWorkflowViewModel
 
     var body: some View {
         switch model.stage {

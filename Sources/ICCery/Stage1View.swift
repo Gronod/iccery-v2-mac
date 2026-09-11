@@ -5,7 +5,7 @@ import ICCeryCore
 /// docs/08). All documented element ids are wired as accessibility
 /// identifiers so the UI-test contract stays stable.
 struct Stage1View: View {
-    @Bindable var workflow: TargetWorkflowViewModel
+    @ObservedObject var workflow: TargetWorkflowViewModel
 
     var body: some View {
         ScrollView {

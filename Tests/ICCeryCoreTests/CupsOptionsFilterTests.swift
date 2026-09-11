@@ -71,10 +71,14 @@ final class ColorSyncSuppressorTests: XCTestCase {
         s.modeResolver = { name in
             if Self.missing.contains(name) { return nil }
             Self.currentSymbol = name
+            // `Self` inside a @convention(c) closure is a dynamic-Self
+            // capture — spell the (final) class name instead.
             return { _, modeArg in
-                Self.recorded.append((Self.currentSymbol, modeArg as String))
-                if let ok = Self.succeeding,
-                   Self.currentSymbol == ok.0, (modeArg as String) == ok.1 {
+                ColorSyncSuppressorTests.recorded.append(
+                    (ColorSyncSuppressorTests.currentSymbol, modeArg as String))
+                if let ok = ColorSyncSuppressorTests.succeeding,
+                   ColorSyncSuppressorTests.currentSymbol == ok.0,
+                   (modeArg as String) == ok.1 {
                     return 0
                 }
                 return 1
