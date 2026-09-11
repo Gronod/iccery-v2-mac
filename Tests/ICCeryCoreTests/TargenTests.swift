@@ -290,7 +290,7 @@ struct ArgyllRunnerTargenTests {
         #expect(ti1URL.lastPathComponent == "mock_test.ti1")
     }
 
-    @Test("Failed targen execution throws processFailed")
+    @Test("Failed targen execution throws toolFailed")
     func failedTargenExecution() async throws {
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
@@ -318,7 +318,8 @@ struct ArgyllRunnerTargenTests {
             workingDirectory: tempDir
         )
 
-        await #expect(throws: ArgyllRunnerError.self) {
+        await #expect(throws: ArgyllRunnerError.toolFailed(
+            tool: "targen", code: 1, logs: ["Error: something went wrong"])) {
             try await runner.runTargen(config: config)
         }
     }
@@ -351,7 +352,8 @@ struct ArgyllRunnerTargenTests {
             workingDirectory: tempDir
         )
 
-        await #expect(throws: ArgyllRunnerError.self) {
+        await #expect(throws: ArgyllRunnerError.missingArtefact(
+            tempDir.appendingPathComponent("no_file.ti1").path)) {
             try await runner.runTargen(config: config)
         }
     }

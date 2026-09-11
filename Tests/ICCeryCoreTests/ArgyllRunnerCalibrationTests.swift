@@ -5,13 +5,13 @@ import Testing
 @Suite("ArgyllRunner Calibration")
 struct ArgyllRunnerCalibrationTests {
 
-    private func makeRunner() -> ArgyllRunner {
+    private func makeRunner(processManager: ProcessManager = ProcessManager()) -> ArgyllRunner {
         let binDir = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .appendingPathComponent("ICCeryUITests/Fixtures/bin")
         return ArgyllRunner(
-            processManager: .shared,
+            processManager: processManager,
             binaryResolver: BinaryResolver(overrideDir: binDir)
         )
     }
@@ -44,8 +44,9 @@ struct ArgyllRunnerCalibrationTests {
     @Test("Calibration targen from foo runs as process id targen_CAL_foo")
     func calibrationTargenProcessId() async throws {
         let testRoot = try makeTestDir()
-        let runner = makeRunner()
-        let events = ProcessManager.shared.events()
+        let pm = ProcessManager()
+        let runner = makeRunner(processManager: pm)
+        let events = pm.events()
         // Subscribed before spawn; the exit event is emitted before
         // runCalibrationTargen returns, so this always terminates.
         let sawExit = Task {
@@ -87,10 +88,28 @@ struct ArgyllRunnerCalibrationTests {
         try? FileManager.default.removeItem(at: testRoot)
     }
 
-    @Test("printcal failure throws printcalFailed")
+    @Test("printcal failure throws toolFailed")
     func printcalFailureThrows() async throws {
         let testRoot = try makeTestDir()
-        let runner = makeRunner()
+        defer { try? FileManager.default.removeItem(at: testRoot) }
+
+        // Per-test mock printcal that always fails — no global
+        // environment mutation, no shared fixture changes.
+        let binDir = try makeTestDir()
+        defer { try? FileManager.default.removeItem(at: binDir) }
+        let mockURL = binDir.appendingPathComponent("printcal")
+        try """
+        #!/bin/sh
+        echo "printcal mock failure" >&2
+        exit 1
+        """.write(to: mockURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: mockURL.path)
+
+        let runner = ArgyllRunner(
+            processManager: ProcessManager(),
+            binaryResolver: BinaryResolver(bundledRoot: binDir, overrideDir: binDir)
+        )
         let output = testRoot.appendingPathComponent("CAL_demo.cal")
         let config = PrintcalConfig(
             ti3Basename: "CAL_demo",
@@ -98,12 +117,9 @@ struct ArgyllRunnerCalibrationTests {
             outputURL: output
         )
 
-        setenv("ICCERY_MOCK_PRINTCAL_EXIT", "1", 1)
-        defer { unsetenv("ICCERY_MOCK_PRINTCAL_EXIT") }
-
-        await #expect(throws: (any Error).self) {
+        await #expect(throws: ArgyllRunnerError.toolFailed(
+            tool: "printcal", code: 1, logs: ["printcal mock failure\n"])) {
             _ = try await runner.runPrintcal(config: config)
         }
-        try? FileManager.default.removeItem(at: testRoot)
     }
 }
