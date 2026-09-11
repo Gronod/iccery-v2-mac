@@ -111,4 +111,21 @@ final class Milestone5UITests: XCTestCase {
             "Expected verification status, got '\(statusValue)'"
         )
     }
+
+    /// A failing colprof run surfaces through the session-wide wizard
+    /// notice only — no duplicate stage-local error view (issue #80).
+    func testProfileFailureShowsWizardNotice() throws {
+        app.launchEnvironment["ICCERY_MOCK_COLPROF_EXIT"] = "2"
+        launchApp()
+
+        let create = waitFor("btnCreateProfile")
+        XCTAssertTrue(create.isEnabled)
+        create.click()
+
+        let notice = element("noticeText")
+        XCTAssertTrue(notice.waitForExistence(timeout: 20))
+        XCTAssertTrue((notice.value as? String ?? "")
+            .contains("Profile creation failed"))
+        XCTAssertFalse(element("colprofLastError").exists)
+    }
 }

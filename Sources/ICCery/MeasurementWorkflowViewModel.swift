@@ -63,7 +63,8 @@ final class MeasurementWorkflowViewModel {
     var rows: [ChartreadRow] = []
     var swatchRows: [SwatchRow] = []
     var showRemoveSheetNotice = false
-    var lastError: String?
+    /// Stage-local chartread error notice (`#chartreadLastError`, #80).
+    var chartreadNotice: Notice?
     private var chartreadTask: Task<Void, Never>?
 
     // MARK: - Averaging
@@ -185,7 +186,7 @@ final class MeasurementWorkflowViewModel {
         isChartreadRunning = true
         chartreadState = .idle
         currentPrompt = nil
-        lastError = nil
+        chartreadNotice = nil
         chartreadLog.removeAll()
 
         // Optional: reset rows when starting a fresh first pass.
@@ -227,7 +228,10 @@ final class MeasurementWorkflowViewModel {
 
         case .exit(let code):
             if code != 0 {
-                lastError = "chartread exited with code \(code)"
+                chartreadNotice = Notice(
+                    kind: .error,
+                    text: "chartread exited with code \(code)"
+                )
             }
 
         case .completed(let canonicalURL):
@@ -235,7 +239,7 @@ final class MeasurementWorkflowViewModel {
             completePass(canonicalURL: canonicalURL)
 
         case .failed(let error):
-            lastError = error.localizedDescription
+            chartreadNotice = Notice(kind: .error, text: error.localizedDescription)
             chartreadState = .error
             isChartreadRunning = false
         }
@@ -381,7 +385,10 @@ final class MeasurementWorkflowViewModel {
             discoverPassSnapshots()
             wizard.refreshGating()
         } catch {
-            lastError = "Could not snapshot pass: \(error.localizedDescription)"
+            chartreadNotice = Notice(
+                kind: .error,
+                text: "Could not snapshot pass: \(error.localizedDescription)"
+            )
         }
     }
 
@@ -397,30 +404,32 @@ final class MeasurementWorkflowViewModel {
 
     func finishAndAverage() {
         guard !isFinishing, let cwd = workingDirectory, !passSnapshots.isEmpty else { return }
-        isFinishing = true
         finishNotice = nil
 
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                let canonical: URL
-                if self.passSnapshots.count == 1, let pass = self.passSnapshots.first {
-                    canonical = try MeasurementArtefacts.promotePass(
-                        pass: pass,
-                        basename: self.basename,
-                        cwd: cwd
-                    )
-                } else {
+                // No log reset: prior chartread output must be preserved.
+                let canonical = try await ProcessRunSupport.runLogged(
+                    setRunning: { self.isFinishing = $0 },
+                    resetLog: {},
+                    onLog: { self.chartreadLog.append(contentsOf: $0) }
+                ) { onLog in
+                    if self.passSnapshots.count == 1, let pass = self.passSnapshots.first {
+                        return try MeasurementArtefacts.promotePass(
+                            pass: pass,
+                            basename: self.basename,
+                            cwd: cwd
+                        )
+                    }
                     let config = AverageConfig(
                         workingDirectory: cwd,
                         basename: self.basename,
                         passFiles: self.passSnapshots
                     )
-                    canonical = try await self.environment.runner.runAverage(
+                    return try await self.environment.runner.runAverage(
                         config: config,
-                        onLogBatch: ProcessRunSupport.logSink { [weak self] batch in
-                            self?.chartreadLog.append(contentsOf: batch)
-                        }
+                        onLogBatch: onLog
                     )
                 }
                 self.discoverPassSnapshots()
@@ -465,7 +474,6 @@ final class MeasurementWorkflowViewModel {
                     )
                 }
             }
-            self.isFinishing = false
         }
     }
 }

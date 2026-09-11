@@ -95,13 +95,6 @@ struct CalibrationView: View {
                         .frame(minHeight: 80, maxHeight: 120)
                     }
                 }
-
-                if let error = model.lastError {
-                    Section {
-                        Text(error)
-                            .foregroundStyle(.red)
-                    }
-                }
             }
             .formStyle(.grouped)
 
