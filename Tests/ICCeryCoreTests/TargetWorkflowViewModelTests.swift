@@ -1,17 +1,15 @@
 import Foundation
-import Testing
+import XCTest
 @testable import ICCeryCore
 @testable import ICCery
 
 /// Dataset-import error contracts through the
 /// `importMeasurementDataset(from:)` seam (issue #80): parser and I/O
 /// failures must surface identically as a single `.error` Notice.
-@Suite("TargetWorkflowViewModel dataset import")
 @MainActor
-struct TargetWorkflowViewModelTests {
+final class TargetWorkflowViewModelTests: XCTestCase {
 
-    @Test("Malformed content (CGATSParseError) produces one .error notice prefixed 'Import failed:'")
-    func malformedDatasetNotice() throws {
+    func testMalformedDatasetNotice() throws {
         let env = try TestAppEnvironment.make()
         defer { env.cleanup() }
         let vm = TargetWorkflowViewModel(environment: env.environment)
@@ -21,13 +19,12 @@ struct TargetWorkflowViewModelTests {
 
         vm.importMeasurementDataset(from: bad)
 
-        let notice = try #require(vm.wizard.notice)
-        #expect(notice.kind == .error)
-        #expect(notice.text.hasPrefix("Import failed:"))
+        let notice = try XCTUnwrap(vm.wizard.notice)
+        XCTAssertEqual(notice.kind, .error)
+        XCTAssertTrue(notice.text.hasPrefix("Import failed:"))
     }
 
-    @Test("Missing file (CocoaError) produces one .error notice prefixed 'Import failed:'")
-    func missingDatasetNotice() throws {
+    func testMissingDatasetNotice() throws {
         let env = try TestAppEnvironment.make()
         defer { env.cleanup() }
         let vm = TargetWorkflowViewModel(environment: env.environment)
@@ -35,8 +32,8 @@ struct TargetWorkflowViewModelTests {
         let missing = env.root.appendingPathComponent("does-not-exist.ti3")
         vm.importMeasurementDataset(from: missing)
 
-        let notice = try #require(vm.wizard.notice)
-        #expect(notice.kind == .error)
-        #expect(notice.text.hasPrefix("Import failed:"))
+        let notice = try XCTUnwrap(vm.wizard.notice)
+        XCTAssertEqual(notice.kind, .error)
+        XCTAssertTrue(notice.text.hasPrefix("Import failed:"))
     }
 }

@@ -1,5 +1,5 @@
 import Foundation
-import Testing
+import XCTest
 @testable import ICCeryCore
 
 /// A `FileManager` subclass that reports a temporary directory as the
@@ -18,8 +18,7 @@ private final class TestFileManager: FileManager {
     }
 }
 
-@Suite("ProfileInstaller")
-struct ProfileInstallerTests {
+final class ProfileInstallerTests: XCTestCase {
 
     private func makeTempDir() throws -> URL {
         let fm = FileManager.default
@@ -39,8 +38,7 @@ struct ProfileInstallerTests {
         return url
     }
 
-    @Test("Installs .icc to user ColorSync folder")
-    func userInstall() throws {
+    func testUserInstall() throws {
         let fm = FileManager.default
         let tmp = try makeTempDir()
         let testFM = TestFileManager(home: tmp)
@@ -51,15 +49,14 @@ struct ProfileInstallerTests {
             fileManager: testFM
         )
 
-        #expect(result.registered)
-        #expect(!result.overwritten)
-        #expect(!result.renamed)
-        #expect(result.destPath.hasSuffix("test.icc"))
-        #expect(fm.fileExists(atPath: result.destPath))
+        XCTAssertTrue(result.registered)
+        XCTAssertFalse(result.overwritten)
+        XCTAssertFalse(result.renamed)
+        XCTAssertTrue(result.destPath.hasSuffix("test.icc"))
+        XCTAssertTrue(fm.fileExists(atPath: result.destPath))
     }
 
-    @Test("Overwrite succeeds and replaces the existing file")
-    func overwriteSucceeds() throws {
+    func testOverwriteSucceeds() throws {
         let fm = FileManager.default
         let tmp = try makeTempDir()
         let testFM = TestFileManager(home: tmp)
@@ -70,7 +67,7 @@ struct ProfileInstallerTests {
             config: InstallProfileConfig(sourceURL: source),
             fileManager: testFM
         )
-        #expect(!first.overwritten)
+        XCTAssertFalse(first.overwritten)
 
         // Change the source contents.
         let newBytes: [UInt8] = (0..<256).map { UInt8(($0 + 100) % 256) }
@@ -87,15 +84,14 @@ struct ProfileInstallerTests {
             fileManager: testFM
         )
 
-        #expect(second.overwritten)
-        #expect(!second.renamed)
-        #expect(fm.fileExists(atPath: second.destPath))
+        XCTAssertTrue(second.overwritten)
+        XCTAssertFalse(second.renamed)
+        XCTAssertTrue(fm.fileExists(atPath: second.destPath))
         let installed = try Data(contentsOf: URL(fileURLWithPath: second.destPath))
-        #expect(Array(installed) == newBytes)
+        XCTAssertEqual(Array(installed), newBytes)
     }
 
-    @Test("Preserves .icm source extension")
-    func preservesIcmExtension() throws {
+    func testPreservesIcmExtension() throws {
         let tmp = try makeTempDir()
         let testFM = TestFileManager(home: tmp)
         let source = try makeSource(at: tmp, name: "m5_profile.icm")
@@ -105,12 +101,11 @@ struct ProfileInstallerTests {
             fileManager: testFM
         )
 
-        #expect(URL(fileURLWithPath: result.destPath).pathExtension == "icm")
-        #expect(result.destPath.hasSuffix("m5_profile.icm"))
+        XCTAssertEqual(URL(fileURLWithPath: result.destPath).pathExtension, "icm")
+        XCTAssertTrue(result.destPath.hasSuffix("m5_profile.icm"))
     }
 
-    @Test("Rejects parent traversal in source path")
-    func rejectsParentTraversal() throws {
+    func testRejectsParentTraversal() throws {
         let fm = FileManager.default
         let tmp = try makeTempDir()
 
@@ -125,20 +120,19 @@ struct ProfileInstallerTests {
         let sourceURL = tmp
             .appendingPathComponent("..")
             .appendingPathComponent(naughtyName)
-        #expect(fm.fileExists(atPath: sourceURL.path))
+        XCTAssertTrue(fm.fileExists(atPath: sourceURL.path))
 
         do {
             _ = try ProfileInstaller.install(config: InstallProfileConfig(sourceURL: sourceURL))
-            Issue.record("Expected unsafeStem error")
+            XCTFail("Expected unsafeStem error")
         } catch let error as ProfileInstallError {
-            if case .unsafeStem = error { } else { Issue.record("Expected unsafeStem, got \(error)") }
+            if case .unsafeStem = error { } else { XCTFail("Expected unsafeStem, got \(error)") }
         } catch {
-            Issue.record("Unexpected error type: \(error)")
+            XCTFail("Unexpected error type: \(error)")
         }
     }
 
-    @Test("Allows stems with consecutive dots like foo..bar")
-    func allowsDoubleDotStem() throws {
+    func testAllowsDoubleDotStem() throws {
         let fm = FileManager.default
         let tmp = try makeTempDir()
         let testFM = TestFileManager(home: tmp)
@@ -149,23 +143,22 @@ struct ProfileInstallerTests {
             fileManager: testFM
         )
 
-        #expect(result.destPath.hasSuffix("foo..bar.icc"))
-        #expect(fm.fileExists(atPath: result.destPath))
+        XCTAssertTrue(result.destPath.hasSuffix("foo..bar.icc"))
+        XCTAssertTrue(fm.fileExists(atPath: result.destPath))
     }
 
-    @Test("Rejects source files that are too small")
-    func rejectsSmallSource() throws {
+    func testRejectsSmallSource() throws {
         let tmp = try makeTempDir()
         let source = tmp.appendingPathComponent("tiny.icc")
         try Data(repeating: 0, count: 64).write(to: source)
 
         do {
             _ = try ProfileInstaller.install(config: InstallProfileConfig(sourceURL: source))
-            Issue.record("Expected sourceTooSmall error")
+            XCTFail("Expected sourceTooSmall error")
         } catch let error as ProfileInstallError {
-            if case .sourceTooSmall = error { } else { Issue.record("Expected sourceTooSmall, got \(error)") }
+            if case .sourceTooSmall = error { } else { XCTFail("Expected sourceTooSmall, got \(error)") }
         } catch {
-            Issue.record("Unexpected error type: \(error)")
+            XCTFail("Unexpected error type: \(error)")
         }
     }
 }

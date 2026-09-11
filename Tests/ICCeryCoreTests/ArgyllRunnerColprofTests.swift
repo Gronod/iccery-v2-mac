@@ -1,5 +1,5 @@
 import Foundation
-import Testing
+import XCTest
 @testable import ICCeryCore
 
 final class LogHolder: @unchecked Sendable {
@@ -19,11 +19,9 @@ final class LogHolder: @unchecked Sendable {
     }
 }
 
-@Suite("ArgyllRunner colprof")
-struct ArgyllRunnerColprofTests {
+final class ArgyllRunnerColprofTests: XCTestCase {
 
-    @Test("Mock colprof produces .icc")
-    func colprofProducesIcc() async throws {
+    func testColprofProducesIcc() async throws {
         let binDir = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -43,15 +41,14 @@ struct ArgyllRunnerColprofTests {
             holder.append(batch)
         }
 
-        #expect(url.lastPathComponent == "testrun.icc")
-        #expect(FileManager.default.fileExists(atPath: url.path))
-        #expect(holder.lines.contains { $0.contains("Gamut mapping") })
+        XCTAssertEqual(url.lastPathComponent, "testrun.icc")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+        XCTAssertTrue(holder.lines.contains { $0.contains("Gamut mapping") })
 
         try? FileManager.default.removeItem(at: testRoot)
     }
 
-    @Test("Failing colprof throws toolFailed with code and logs")
-    func colprofFailureThrowsToolFailed() async throws {
+    func testColprofFailureThrowsToolFailed() async throws {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("colprof-fail-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -72,9 +69,11 @@ struct ArgyllRunnerColprofTests {
         )
         let config = ColprofConfig(basename: "failrun", workingDirectory: dir)
 
-        await #expect(throws: ArgyllRunnerError.toolFailed(
-            tool: "colprof", code: 4, logs: ["colprof broke"])) {
+        await assertAsyncThrows(expectedType: ArgyllRunnerError.self) {
             try await runner.runColprof(config: config)
+        } errorHandler: { error in
+            XCTAssertEqual(error, .toolFailed(
+                tool: "colprof", code: 4, logs: ["colprof broke"]))
         }
     }
 }

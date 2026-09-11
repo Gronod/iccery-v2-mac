@@ -1,13 +1,12 @@
-import Testing
 import Foundation
+import XCTest
 @testable import ICCeryCore
 @testable import ICCery
 
 /// Issue #29 — `CAL_` basename must be restored on relaunch and on any
 /// attempt to navigate to a non-calibration stage that would use it.
-@Suite("WizardCalibrationSession")
 @MainActor
-struct WizardCalibrationSessionTests {
+final class WizardCalibrationSessionTests: XCTestCase {
 
     private func tempURL() -> URL {
         FileManager.default.temporaryDirectory
@@ -24,8 +23,7 @@ struct WizardCalibrationSessionTests {
         return url
     }
 
-    @Test("Persist and restore calibrationOriginalBasename across a relaunch")
-    func relaunchRestoresOriginal() throws {
+    func testRelaunchRestoresOriginal() throws {
         let url = tempURL()
         let store = WizardStateStore(fileURL: url)
         var saved = WizardState(
@@ -39,14 +37,13 @@ struct WizardCalibrationSessionTests {
 
         let model = WizardViewModel(stateStore: store)
 
-        #expect(model.basename == "DemoTarget")
-        #expect(model.calibrationOriginalBasename == "")
-        #expect(model.sessionMode == .profile)
-        #expect(model.stage == .generate)
+        XCTAssertEqual(model.basename, "DemoTarget")
+        XCTAssertEqual(model.calibrationOriginalBasename, "")
+        XCTAssertEqual(model.sessionMode, .profile)
+        XCTAssertEqual(model.stage, .generate)
     }
 
-    @Test("go(to: .buildProfile) while basename is CAL_ refuses and restores the original")
-    func goToBuildProfileRefusesAndRestores() throws {
+    func testGoToBuildProfileRefusesAndRestores() throws {
         let dir = try tempDir()
         let url = tempURL()
         let store = WizardStateStore(fileURL: url)
@@ -60,14 +57,13 @@ struct WizardCalibrationSessionTests {
 
         model.go(to: .buildProfile)
 
-        #expect(model.basename == "DemoTarget")
-        #expect(model.calibrationOriginalBasename == "")
-        #expect(model.sessionMode == .profile)
-        #expect(model.stage == .calibrate)
+        XCTAssertEqual(model.basename, "DemoTarget")
+        XCTAssertEqual(model.calibrationOriginalBasename, "")
+        XCTAssertEqual(model.sessionMode, .profile)
+        XCTAssertEqual(model.stage, .calibrate)
     }
 
-    @Test("go(to: .layOutPrint) while basename is CAL_ stays in calibration")
-    func goToLayoutStaysCal() throws {
+    func testGoToLayoutStaysCal() throws {
         let dir = try tempDir()
         let url = tempURL()
         let store = WizardStateStore(fileURL: url)
@@ -81,9 +77,9 @@ struct WizardCalibrationSessionTests {
 
         model.go(to: .layOutPrint)
 
-        #expect(model.basename == "CAL_DemoTarget")
-        #expect(model.calibrationOriginalBasename == "DemoTarget")
-        #expect(model.sessionMode == .calibration)
-        #expect(model.stage == .layOutPrint)
+        XCTAssertEqual(model.basename, "CAL_DemoTarget")
+        XCTAssertEqual(model.calibrationOriginalBasename, "DemoTarget")
+        XCTAssertEqual(model.sessionMode, .calibration)
+        XCTAssertEqual(model.stage, .layOutPrint)
     }
 }

@@ -1,5 +1,5 @@
 import Foundation
-import Testing
+import XCTest
 @testable import ICCery
 
 /// Direct contracts for the shared logged-run helper (issue #80).
@@ -7,14 +7,12 @@ import Testing
 /// `runLogged` owns the running-flag transition (`false → true → false`)
 /// and the log-reset decision; these tests pin both sides of the
 /// contract plus the coalesced `@MainActor` log hop.
-@Suite("ProcessRunSupport runLogged")
 @MainActor
-struct ProcessRunSupportTests {
+final class ProcessRunSupportTests: XCTestCase {
 
     private struct SentinelError: Error {}
 
-    @Test("Success: running transitions [true, false], log resets once, batches reach the main actor, value preserved")
-    func successTransitions() async throws {
+    func testSuccessTransitions() async throws {
         var running: [Bool] = []
         var resets = 0
         var received: [String] = []
@@ -31,20 +29,19 @@ struct ProcessRunSupportTests {
             return 42
         }
 
-        #expect(result == 42)
-        #expect(running == [true, false])
-        #expect(resets == 1)
+        XCTAssertEqual(result, 42)
+        XCTAssertEqual(running, [true, false])
+        XCTAssertEqual(resets, 1)
 
         // The sink hops back through a main-actor Task; yield until the
         // coalesced batch lands.
         for _ in 0..<200 where received.isEmpty {
-            try await Task.sleep(for: .milliseconds(10))
+            try await Task.sleep(nanoseconds: 10_000_000)
         }
-        #expect(received == ["alpha", "beta"])
+        XCTAssertEqual(received, ["alpha", "beta"])
     }
 
-    @Test("Failure: running still transitions [true, false], log resets once, error is rethrown")
-    func failureTransitions() async throws {
+    func testFailureTransitions() async throws {
         var running: [Bool] = []
         var resets = 0
 
@@ -56,12 +53,12 @@ struct ProcessRunSupportTests {
             ) { _ -> Int in
                 throw SentinelError()
             }
-            Issue.record("Expected runLogged to rethrow")
+            XCTFail("Expected runLogged to rethrow")
         } catch is SentinelError {
             // Expected path.
         }
 
-        #expect(running == [true, false])
-        #expect(resets == 1)
+        XCTAssertEqual(running, [true, false])
+        XCTAssertEqual(resets, 1)
     }
 }

@@ -1,4 +1,3 @@
-import Testing
 import XCTest
 import Foundation
 @testable import ICCeryCore
@@ -257,8 +256,7 @@ final class PrinttargManifestTests: XCTestCase {
     }
 }
 
-@Suite("ArgyllRunner Printtarg")
-struct ArgyllRunnerPrinttargTests {
+final class ArgyllRunnerPrinttargTests: XCTestCase {
 
     private func makeFixture(_ body: String, name: String = "printtarg") throws -> URL {
         let dir = FileManager.default.temporaryDirectory
@@ -310,8 +308,7 @@ struct ArgyllRunnerPrinttargTests {
         try Data(bytes).write(to: url)
     }
 
-    @Test("Successful printtarg emits .ti2 + manifest + PNG previews")
-    func success() async throws {
+    func testSuccess() async throws {
         let dir = try makeFixture("""
             #!/bin/sh
             last=""
@@ -330,18 +327,17 @@ struct ArgyllRunnerPrinttargTests {
             processManager: ProcessManager(), binaryResolver: resolver)
         let config = PrinttargConfig(basename: "pt", workingDirectory: dir)
         let result = try await runner.runPrinttarg(config: config)
-        #expect(result.ti2URL.lastPathComponent == "pt.ti2")
-        #expect(result.manifest.pages.count == 1)
-        #expect(result.pages.count == 1)
+        XCTAssertEqual(result.ti2URL.lastPathComponent, "pt.ti2")
+        XCTAssertEqual(result.manifest.pages.count, 1)
+        XCTAssertEqual(result.pages.count, 1)
         let png = result.pages[0].previewPNG
-        #expect(png != nil)
+        XCTAssertNotNil(png)
         if let png {
-            #expect(png.prefix(8) == Data([0x89,0x50,0x4E,0x47,0x0D,0x0A,0x1A,0x0A]))
+            XCTAssertEqual(png.prefix(8), Data([0x89,0x50,0x4E,0x47,0x0D,0x0A,0x1A,0x0A]))
         }
     }
 
-    @Test("Non-zero exit throws toolFailed and stays on stage")
-    func failure() async throws {
+    func testFailure() async throws {
         let dir = try makeFixture("""
             #!/bin/sh
             echo "oops" >&2
@@ -351,15 +347,16 @@ struct ArgyllRunnerPrinttargTests {
         let runner = ArgyllRunner(
             processManager: ProcessManager(),
             binaryResolver: BinaryResolver(bundledRoot: dir, overrideDir: dir))
-        await #expect(throws: ArgyllRunnerError.toolFailed(
-            tool: "printtarg", code: 3, logs: ["oops"])) {
+        await assertAsyncThrows(expectedType: ArgyllRunnerError.self) {
             try await runner.runPrinttarg(
                 config: PrinttargConfig(basename: "x", workingDirectory: dir))
+        } errorHandler: { error in
+            XCTAssertEqual(error, .toolFailed(
+                tool: "printtarg", code: 3, logs: ["oops"]))
         }
     }
 
-    @Test("Exit 0 without manifest → malformedManifest")
-    func noManifest() async throws {
+    func testNoManifest() async throws {
         let dir = try makeFixture("""
             #!/bin/sh
             last=""
@@ -372,14 +369,13 @@ struct ArgyllRunnerPrinttargTests {
         let runner = ArgyllRunner(
             processManager: ProcessManager(),
             binaryResolver: BinaryResolver(bundledRoot: dir, overrideDir: dir))
-        await #expect(throws: ArgyllRunnerError.self) {
+        await assertAsyncThrows(expectedType: ArgyllRunnerError.self) {
             try await runner.runPrinttarg(
                 config: PrinttargConfig(basename: "x", workingDirectory: dir))
         }
     }
 
-    @Test("Exit 0 without .ti2 → missingArtefact")
-    func noTi2() async throws {
+    func testNoTi2() async throws {
         let dir = try makeFixture("""
             #!/bin/sh
             printf '{\\n"event":"manifest",\\n"pages":[]\\n}\\n'
@@ -389,14 +385,13 @@ struct ArgyllRunnerPrinttargTests {
         let runner = ArgyllRunner(
             processManager: ProcessManager(),
             binaryResolver: BinaryResolver(bundledRoot: dir, overrideDir: dir))
-        await #expect(throws: ArgyllRunnerError.self) {
+        await assertAsyncThrows(expectedType: ArgyllRunnerError.self) {
             try await runner.runPrinttarg(
                 config: PrinttargConfig(basename: "x", workingDirectory: dir))
         }
     }
 
-    @Test("Deterministic config produces byte-identical .ti2")
-    func determinism() async throws {
+    func testDeterminism() async throws {
         let dir = try makeFixture("""
             #!/bin/sh
             last=""
@@ -416,6 +411,6 @@ struct ArgyllRunnerPrinttargTests {
             config: PrinttargConfig(basename: "b", workingDirectory: dir))
         let d1 = try Data(contentsOf: dir.appendingPathComponent("a.ti2"))
         let d2 = try Data(contentsOf: dir.appendingPathComponent("b.ti2"))
-        #expect(d1 == d2)
+        XCTAssertEqual(d1, d2)
     }
 }

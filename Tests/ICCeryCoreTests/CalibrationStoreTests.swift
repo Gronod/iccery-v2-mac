@@ -1,9 +1,8 @@
 import Foundation
-import Testing
+import XCTest
 @testable import ICCeryCore
 
-@Suite("CalibrationStore")
-struct CalibrationStoreTests {
+final class CalibrationStoreTests: XCTestCase {
 
     private static let sampleCal = """
     CTI3
@@ -23,8 +22,7 @@ struct CalibrationStoreTests {
     END_DATA
     """
 
-    @Test("Loads metadata and curves from .cal")
-    func parseCal() async throws {
+    func testParseCal() async throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("test_\(UUID().uuidString).cal")
         try Self.sampleCal.write(to: url, atomically: true, encoding: .utf8)
@@ -33,17 +31,16 @@ struct CalibrationStoreTests {
         try await store.load(url: url)
 
         let data = await store.data
-        #expect(data?.colorRep == "RGB")
-        #expect(data?.descriptor == "Test printer")
-        #expect(data?.maxTac == 300)
-        #expect(data?.curves.count == 3)
+        XCTAssertEqual(data?.colorRep, "RGB")
+        XCTAssertEqual(data?.descriptor, "Test printer")
+        XCTAssertEqual(data?.maxTac, 300)
+        XCTAssertEqual(data?.curves.count, 3)
 
         let r = data?.curves.first { $0.channel == "R" }
-        #expect(r?.output == [0, 64, 255])
+        XCTAssertEqual(r?.output, [0, 64, 255])
     }
 
-    @Test("Staleness is true for a very old calibration")
-    func staleCalibration() async throws {
+    func testStaleCalibration() async throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("stale_\(UUID().uuidString).cal")
         try Self.sampleCal.write(to: url, atomically: true, encoding: .utf8)
@@ -51,11 +48,10 @@ struct CalibrationStoreTests {
         let store = CalibrationStore(staleDays: 0)
         try await store.load(url: url)
         let stale = await store.isStale(comparedTo: "Other")
-        #expect(stale == true)
+        XCTAssertEqual(stale, true)
     }
 
-    @Test("Printer mismatch is flagged as stale")
-    func printerMismatch() async throws {
+    func testPrinterMismatch() async throws {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("mismatch_\(UUID().uuidString).cal")
         try Self.sampleCal.write(to: url, atomically: true, encoding: .utf8)
@@ -64,6 +60,6 @@ struct CalibrationStoreTests {
         try await store.load(url: url)
         await store.setPrinterName("Printer A")
         let stale = await store.isStale(comparedTo: "Printer B")
-        #expect(stale == true)
+        XCTAssertEqual(stale, true)
     }
 }
