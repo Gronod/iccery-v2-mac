@@ -138,16 +138,20 @@ struct Stage4View: View {
                 .textFieldStyle(.roundedBorder)
                 .accessibilityIdentifier("colprofCopyright")
 
-            Toggle("Apply calibration curve", isOn: $model.applyCalibration)
-                .accessibilityIdentifier("colprofApplyCalibration")
+            // Nested VStack keeps the parent at the Swift 5.7 ViewBuilder
+            // 10-child limit (Xcode 14.2 / macOS 12 CI runner, #111).
+            VStack(alignment: .leading, spacing: 12) {
+                Toggle("Apply calibration curve", isOn: $model.applyCalibration)
+                    .accessibilityIdentifier("colprofApplyCalibration")
 
-            if model.applyCalibration {
-                HStack {
-                    TextField("Calibration .cal file", text: $model.calibrationFile)
-                        .textFieldStyle(.roundedBorder)
-                        .accessibilityIdentifier("colprofCalibrationFile")
-                    Button("Browse…") { model.browseForCalibrationFile() }
-                        .accessibilityIdentifier("btnBrowseCalibrationFile")
+                if model.applyCalibration {
+                    HStack {
+                        TextField("Calibration .cal file", text: $model.calibrationFile)
+                            .textFieldStyle(.roundedBorder)
+                            .accessibilityIdentifier("colprofCalibrationFile")
+                        Button("Browse…") { model.browseForCalibrationFile() }
+                            .accessibilityIdentifier("btnBrowseCalibrationFile")
+                    }
                 }
             }
         }
