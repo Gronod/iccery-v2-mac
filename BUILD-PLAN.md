@@ -1,6 +1,6 @@
 # BUILD-PLAN.md — ICCery v2 Mac
 
-Spec snapshot: `docs/`. Source of tickets: Gitea milestones M1–M6 + Later.
+Spec snapshot: `docs/`. Source of tickets: Gitea milestones M1–M6 + M10 (id 32) + Later.
 
 ## Sprint rule
 Do not start milestone N+1 implementation until milestone N **CI/mock gate** is green.
@@ -17,9 +17,14 @@ Hardware gates block *release of that sprint*, not filing, and not starting codi
 | M5 | Profile / verify / install | 23–27 | colprof → `.icc`; profcheck parse; atomic history; install into temp dir | Full `.ti1`→`.icc`; profile visible in ColorSync Utility |
 | M6 | Gamut, Stage 0, CGATS, release | 28–32 | `.gam` fixtures; cal argv; CGATS round-trip; signed sidecars; dmgbuild | Stage 0 on a real printer; gamut of a real profile |
 | M7 | Deduplicate & consolidate | 79–86 | Shared runner loop; JSONFileStore; preset↔config maps; Notice/log helper; ProcessManager factory; PrintSession VM; identity + colour-type cleanup | N/A |
+| M8 | Deduplicate & consolidate | 79–86 | (already shipped on `develop`) | N/A |
+| M9 | macOS 12 / Xcode 14.2 retarget | (milestone/m9-monterey, PR #145) | XCTest + ObservableObject + macos-12 CI | N/A |
+| M10 | Studio workflow | 146–149 | Media library + spot-read + gamut compare + project file unit/UI smoke | Real printer+paper+.cal; live spot-read; two `.gam`; reopen `.icceryproj` |
 | Later | Quartz / TargetPrint | 16 | `ICCeryPrintKit` standalone + seam test | 1:1 on paper vs TIFF |
 
-Issue **16 is not an M3 or M6 exit gate.**
+M8 and M9 merged to `develop` via PR #104 / #145; M10 starts from `800c980`.
+
+Issue **16 is not an M3, M6, or M10 exit gate.**
 
 ## Branch taxonomy
 
