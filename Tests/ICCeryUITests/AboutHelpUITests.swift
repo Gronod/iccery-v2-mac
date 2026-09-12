@@ -64,7 +64,8 @@ final class AboutHelpUITests: XCTestCase {
         let toggle = app.buttons["btnToggleAllHelp"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 10))
 
-        let sidebar = app.groups.containing(.button, identifier: "openSettingsBtn").element
+        let sidebar = app.descendants(matching: .any)["sidebar"]
+        XCTAssertTrue(sidebar.waitForExistence(timeout: 10))
         let before = sidebar.frame
 
         toggle.click()
