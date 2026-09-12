@@ -1,13 +1,12 @@
+import Combine
 import Foundation
-import Observation
 import SwiftUI
 import ICCeryCore
 
 /// Stage 0 calibration workflow: generate wedge, print, measure, and
 /// compute `.cal` curves.
 @MainActor
-@Observable
-final class CalibrationViewModel {
+final class CalibrationViewModel: ObservableObject {
 
     let workflow: TargetWorkflowViewModel
     let profile: ProfileWorkflowViewModel
@@ -15,16 +14,16 @@ final class CalibrationViewModel {
 
     // MARK: - Form state
 
-    var colourSpace: ColourSpace = .cmyk
-    var steps: Int = 21
-    var whitePatches: Int = 4
-    var includeNeutralEmphasis: Bool = false
-    var inkLimit: String = "320"
-    var applyToProfile: Bool = false
-    var computedCalURL: URL?
-    var calibrationLog: [String] = []
-    var isGenerating = false
-    var isComputing = false
+    @Published var colourSpace: ColourSpace = .cmyk
+    @Published var steps: Int = 21
+    @Published var whitePatches: Int = 4
+    @Published var includeNeutralEmphasis: Bool = false
+    @Published var inkLimit: String = "320"
+    @Published var applyToProfile: Bool = false
+    @Published var computedCalURL: URL?
+    @Published var calibrationLog: [String] = []
+    @Published var isGenerating = false
+    @Published var isComputing = false
 
     init(workflow: TargetWorkflowViewModel, profile: ProfileWorkflowViewModel, environment: AppEnvironment) {
         self.workflow = workflow

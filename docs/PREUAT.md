@@ -17,7 +17,7 @@ Unsigned CI artefacts (e.g. a `.zip` from a non-notarized workflow run) are **no
 scripts/fetch-argyll.sh          # populates Vendor/Argyll and signs sidecars
 xcodegen generate --project .
 xcodebuild test -scheme ICCery -destination 'platform=macOS' \
-    ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO \
+    ARCHS="$(uname -m)" \
     CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY='-'
 ```
 

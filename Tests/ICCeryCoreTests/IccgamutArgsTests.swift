@@ -1,16 +1,14 @@
 import Foundation
-import Testing
+import XCTest
 @testable import ICCeryCore
 
-@Suite("IccgamutArgs")
-struct IccgamutArgsTests {
+final class IccgamutArgsTests: XCTestCase {
 
-    @Test("Density is 10 and not a directory")
-    func densityNotDirectory() throws {
+    func testDensityNotDirectory() throws {
         let config = IccgamutConfig(
             profileURL: URL(fileURLWithPath: "/tmp/MyProfile.icc")
         )
         let args = try IccgamutArgs.build(config: config)
-        #expect(args == ["-v", "-d", "10", "/tmp/MyProfile.icc"])
+        XCTAssertEqual(args, ["-v", "-d", "10", "/tmp/MyProfile.icc"])
     }
 }

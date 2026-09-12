@@ -1,9 +1,8 @@
-import Testing
+import XCTest
 import Foundation
 @testable import ICCeryCore
 
-@Suite("BinaryResolver")
-struct BinaryResolverTests {
+final class BinaryResolverTests: XCTestCase {
 
     private func makeTree(_ body: (URL) throws -> Void) throws -> URL {
         let root = FileManager.default.temporaryDirectory
@@ -22,16 +21,16 @@ struct BinaryResolverTests {
         }
     }
 
-    @Test func overrideDirWinsWhenFileExists() throws {
+    func testOverrideDirWinsWhenFileExists() throws {
         let override = try makeTree { root in
             try touch(root.appendingPathComponent("targen"))
         }
         let bundled = try makeTree { _ in }
         let r = BinaryResolver(bundledRoot: bundled, overrideDir: override)
-        #expect(r.resolve("targen") == override.appendingPathComponent("targen"))
+        XCTAssertEqual(r.resolve("targen"), override.appendingPathComponent("targen"))
     }
 
-    @Test func overrideFallsThroughWhenMissing() throws {
+    func testOverrideFallsThroughWhenMissing() throws {
         let override = try makeTree { _ in }
         let bundled = try makeTree { root in
             let dir = root.appendingPathComponent("macos-universal")
@@ -39,10 +38,10 @@ struct BinaryResolverTests {
             try touch(dir.appendingPathComponent("instlist"))
         }
         let r = BinaryResolver(bundledRoot: bundled, overrideDir: override)
-        #expect(r.resolve("targen").path.contains("macos-universal/targen"))
+        XCTAssertTrue(r.resolve("targen").path.contains("macos-universal/targen"))
     }
 
-    @Test func universalPreferredWhenMarkerPresent() throws {
+    func testUniversalPreferredWhenMarkerPresent() throws {
         let bundled = try makeTree { root in
             for dir in ["macos-universal", "macos-x86_64"] {
                 let d = root.appendingPathComponent(dir)
@@ -51,10 +50,10 @@ struct BinaryResolverTests {
             }
         }
         let r = BinaryResolver(bundledRoot: bundled)
-        #expect(r.platformDir() == "macos-universal")
+        XCTAssertEqual(r.platformDir(), "macos-universal")
     }
 
-    @Test func fallsBackToArchDir() throws {
+    func testFallsBackToArchDir() throws {
         let bundled = try makeTree { root in
             let d = root.appendingPathComponent("macos-x86_64")
             try FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
@@ -64,20 +63,20 @@ struct BinaryResolverTests {
             bundledRoot: bundled,
             archDirs: ["macos-universal", "macos-x86_64"]
         )
-        #expect(r.platformDir() == "macos-x86_64")
+        XCTAssertEqual(r.platformDir(), "macos-x86_64")
     }
 
-    @Test func missingEverythingReturnsConstructedPath() throws {
+    func testMissingEverythingReturnsConstructedPath() throws {
         let bundled = try makeTree { _ in }
         let r = BinaryResolver(bundledRoot: bundled)
         // v1 semantic: path is returned; spawn surfaces the error.
-        #expect(r.resolve("targen").path.hasSuffix("macos-universal/targen"))
-        #expect(!r.exists(r.resolve("targen")))
+        XCTAssertTrue(r.resolve("targen").path.hasSuffix("macos-universal/targen"))
+        XCTAssertFalse(r.exists(r.resolve("targen")))
     }
 
-    @Test func mockAndGamutPaths() throws {
+    func testMockAndGamutPaths() throws {
         let r = BinaryResolver(bundledRoot: URL(fileURLWithPath: "/x"))
-        #expect(r.mock("chartread").path == "/x/mocks/chartread.mock")
-        #expect(r.referenceGamut("sRGB.gam").path == "/x/reference_gamuts/sRGB.gam")
+        XCTAssertEqual(r.mock("chartread").path, "/x/mocks/chartread.mock")
+        XCTAssertEqual(r.referenceGamut("sRGB.gam").path, "/x/reference_gamuts/sRGB.gam")
     }
 }

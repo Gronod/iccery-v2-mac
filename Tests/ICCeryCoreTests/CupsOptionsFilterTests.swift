@@ -1,4 +1,4 @@
-import Testing
+import XCTest
 import Foundation
 @testable import ICCeryCore
 @testable import ICCery
@@ -6,48 +6,42 @@ import AppKit
 import ApplicationServices
 
 /// Issue 14 — PMPrintSettingsToOptions capture filter (docs/11 layer ⑥).
-@Suite("CupsOptionsFilter")
-struct CupsOptionsFilterTests {
+final class CupsOptionsFilterTests: XCTestCase {
 
-    @Test("Drops com.apple.*, collate, copies, job-sheets, AP_* keys")
-    func dropsReserved() {
+    func testDropsReserved() {
         let raw = "AP_ColorMatchingMode=AP_ApplicationColorMatching "
             + "AP.ColorMatchingMode=AP_ApplicationColorMatching "
             + "com.apple.print.JobTicket.PMTotalSidesImaged=0 "
             + "collate=true copies=1 job-sheets=none,none "
             + "pserrorhandler-requested=standard "
             + "MediaType=PhotographicGlossy"
-        #expect(CupsOptionsFilter.filter(raw) == "MediaType=PhotographicGlossy")
+        XCTAssertEqual(CupsOptionsFilter.filter(raw), "MediaType=PhotographicGlossy")
     }
 
-    @Test("Keeps relevant driver keys, order preserved")
-    func keepsRelevant() {
+    func testKeepsRelevant() {
         let raw = "InputSlot=Rear PageSize=A4 CNIJIntent2=4 "
             + "Resolution=600x600dpi Duplex=None"
-        #expect(CupsOptionsFilter.filter(raw) == raw)
+        XCTAssertEqual(CupsOptionsFilter.filter(raw), raw)
     }
 
-    @Test("Permissive: unknown non-com.* keys survive")
-    func keepsUnknown() {
+    func testKeepsUnknown() {
         let raw = "VendorFooBar=baz MediaType=Plain"
-        #expect(CupsOptionsFilter.filter(raw) == raw)
+        XCTAssertEqual(CupsOptionsFilter.filter(raw), raw)
     }
 
-    @Test("Drops empty keys and values")
-    func dropsEmpty() {
+    func testDropsEmpty() {
         let raw = "=noval MediaType= InputSlot=Rear"
         // "MediaType=" has an empty value → dropped; "=noval" empty key.
-        #expect(CupsOptionsFilter.filter(raw) == "InputSlot=Rear")
+        XCTAssertEqual(CupsOptionsFilter.filter(raw), "InputSlot=Rear")
     }
 
-    @Test("extractMediaType prefers MediaType then EPIJ_Medi")
-    func extractMedia() {
-        #expect(CupsParsers.extractMediaType(
-            fromOptionsString: "MediaType=Photo EPIJ_Medi=1") == "Photo")
-        #expect(CupsParsers.extractMediaType(
-            fromOptionsString: "EPIJ_Medi=7") == "7")
-        #expect(CupsParsers.extractMediaType(
-            fromOptionsString: "PageSize=A4") == nil)
+    func testExtractMedia() {
+        XCTAssertEqual(CupsParsers.extractMediaType(
+            fromOptionsString: "MediaType=Photo EPIJ_Medi=1"), "Photo")
+        XCTAssertEqual(CupsParsers.extractMediaType(
+            fromOptionsString: "EPIJ_Medi=7"), "7")
+        XCTAssertNil(CupsParsers.extractMediaType(
+            fromOptionsString: "PageSize=A4"))
     }
 }
 
@@ -55,9 +49,8 @@ struct CupsOptionsFilterTests {
 /// `@convention(c)` closures can't capture, so recording goes through
 /// a file-scope recorder keyed by global state; no private symbols are
 /// touched.
-@Suite("ColorSyncSuppressor")
 @MainActor
-struct ColorSyncSuppressorTests {
+final class ColorSyncSuppressorTests: XCTestCase {
 
     /// Fake PMPrintSession — the injected resolver never dereferences it.
     private var fakeSession: PMPrintSession {
@@ -78,10 +71,14 @@ struct ColorSyncSuppressorTests {
         s.modeResolver = { name in
             if Self.missing.contains(name) { return nil }
             Self.currentSymbol = name
+            // `Self` inside a @convention(c) closure is a dynamic-Self
+            // capture — spell the (final) class name instead.
             return { _, modeArg in
-                Self.recorded.append((Self.currentSymbol, modeArg as String))
-                if let ok = Self.succeeding,
-                   Self.currentSymbol == ok.0, (modeArg as String) == ok.1 {
+                ColorSyncSuppressorTests.recorded.append(
+                    (ColorSyncSuppressorTests.currentSymbol, modeArg as String))
+                if let ok = ColorSyncSuppressorTests.succeeding,
+                   ColorSyncSuppressorTests.currentSymbol == ok.0,
+                   (modeArg as String) == ok.1 {
                     return 0
                 }
                 return 1
@@ -90,55 +87,50 @@ struct ColorSyncSuppressorTests {
         return s
     }
 
-    @Test("Attempt order: Lock → Mode → NoLock, AP_ prefix first")
-    func attemptOrder() {
+    func testAttemptOrder() {
         Self.recorded = []
         Self.succeeding = nil
         Self.missing = ["PMSessionSetColorMatchingModeLock"]
         let s = makeSuppressor()
-        #expect(s.applySPIMode(to: fakeSession) == false)
+        XCTAssertEqual(s.applySPIMode(to: fakeSession), false)
         // Lock is unresolvable → skipped; the rest plays out in order.
-        #expect(Self.recorded.map { "\($0.0)|\($0.1)" }
-            == ColorMatchingAttempts.attempts
+        XCTAssertEqual(Self.recorded.map { "\($0.0)|\($0.1)" }, ColorMatchingAttempts.attempts
                 .filter { $0.symbol != "PMSessionSetColorMatchingModeLock" }
                 .map { "\($0.symbol)|\($0.mode)" })
     }
 
-    @Test("First zero wins — later symbols/modes not called")
-    func firstZeroWins() {
+    func testFirstZeroWins() {
         Self.recorded = []
         Self.succeeding = ("PMSessionSetColorMatchingModeLock",
                            "AP_ApplicationColorMatching")
         Self.missing = []
         let s = makeSuppressor()
-        #expect(s.applySPIMode(to: fakeSession))
-        #expect(Self.recorded.map { "\($0.0)|\($0.1)" } == [
+        XCTAssertTrue(s.applySPIMode(to: fakeSession))
+        XCTAssertEqual(Self.recorded.map { "\($0.0)|\($0.1)" }, [
             "PMSessionSetColorMatchingModeLock|AP_ApplicationColorMatching",
         ])
     }
 
-    @Test("Mode fallback: AP_ rejected → ApplicationColorMatching tried")
-    func modeFallback() {
+    func testModeFallback() {
         Self.recorded = []
         Self.succeeding = ("PMSessionSetColorMatchingModeLock",
                            "ApplicationColorMatching")
         Self.missing = []
         let s = makeSuppressor()
-        #expect(s.applySPIMode(to: fakeSession))
-        #expect(Self.recorded[0].0 == "PMSessionSetColorMatchingModeLock")
-        #expect(Self.recorded[0].1 == "AP_ApplicationColorMatching")
-        #expect(Self.recorded[1].0 == "PMSessionSetColorMatchingModeLock")
-        #expect(Self.recorded[1].1 == "ApplicationColorMatching")
-        #expect(Self.recorded.count == 2)
+        XCTAssertTrue(s.applySPIMode(to: fakeSession))
+        XCTAssertEqual(Self.recorded[0].0, "PMSessionSetColorMatchingModeLock")
+        XCTAssertEqual(Self.recorded[0].1, "AP_ApplicationColorMatching")
+        XCTAssertEqual(Self.recorded[1].0, "PMSessionSetColorMatchingModeLock")
+        XCTAssertEqual(Self.recorded[1].1, "ApplicationColorMatching")
+        XCTAssertEqual(Self.recorded.count, 2)
     }
 
-    @Test("All symbols missing → false, no calls")
-    func allMissing() {
+    func testAllMissing() {
         Self.recorded = []
         Self.succeeding = nil
         Self.missing = Set(ColorMatchingAttempts.symbols)
         let s = makeSuppressor()
-        #expect(s.applySPIMode(to: fakeSession) == false)
-        #expect(Self.recorded.isEmpty)
+        XCTAssertEqual(s.applySPIMode(to: fakeSession), false)
+        XCTAssertTrue(Self.recorded.isEmpty)
     }
 }

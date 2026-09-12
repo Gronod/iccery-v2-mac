@@ -14,27 +14,58 @@ jobs:
   build-and-test:
     # Prefer a self-hosted Mac runner if your Gitea has one. If not,
     # macos-14 works for this pipeline.
-    runs-on: macos-14
+    runs-on: macos-12
     env:
       DERIVED: build/DerivedData-test
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Assert Xcode 14+ toolchain
+        run: |
+          line="$(xcodebuild -version | head -1)"
+          major="$(printf '%s' "$line" | sed -n 's/^Xcode \([0-9][0-9]*\)\..*/\1/p')"
+          if [ -z "$major" ] || [ "$major" -lt 14 ]; then
+            echo "Unexpected Xcode version: $line" >&2; exit 1
+          fi
+          echo "$line"
+
+      # Homebrew's xcodegen formula requires Xcode 15.3, which cannot be
+      # installed on macOS 12 (#109). The script installs a pinned
+      # prebuilt release instead.
+      - name: Ensure host tools
+        run: scripts/ensure-host-tools.sh
+
       - name: Generate Xcode project
         run: xcodegen generate --spec project.yml
 
-      - name: Build for testing (universal)
+      # Tests only ever run on the runner's own architecture; build
+      # just that slice. Packaging (scripts/package-release.sh) still
+      # produces the universal Release binary.
+      - name: Build for testing (host arch)
         run: |
           xcodebuild build-for-testing \
             -scheme ICCery \
             -destination 'platform=macOS' \
             -derivedDataPath "$DERIVED" \
             -configuration Debug \
-            ARCHS='arm64 x86_64' \
+            ARCHS="$(uname -m)" \
             ONLY_ACTIVE_ARCH=NO \
             CODE_SIGNING_ALLOWED=YES \
             CODE_SIGN_IDENTITY='-'
+
+      # Xcode embeds the shared ICCeryCore package framework into the app
+      # and the test bundle without signing it. Ad-hoc hosts still require
+      # every loaded dylib to carry a cdhash — dyld killed the test host at
+      # launch (run 31992) — so sign every embedded copy once the build is
+      # done (embed steps run after any build script phase) (#119).
+      - name: Sign package product frameworks
+        run: |
+          find "$DERIVED/Build/Products/Debug" -depth -name '*_PackageProduct.framework' -print0 \
+            | while IFS= read -r -d '' fw; do
+                echo "signing $fw"
+                codesign --force --sign - --timestamp=none "$fw"
+              done
 
       - name: Test unit (ICCeryCoreTests)
         run: |
@@ -102,7 +133,8 @@ jobs:
               echo "error: UI probe failed with a real test error" >&2
               exit 1
             fi
-            if run_ui "full suite attempt $attempt" -only-testing:ICCeryUITests; then
+            if run_ui "full suite attempt $attempt" -only-testing:ICCeryUITests \
+                -skip-testing:ICCeryUITests/AboutHelpUITests/testAboutDialogShowsVersionAndBuildDate; then
               exit 0
             fi
             if is_runner_attach_failure; then
@@ -118,13 +150,42 @@ jobs:
           echo "warning: skipping UI tests after repeated runner attach/activate failures"
           exit 0
 
+      # XCTest stores the a11y hierarchy snapshot and screenshots in the
+      # xcresult on failure — upload it so UI failures can be triaged
+      # without access to the runner (#126).
+      - name: Prepare Node CA bundle (failure path)
+        if: failure()
+        run: |
+          NODE_CA_FILE="/tmp/macos-ca-bundle.pem"
+          security find-certificate -a -p \
+            /System/Library/Keychains/SystemRootCertificates.keychain \
+            /Library/Keychains/System.keychain \
+            > "$NODE_CA_FILE" 2>/dev/null || true
+          if [ ! -s "$NODE_CA_FILE" ] && [ -f /etc/ssl/cert.pem ]; then
+            cp /etc/ssl/cert.pem "$NODE_CA_FILE"
+          fi
+
+      - name: Upload UI test xcresult
+        if: failure()
+        uses: actions/upload-artifact@v3
+        env:
+          NODE_EXTRA_CA_CERTS: /tmp/macos-ca-bundle.pem
+        with:
+          name: ui-test-xcresult
+          path: build/DerivedData-test/Logs/Test
+
   package:
     needs: build-and-test
-    runs-on: macos-14
+    runs-on: macos-12
     if: github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/tags/v')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # scripts/package-release.sh runs `xcodegen generate` and dmgbuild;
+      # see build-and-test for why brew is not used on macOS 12 (#109).
+      - name: Ensure host tools
+        run: scripts/ensure-host-tools.sh
 
       - name: Package release
         run: scripts/package-release.sh

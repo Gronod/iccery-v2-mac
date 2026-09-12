@@ -559,7 +559,7 @@ public actor ProcessManager {
         // Start a watchdog in case the `readabilityHandler` EOFs never
         // arrive after the process exits (e.g. a hung pipe).
         child.finalizeTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(2))
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
             guard let self else { return }
             await self.forceKill(id: id)
             await self.forceFinalize(id: id)

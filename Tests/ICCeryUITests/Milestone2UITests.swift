@@ -85,6 +85,16 @@ final class Milestone2UITests: XCTestCase {
         return el
     }
 
+    /// Assert an element stays absent after a short dwell — unlike
+    /// `waitForExistence`, which always burns its full timeout on the
+    /// negative path.
+    private func assertAbsent(_ el: XCUIElement, dwell: TimeInterval = 0.5,
+                              _ message: String = "expected element to stay absent",
+                              file: StaticString = #filePath, line: UInt = #line) {
+        RunLoop.current.run(until: Date().addingTimeInterval(dwell))
+        XCTAssertFalse(el.exists, message, file: file, line: line)
+    }
+
     private func staticText(_ exact: String) -> XCUIElement {
         let inApp = app.staticTexts[exact]
         if inApp.exists { return inApp }
@@ -316,7 +326,7 @@ final class Milestone2UITests: XCTestCase {
             "identifier BEGINSWITH 'btnDeletePreset-'")
         XCTAssertTrue(deleteButtons.firstMatch.waitForExistence(timeout: 5))
         deleteButtons.firstMatch.click()
-        XCTAssertFalse(staticText("UI Test Preset").waitForExistence(timeout: 3))
+        assertAbsent(staticText("UI Test Preset"))
     }
 
     /// Export a preset to JSON and re-import it (issue #11).
@@ -348,7 +358,7 @@ final class Milestone2UITests: XCTestCase {
         let deleteButtons = buttonsMatching(
             "identifier BEGINSWITH 'btnDeletePreset-'")
         deleteButtons.firstMatch.click()
-        XCTAssertFalse(staticText("RoundTrip").waitForExistence(timeout: 3))
+        assertAbsent(staticText("RoundTrip"))
 
         // Copy the export to the import path so the hook picks it up.
         try FileManager.default.copyItem(at: exportURL, to: importURL)

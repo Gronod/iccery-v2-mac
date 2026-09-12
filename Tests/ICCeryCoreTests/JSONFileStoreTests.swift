@@ -1,26 +1,23 @@
 import Foundation
-import Testing
+import XCTest
 @testable import ICCeryCore
 
-@Suite("JSONFileStore")
-struct JSONFileStoreTests {
+final class JSONFileStoreTests: XCTestCase {
     private func tempURL() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("json-store-\(UUID().uuidString).json")
     }
 
-    @Test("Missing file returns default")
-    func missingFileDefaults() throws {
+    func testMissingFileDefaults() throws {
         let store = JSONFileStore<AppSettings>(
             fileURL: tempURL(),
             corrupt: .throwCorrupt,
             defaultValue: { .default }
         )
-        #expect(try store.load() == .default)
+        XCTAssertEqual(try store.load(), .default)
     }
 
-    @Test("Corrupt file with replaceWithDefault returns default and leaves bytes")
-    func corruptDefaults() throws {
+    func testCorruptDefaults() throws {
         let url = tempURL()
         try "{ not json".write(to: url, atomically: true, encoding: .utf8)
         let store = JSONFileStore<AppSettings>(
@@ -28,13 +25,12 @@ struct JSONFileStoreTests {
             corrupt: .replaceWithDefault,
             defaultValue: { .default }
         )
-        #expect(try store.load() == .default)
+        XCTAssertEqual(try store.load(), .default)
         let kept = try String(contentsOf: url, encoding: .utf8)
-        #expect(kept == "{ not json")
+        XCTAssertEqual(kept, "{ not json")
     }
 
-    @Test("Corrupt file with throwCorrupt throws and leaves bytes")
-    func corruptThrows() throws {
+    func testCorruptThrows() throws {
         let url = tempURL()
         try "not json".write(to: url, atomically: true, encoding: .utf8)
         let store = JSONFileStore<[Int]>(
@@ -42,15 +38,12 @@ struct JSONFileStoreTests {
             corrupt: .throwCorrupt,
             defaultValue: { [] }
         )
-        #expect(throws: DecodingError.self) {
-            _ = try store.load()
-        }
+        XCTAssertThrowsError(try store.load()) { error in XCTAssertTrue(error is DecodingError) }
         let kept = try String(contentsOf: url, encoding: .utf8)
-        #expect(kept == "not json")
+        XCTAssertEqual(kept, "not json")
     }
 
-    @Test("Pretty sorted keys")
-    func prettySorted() throws {
+    func testPrettySorted() throws {
         let url = tempURL()
         let store = JSONFileStore<AppSettings>(
             fileURL: url,
@@ -59,8 +52,8 @@ struct JSONFileStoreTests {
         )
         try store.save(.default)
         let text = try String(contentsOf: url, encoding: .utf8)
-        #expect(text.contains("\n"))
-        #expect(text.contains("\"delta_e_good_max\""))
+        XCTAssertTrue(text.contains("\n"))
+        XCTAssertTrue(text.contains("\"delta_e_good_max\""))
         // Lexical key sorting: ascending order of top-level keys.
         let keys = [
             "ask_before_overwrite_profile",
@@ -75,7 +68,7 @@ struct JSONFileStoreTests {
         var lastIndex = text.startIndex
         for key in keys {
             guard let range = text.range(of: "\"\(key)\"", range: lastIndex..<text.endIndex) else {
-                Issue.record("missing or out-of-order key \(key)")
+                XCTFail("missing or out-of-order key \(key)")
                 return
             }
             lastIndex = range.upperBound

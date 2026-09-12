@@ -1,11 +1,10 @@
-import Testing
+import XCTest
 import Foundation
 @testable import ICCeryCore
 
 /// Issue 12 — CUPS enumeration parsers on recorded fixtures
 /// (docs/10–11). No live `lpstat`/`lpoptions` is spawned here.
-@Suite("CupsParsers")
-struct CupsParsersTests {
+final class CupsParsersTests: XCTestCase {
 
     // Recorded on an Epson XP-55 + Canon Pro9500 host.
     private let lpstatE = """
@@ -34,112 +33,102 @@ struct CupsParsersTests {
         cupsPrintQuality/cupsPrintQuality: Draft *Normal High
         """
 
-    @Test("lpstat -e: one destination per line; empty = success")
-    func destinations() {
-        #expect(CupsParsers.lpstatDestinations(lpstatE) == [
+    func testDestinations() {
+        XCTAssertEqual(CupsParsers.lpstatDestinations(lpstatE), [
             "Canon_Pro9500_II_series_XPS",
             "Epson_XP_55_LPD",
             "EPSON_XP_55_Series",
         ])
-        #expect(CupsParsers.lpstatDestinations("") == [])
+        XCTAssertEqual(CupsParsers.lpstatDestinations(""), [])
     }
 
-    @Test("lpstat -p: idle / now-printing / disabled statuses")
-    func statuses() {
+    func testStatuses() {
         let s = CupsParsers.lpstatStatuses(lpstatP)
-        #expect(s["Canon_Pro9500_II_series_XPS"] == .idle)
-        #expect(s["Epson_XP_55_LPD"] == .printing)
-        #expect(s["EPSON_XP_55_Series"] == .stopped)
+        XCTAssertEqual(s["Canon_Pro9500_II_series_XPS"], .idle)
+        XCTAssertEqual(s["Epson_XP_55_LPD"], .printing)
+        XCTAssertEqual(s["EPSON_XP_55_Series"], .stopped)
     }
 
-    @Test("lpstat -d: default destination or none")
-    func defaultDestination() {
-        #expect(CupsParsers.lpstatDefault(
-            "system default destination: Canon_Pro9500_II_series_XPS\n")
-            == "Canon_Pro9500_II_series_XPS")
-        #expect(CupsParsers.lpstatDefault("no system default destination\n") == nil)
+    func testDefaultDestination() {
+        XCTAssertEqual(CupsParsers.lpstatDefault(
+            "system default destination: Canon_Pro9500_II_series_XPS\n"), "Canon_Pro9500_II_series_XPS")
+        XCTAssertNil(CupsParsers.lpstatDefault("no system default destination\n"))
     }
 
-    @Test("lpoptions -p: quoted printer-info, bare flags ignored")
-    func displayName() {
-        #expect(CupsParsers.lpoptionsDisplayName(lpoptionsP) == "EPSON XP-55 Series")
-        #expect(CupsParsers.lpoptionsDisplayName("printer-type=42\n") == nil)
+    func testDisplayName() {
+        XCTAssertEqual(CupsParsers.lpoptionsDisplayName(lpoptionsP), "EPSON XP-55 Series")
+        XCTAssertNil(CupsParsers.lpoptionsDisplayName("printer-type=42\n"))
     }
 
-    @Test("lpoptions -l: key/label split, * marks the default")
-    func optionListings() {
+    func testOptionListings() {
         let listings = CupsParsers.lpoptionsList(lpoptionsL)
-        #expect(listings.count == 6)
+        XCTAssertEqual(listings.count, 6)
 
         let page = listings[0]
-        #expect(page.key == "PageSize")
-        #expect(page.label == "Media Size")
-        #expect(page.defaultChoice == "A4")
-        #expect(page.choices.contains("Custom.WIDTHxHEIGHT"))
-        #expect(!page.choices.contains("*A4"))
+        XCTAssertEqual(page.key, "PageSize")
+        XCTAssertEqual(page.label, "Media Size")
+        XCTAssertEqual(page.defaultChoice, "A4")
+        XCTAssertTrue(page.choices.contains("Custom.WIDTHxHEIGHT"))
+        XCTAssertFalse(page.choices.contains("*A4"))
 
         let slot = listings[1]
-        #expect(slot.key == "InputSlot")
-        #expect(slot.choices == ["Auto", "Main", "Photo", "Rear"])
-        #expect(slot.defaultChoice == "Main")
+        XCTAssertEqual(slot.key, "InputSlot")
+        XCTAssertEqual(slot.choices, ["Auto", "Main", "Photo", "Rear"])
+        XCTAssertEqual(slot.defaultChoice, "Main")
     }
 
-    @Test("capabilities: trays/sizes index 1-based, media uses detected key")
-    func capabilities() {
+    func testCapabilities() {
         let service = CupsService()
         let listings = CupsParsers.lpoptionsList(lpoptionsL)
         let caps = service.capabilities(from: listings, ppd: nil)
 
-        #expect(caps.trays == [
+        XCTAssertEqual(caps.trays, [
             PrinterTray(id: 1, name: "Auto"),
             PrinterTray(id: 2, name: "Main"),
             PrinterTray(id: 3, name: "Photo"),
             PrinterTray(id: 4, name: "Rear"),
         ])
-        #expect(caps.paperSizes.first == PrinterPaperSize(id: 1, name: "3.5x5"))
-        #expect(caps.paperSizes.count == 10)
-        #expect(caps.mediaTypes.map(\.id) == [
+        XCTAssertEqual(caps.paperSizes.first, PrinterPaperSize(id: 1, name: "3.5x5"))
+        XCTAssertEqual(caps.paperSizes.count, 10)
+        XCTAssertEqual(caps.mediaTypes.map(\.id), [
             "Stationery", "PhotographicHighGloss", "Photographic",
             "PhotographicMatte", "Envelope",
         ])
-        #expect(caps.supportsOrientation)
+        XCTAssertTrue(caps.supportsOrientation)
     }
 
-    @Test("PPD enrichment maps id → human label")
-    func ppdLabels() {
+    func testPpdLabels() {
         let ppd = """
             *CNIJMediaType 42/Photo Paper Plus Semi-gloss: "<</MediaType(42)>>"
             *CNIJMediaType 0/Plain Paper: ""
             *en_US.CNIJMediaType 13/Envelope: ""
             """
         let labels = CupsParsers.ppdChoiceLabels(ppd, key: "CNIJMediaType")
-        #expect(labels["42"] == "Photo Paper Plus Semi-gloss")
-        #expect(labels["0"] == "Plain Paper")
-        #expect(labels["13"] == "Envelope")
+        XCTAssertEqual(labels["42"], "Photo Paper Plus Semi-gloss")
+        XCTAssertEqual(labels["0"], "Plain Paper")
+        XCTAssertEqual(labels["13"], "Envelope")
     }
 
-    @Test("detectMediaTypeKey prefers vendor keys in order")
-    func mediaTypeKey() {
-        #expect(CupsParsers.detectMediaTypeKey(
-            optionKeys: ["MediaType", "CNIJMediaType"]) == "CNIJMediaType")
-        #expect(CupsParsers.detectMediaTypeKey(
-            optionKeys: ["PageSize", "MediaType"]) == "MediaType")
-        #expect(CupsParsers.detectMediaTypeKey(optionKeys: ["PageSize"]) == nil)
+    func testMediaTypeKey() {
+        XCTAssertEqual(CupsParsers.detectMediaTypeKey(
+            optionKeys: ["MediaType", "CNIJMediaType"]), "CNIJMediaType")
+        XCTAssertEqual(CupsParsers.detectMediaTypeKey(
+            optionKeys: ["PageSize", "MediaType"]), "MediaType")
+        XCTAssertNil(CupsParsers.detectMediaTypeKey(optionKeys: ["PageSize"]))
     }
 
-    @Test("Driver bypass: Canon Intent2 > Intent; Epson CCor > CMat")
-    func driverBypass() {
+    func testDriverBypass() {
         func pair(_ keys: Set<String>) -> String? {
             CupsParsers.detectDriverColorBypass(optionKeys: keys)
                 .map { "\($0.key)=\($0.value)" }
         }
-        #expect(pair(["CNIJIntent2", "CNIJIntent"]) == "CNIJIntent2=4")
-        #expect(pair(["CNIJIntent"]) == "CNIJIntent=4")
-        #expect(pair(["EPIJ_CCor", "EPIJ_CMat"]) == "EPIJ_CCor=0")
-        #expect(pair(["EPIJ_CMat"]) == "EPIJ_CMat=3")
-        #expect(pair(["StpColorCorrection"]) == "StpColorCorrection=Uncorrected")
-        #expect(pair(["ColorCorrection"]) == "ColorCorrection=Uncorrected")
-        #expect(pair(["EpsonColorMode"]) == "EpsonColorMode=Off")
-        #expect(pair(["PageSize"]) == nil)
+        XCTAssertEqual(pair(["CNIJIntent2", "CNIJIntent"]), "CNIJIntent2=4")
+        XCTAssertEqual(pair(["CNIJIntent"]), "CNIJIntent=4")
+        XCTAssertEqual(pair(["EPIJ_CCor", "EPIJ_CMat"]), "EPIJ_CCor=0")
+        XCTAssertEqual(pair(["EPIJ_CMat"]), "EPIJ_CMat=3")
+        XCTAssertEqual(pair(["StpColorCorrection"]), "StpColorCorrection=Uncorrected")
+        XCTAssertEqual(pair(["ColorCorrection"]), "ColorCorrection=Uncorrected")
+        XCTAssertEqual(pair(["EpsonColorMode"]), "EpsonColorMode=Off")
+        XCTAssertNil(pair(["PageSize"]))
     }
 }

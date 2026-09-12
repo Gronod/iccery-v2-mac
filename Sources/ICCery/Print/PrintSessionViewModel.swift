@@ -1,23 +1,22 @@
+import Combine
 import Foundation
-import Observation
 import ICCeryCore
 
 /// CUPS queue selection, bound print panel, and `lp` spool (issues 12–15, 17 / #85).
 @MainActor
-@Observable
-final class PrintSessionViewModel {
+final class PrintSessionViewModel: ObservableObject {
     let wizard: WizardViewModel
     let environment: AppEnvironment
 
-    var printers: [Printer] = []
-    var selectedPrinter = ""
-    var printerCaps = PrinterCapabilities()
-    var selectedTray: Int?
-    var selectedMediaType: String?
-    var printOrientation = "portrait"
-    var capturedCupsOptions: [String: String] = [:]
-    var printNotice: Notice?
-    var isPrinting = false
+    @Published var printers: [Printer] = []
+    @Published var selectedPrinter = ""
+    @Published var printerCaps = PrinterCapabilities()
+    @Published var selectedTray: Int?
+    @Published var selectedMediaType: String?
+    @Published var printOrientation = "portrait"
+    @Published var capturedCupsOptions: [String: String] = [:]
+    @Published var printNotice: Notice?
+    @Published var isPrinting = false
     private var printTask: Task<Void, Never>?
 
     init(wizard: WizardViewModel, environment: AppEnvironment) {
@@ -111,7 +110,8 @@ final class PrintSessionViewModel {
         isPrinting = true
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
-            defer { self.printTask = nil }
+            // `defer` cannot mutate isolated state under Swift 5.7
+            // (Xcode 14.2 / macOS 12 runner), so clear explicitly (#113).
             var printed = 0
             for page in result.pages {
                 do {
@@ -124,6 +124,7 @@ final class PrintSessionViewModel {
                             + error.localizedDescription
                     )
                     isPrinting = false
+                    self.printTask = nil
                     return
                 }
             }
@@ -133,6 +134,7 @@ final class PrintSessionViewModel {
                 autoHideAfter: nil
             )
             isPrinting = false
+            self.printTask = nil
         }
         printTask = task
     }
@@ -142,7 +144,6 @@ final class PrintSessionViewModel {
         isPrinting = true
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
-            defer { self.printTask = nil }
             do {
                 try await spool(page, index: page.index, pageSize: pageSize)
                 printNotice = Notice(
@@ -157,6 +158,7 @@ final class PrintSessionViewModel {
                 )
             }
             isPrinting = false
+            self.printTask = nil
         }
         printTask = task
     }

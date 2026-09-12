@@ -1,13 +1,12 @@
-import Testing
 import Foundation
+import XCTest
 @testable import ICCeryCore
 @testable import ICCery
 
 /// Issue 13 — panel outcome mapping (cancel → nil, ok → result).
 /// The real `NSPrintPanel` is never run in tests; these exercise the
 /// `UITestHooks` seam the UI tests rely on.
-@Suite("PrintPanelStub")
-struct PrintPanelStubTests {
+final class PrintPanelStubTests: XCTestCase {
 
     private func withEnv(
         _ vars: [String: String?],
@@ -28,19 +27,17 @@ struct PrintPanelStubTests {
         try body()
     }
 
-    @Test("Cancel returns nil — not an error")
-    func cancelIsNil() throws {
+    func testCancelIsNil() throws {
         try withEnv([
             "ICCERY_UI_TESTING": "1",
             "ICCERY_TEST_PRINT_PANEL": "cancel",
         ]) {
-            #expect(UITestHooks.printPanelStubbed)
-            #expect(UITestHooks.printPanelResult(forQueue: "q") == nil)
+            XCTAssertTrue(UITestHooks.printPanelStubbed)
+            XCTAssertNil(UITestHooks.printPanelResult(forQueue: "q"))
         }
     }
 
-    @Test("OK returns captured options + selected printer")
-    func okResult() throws {
+    func testOkResult() throws {
         try withEnv([
             "ICCERY_UI_TESTING": "1",
             "ICCERY_TEST_PRINT_PANEL": "ok",
@@ -48,15 +45,14 @@ struct PrintPanelStubTests {
             "ICCERY_TEST_PANEL_PRINTER": "Other_Queue",
         ]) {
             let result = UITestHooks.printPanelResult(forQueue: "q")
-            #expect(result?.selectedPrinter == "Other_Queue")
-            #expect(result?.options.cupsOptions == "MediaType=Photo InputSlot=Rear")
-            #expect(result?.options.mediaType == "Photo")
-            #expect(result?.options.ppdUncorrectedPassthrough == true)
+            XCTAssertEqual(result?.selectedPrinter, "Other_Queue")
+            XCTAssertEqual(result?.options.cupsOptions, "MediaType=Photo InputSlot=Rear")
+            XCTAssertEqual(result?.options.mediaType, "Photo")
+            XCTAssertEqual(result?.options.ppdUncorrectedPassthrough, true)
         }
     }
 
-    @Test("OK defaults selected printer to the opened queue")
-    func okDefaultsPrinter() throws {
+    func testOkDefaultsPrinter() throws {
         try withEnv([
             "ICCERY_UI_TESTING": "1",
             "ICCERY_TEST_PRINT_PANEL": "ok",
@@ -64,8 +60,8 @@ struct PrintPanelStubTests {
             "ICCERY_TEST_PANEL_PRINTER": nil,
         ]) {
             let result = UITestHooks.printPanelResult(forQueue: "My_Queue")
-            #expect(result?.selectedPrinter == "My_Queue")
-            #expect(result?.options.cupsOptions == nil)
+            XCTAssertEqual(result?.selectedPrinter, "My_Queue")
+            XCTAssertNil(result?.options.cupsOptions)
         }
     }
 }

@@ -1,9 +1,8 @@
-import Testing
+import XCTest
 import Foundation
 @testable import ICCeryCore
 
-@Suite("PrinttargArgs")
-struct PrinttargArgsTests {
+final class PrinttargArgsTests: XCTestCase {
 
     private func config(
         instrument: PrintInstrument = .i1,
@@ -28,136 +27,121 @@ struct PrinttargArgsTests {
         )
     }
 
-    @Test("Baseline: -v -u -i i1 -p A4 -R 1 -t 300")
-    func baseline() throws {
+    func testBaseline() throws {
         let args = try PrinttargArgs.build(config: config())
-        #expect(args == ["-v", "-u", "-i", "i1", "-p", "A4",
+        XCTAssertEqual(args, ["-v", "-u", "-i", "i1", "-p", "A4",
                          "-R", "1", "-t", "300", "target"])
     }
 
-    @Test("Default layout is deterministic -R 1, never bare")
-    func deterministicDefault() throws {
+    func testDeterministicDefault() throws {
         let args = try PrinttargArgs.build(config: config())
-        #expect(args.contains("-R"))
-        #expect(!args.contains("-r"))
-        #expect(args[args.firstIndex(of: "-R")! + 1] == "1")
+        XCTAssertTrue(args.contains("-R"))
+        XCTAssertFalse(args.contains("-r"))
+        XCTAssertEqual(args[args.firstIndex(of: "-R")! + 1], "1")
     }
 
-    @Test("Custom seed -R N; seed < 1 throws")
-    func customSeed() throws {
+    func testCustomSeed() throws {
         let args = try PrinttargArgs.build(config: config(layout: .customSeed, seed: 42))
-        #expect(args[args.firstIndex(of: "-R")! + 1] == "42")
-        #expect(throws: PrinttargArgError.self) {
-            try PrinttargArgs.build(config: config(layout: .customSeed, seed: 0))
+        XCTAssertEqual(args[args.firstIndex(of: "-R")! + 1], "42")
+        XCTAssertThrowsError(try PrinttargArgs.build(config: config(layout: .customSeed, seed: 0))) { error in
+            XCTAssertTrue(error is PrinttargArgError)
         }
     }
 
-    @Test("Raster emits -r and supersedes seed (printtarg -r, not targen -r)")
-    func raster() throws {
+    func testRaster() throws {
         let args = try PrinttargArgs.build(config: config(layout: .raster, seed: 9))
-        #expect(args.contains("-r"))
-        #expect(!args.contains("-R"))
+        XCTAssertTrue(args.contains("-r"))
+        XCTAssertFalse(args.contains("-R"))
     }
 
-    @Test("Label: -d emits the resolved string, not a colour space")
-    func label() throws {
+    func testLabel() throws {
         let args = try PrinttargArgs.build(
             config: config(label: "ICCery - t - P - I - D - A - 01/02/2026 03:04"))
         let i = args.firstIndex(of: "-d")!
-        #expect(args[i + 1].hasPrefix("ICCery - t"))
+        XCTAssertTrue(args[i + 1].hasPrefix("ICCery - t"))
     }
 
-    @Test("Bit depth: -t 8-bit, -T 16-bit; DPI range 72-600")
-    func bitDepthAndDPI() throws {
-        #expect(try PrinttargArgs.build(config: config(bitDepth: .sixteen, dpi: 600))
+    func testBitDepthAndDPI() throws {
+        XCTAssertTrue(try PrinttargArgs.build(config: config(bitDepth: .sixteen, dpi: 600))
             .contains("-T"))
-        #expect(try PrinttargArgs.build(config: config(bitDepth: .eight, dpi: 72))
+        XCTAssertTrue(try PrinttargArgs.build(config: config(bitDepth: .eight, dpi: 72))
             .contains("-t"))
-        #expect(throws: PrinttargArgError.self) {
-            try PrinttargArgs.build(config: config(dpi: 71))
+        XCTAssertThrowsError(try PrinttargArgs.build(config: config(dpi: 71))) { error in
+            XCTAssertTrue(error is PrinttargArgError)
         }
-        #expect(throws: PrinttargArgError.self) {
-            try PrinttargArgs.build(config: config(dpi: 601))
+        XCTAssertThrowsError(try PrinttargArgs.build(config: config(dpi: 601))) { error in
+            XCTAssertTrue(error is PrinttargArgError)
         }
     }
 
-    @Test("All instruments emit their Argyll code")
-    func instruments() throws {
+    func testInstruments() throws {
         let expected: [(PrintInstrument, String)] = [
             (.i1, "i1"), (.p3, "p3"), (.cm, "CM"), (.ss, "SS"),
             (.dtp20, "20"), (.dtp22, "22"), (.dtp41, "41"), (.dtp51, "51"),
         ]
         for (inst, code) in expected {
             let args = try PrinttargArgs.build(config: config(instrument: inst))
-            #expect(args[args.firstIndex(of: "-i")! + 1] == code)
+            XCTAssertEqual(args[args.firstIndex(of: "-i")! + 1], code)
         }
     }
 
-    @Test("All fixed page sizes; custom emits WxH in mm")
-    func pageSizes() throws {
+    func testPageSizes() throws {
         for size in PageSize.allCases where size != .custom {
             let args = try PrinttargArgs.build(config: config(pageSize: size))
-            #expect(args[args.firstIndex(of: "-p")! + 1] == size.rawValue)
+            XCTAssertEqual(args[args.firstIndex(of: "-p")! + 1], size.rawValue)
         }
         let custom = try PrinttargArgs.build(config: config(
             pageSize: .custom, customW: 150, customH: 220))
-        #expect(custom[custom.firstIndex(of: "-p")! + 1] == "150x220")
+        XCTAssertEqual(custom[custom.firstIndex(of: "-p")! + 1], "150x220")
     }
 
-    @Test("Custom page below 50 mm throws")
-    func customPageTooSmall() {
-        #expect(throws: PrinttargArgError.self) {
-            try PrinttargArgs.build(config: config(pageSize: .custom, customW: 49.9))
+    func testCustomPageTooSmall() {
+        XCTAssertThrowsError(try PrinttargArgs.build(config: config(pageSize: .custom, customW: 49.9))) { error in
+            XCTAssertTrue(error is PrinttargArgError)
         }
-        #expect(throws: PrinttargArgError.self) {
-            try PrinttargArgs.build(config: config(pageSize: .custom, customH: 10))
+        XCTAssertThrowsError(try PrinttargArgs.build(config: config(pageSize: .custom, customH: 10))) { error in
+            XCTAssertTrue(error is PrinttargArgError)
         }
     }
 
-    @Test("Calibration: -K applies, -I embeds")
-    func calibrationFlags() throws {
+    func testCalibrationFlags() throws {
         let k = try PrinttargArgs.build(config: config(calFile: "/tmp/a.cal"))
-        #expect(k[k.firstIndex(of: "-K")! + 1] == "/tmp/a.cal")
+        XCTAssertEqual(k[k.firstIndex(of: "-K")! + 1], "/tmp/a.cal")
         let i = try PrinttargArgs.build(config: config(calFile: "/tmp/a.cal", calEmbed: true))
-        #expect(i[i.firstIndex(of: "-I")! + 1] == "/tmp/a.cal")
-        #expect(!i.contains("-K"))
+        XCTAssertEqual(i[i.firstIndex(of: "-I")! + 1], "/tmp/a.cal")
+        XCTAssertFalse(i.contains("-K"))
     }
 
-    @Test("CAL_ basename never gets -K or -I")
-    func calProtection() throws {
+    func testCalProtection() throws {
         let args = try PrinttargArgs.build(
             config: config(calFile: "/tmp/a.cal", basename: "CAL_test"))
-        #expect(!args.contains("-K"))
-        #expect(!args.contains("-I"))
+        XCTAssertFalse(args.contains("-K"))
+        XCTAssertFalse(args.contains("-I"))
     }
 
-    @Test("Whitespace-only label emits no -d; whitespace-only calibration emits no -K/-I")
-    func whitespaceOptions() throws {
+    func testWhitespaceOptions() throws {
         let args = try PrinttargArgs.build(
             config: config(label: "   \n ", calFile: " \t "))
-        #expect(!args.contains("-d"))
-        #expect(!args.contains("-K"))
-        #expect(!args.contains("-I"))
+        XCTAssertFalse(args.contains("-d"))
+        XCTAssertFalse(args.contains("-K"))
+        XCTAssertFalse(args.contains("-I"))
     }
 
-    @Test("Label and calibration values are trimmed before emission")
-    func trimmedOptions() throws {
+    func testTrimmedOptions() throws {
         let args = try PrinttargArgs.build(
             config: config(label: "  My Label  ", calFile: "  /tmp/a.cal  "))
-        #expect(args[args.firstIndex(of: "-d")! + 1] == "My Label")
-        #expect(args[args.firstIndex(of: "-K")! + 1] == "/tmp/a.cal")
+        XCTAssertEqual(args[args.firstIndex(of: "-d")! + 1], "My Label")
+        XCTAssertEqual(args[args.firstIndex(of: "-K")! + 1], "/tmp/a.cal")
     }
 
-    @Test("Unsafe basename throws")
-    func unsafeBasename() {
-        #expect(throws: PathSecurity.Error.self) {
-            try PrinttargArgs.build(config: config(basename: "../x"))
+    func testUnsafeBasename() {
+        XCTAssertThrowsError(try PrinttargArgs.build(config: config(basename: "../x"))) { error in
+            XCTAssertTrue(error is PathSecurity.Error)
         }
     }
 }
 
-@Suite("PrinttargLabel")
-struct PrinttargLabelTests {
+final class PrinttargLabelTests: XCTestCase {
 
     private var fixedDate: Date {
         var comps = DateComponents()
@@ -166,37 +150,33 @@ struct PrinttargLabelTests {
         return Calendar(identifier: .gregorian).date(from: comps)!
     }
 
-    @Test("Automatic label: ICCery - basename - P - I - DP - AP - DD/MM/YYYY HH:MM")
-    func automatic() {
+    func testAutomatic() {
         let label = PrinttargLabel.automatic(
             basename: "tgt",
             metadata: TargetLabelMetadata(
                 printer: "Epson", inkSet: "CMYK",
                 driverPaper: "Photo", actualPaper: "Matte"),
             date: fixedDate, timeZone: .current)
-        #expect(label.hasPrefix("ICCery - tgt - Epson - CMYK - Photo - Matte - "))
-        #expect(label.hasSuffix("03/02/2026") || label.contains("/02/2026"))
+        XCTAssertTrue(label.hasPrefix("ICCery - tgt - Epson - CMYK - Photo - Matte - "))
+        XCTAssertTrue(label.hasSuffix("03/02/2026") || label.contains("/02/2026"))
     }
 
-    @Test("Missing metadata becomes Unspecified")
-    func unspecified() {
+    func testUnspecified() {
         let label = PrinttargLabel.automatic(
             basename: "tgt", metadata: TargetLabelMetadata(),
             date: fixedDate, timeZone: .current)
-        #expect(label.contains(" - Unspecified - Unspecified - Unspecified - Unspecified - "))
+        XCTAssertTrue(label.contains(" - Unspecified - Unspecified - Unspecified - Unspecified - "))
     }
 
-    @Test("Manual label wins over automatic")
-    func manualWins() {
+    func testManualWins() {
         let resolved = PrinttargLabel.resolved(
             customLabel: "  My Label  ", basename: "tgt",
             metadata: TargetLabelMetadata(), date: fixedDate)
-        #expect(resolved == "My Label")
+        XCTAssertEqual(resolved, "My Label")
     }
 }
 
-@Suite("PrinttargManifest")
-struct PrinttargManifestTests {
+final class PrinttargManifestTests: XCTestCase {
 
     private let prettySingle = """
         Some log line
@@ -225,66 +205,58 @@ struct PrinttargManifestTests {
         }
         """
 
-    @Test("Decodes a single-page pretty manifest amid log noise")
-    func singlePage() throws {
+    func testSinglePage() throws {
         let m = try PrinttargManifestExtractor.manifest(from: prettySingle)
-        #expect(m.event == "manifest")
-        #expect(m.pages.count == 1)
-        #expect(m.pages[0].filename == "target.tif")
-        #expect(m.pages[0].patches == 800)
+        XCTAssertEqual(m.event, "manifest")
+        XCTAssertEqual(m.pages.count, 1)
+        XCTAssertEqual(m.pages[0].filename, "target.tif")
+        XCTAssertEqual(m.pages[0].patches, 800)
     }
 
-    @Test("Multi-page manifest preserves order")
-    func multiPage() throws {
+    func testMultiPage() throws {
         let m = try PrinttargManifestExtractor.manifest(from: prettyMulti)
-        #expect(m.pages.map(\.filename) == ["p1.tif", "p2.tif"])
+        XCTAssertEqual(m.pages.map(\.filename), ["p1.tif", "p2.tif"])
     }
 
-    @Test("No JSON document → noJSONDocument")
-    func noJSON() {
-        #expect(throws: ManifestError.self) {
-            try PrinttargManifestExtractor.manifest(from: "plain text\nno json")
+    func testNoJSON() {
+        XCTAssertThrowsError(try PrinttargManifestExtractor.manifest(from: "plain text\nno json")) { error in
+            XCTAssertTrue(error is ManifestError)
         }
     }
 
-    @Test("Wrong event → wrongEvent")
-    func wrongEvent() {
+    func testWrongEvent() {
         let stdout = "{\n  \"event\": \"row\",\n  \"row\": 1\n}\n"
-        #expect(throws: ManifestError.self) {
-            try PrinttargManifestExtractor.manifest(from: stdout)
+        XCTAssertThrowsError(try PrinttargManifestExtractor.manifest(from: stdout)) { error in
+            XCTAssertTrue(error is ManifestError)
         }
     }
 
-    @Test("ROW_COLORS_JSON line is never treated as the manifest")
-    func rowColorsNotManifest() {
+    func testRowColorsNotManifest() {
         let stdout = "ROW_COLORS_JSON: {\"a\":1}\n{\"event\":\"manifest\",\"pages\":[]}"
         // Extraction only starts at a '{' that begins a trimmed line,
         // so the ROW_COLORS_JSON line is skipped entirely.
         let m = try? PrinttargManifestExtractor.manifest(from: stdout)
-        #expect(m != nil)
-        #expect(m?.event == "manifest")
+        XCTAssertNotNil(m)
+        XCTAssertEqual(m?.event, "manifest")
     }
 
-    @Test("Braces inside a quoted filename do not corrupt the scan")
-    func bracesInFilename() throws {
+    func testBracesInFilename() throws {
         let stdout = "log\n{\n\"event\": \"manifest\",\n\"pages\": [{\"filename\": \"a}b.tif\", \"patches\": 1, \"width_mm\": 50, \"height_mm\": 50}]\n}\n"
         let m = try PrinttargManifestExtractor.manifest(from: stdout)
-        #expect(m.pages[0].filename == "a}b.tif")
+        XCTAssertEqual(m.pages[0].filename, "a}b.tif")
     }
 
-    @Test("Unsafe / non-TIFF filenames rejected")
-    func unsafeFilenames() {
+    func testUnsafeFilenames() {
         for bad in ["../x.tif", "/abs/x.tif", "dir/x.tif", "x.txt", ""] {
             let stdout = "{\n\"event\":\"manifest\",\"pages\":[{\"filename\":\"\(bad)\",\"patches\":1,\"width_mm\":50,\"height_mm\":50}]\n}"
-            #expect(throws: ManifestError.self) {
-                try PrinttargManifestExtractor.manifest(from: stdout)
+            XCTAssertThrowsError(try PrinttargManifestExtractor.manifest(from: stdout)) { error in
+                XCTAssertTrue(error is ManifestError)
             }
         }
     }
 }
 
-@Suite("ArgyllRunner Printtarg")
-struct ArgyllRunnerPrinttargTests {
+final class ArgyllRunnerPrinttargTests: XCTestCase {
 
     private func makeFixture(_ body: String, name: String = "printtarg") throws -> URL {
         let dir = FileManager.default.temporaryDirectory
@@ -336,8 +308,7 @@ struct ArgyllRunnerPrinttargTests {
         try Data(bytes).write(to: url)
     }
 
-    @Test("Successful printtarg emits .ti2 + manifest + PNG previews")
-    func success() async throws {
+    func testSuccess() async throws {
         let dir = try makeFixture("""
             #!/bin/sh
             last=""
@@ -356,18 +327,17 @@ struct ArgyllRunnerPrinttargTests {
             processManager: ProcessManager(), binaryResolver: resolver)
         let config = PrinttargConfig(basename: "pt", workingDirectory: dir)
         let result = try await runner.runPrinttarg(config: config)
-        #expect(result.ti2URL.lastPathComponent == "pt.ti2")
-        #expect(result.manifest.pages.count == 1)
-        #expect(result.pages.count == 1)
+        XCTAssertEqual(result.ti2URL.lastPathComponent, "pt.ti2")
+        XCTAssertEqual(result.manifest.pages.count, 1)
+        XCTAssertEqual(result.pages.count, 1)
         let png = result.pages[0].previewPNG
-        #expect(png != nil)
+        XCTAssertNotNil(png)
         if let png {
-            #expect(png.prefix(8) == Data([0x89,0x50,0x4E,0x47,0x0D,0x0A,0x1A,0x0A]))
+            XCTAssertEqual(png.prefix(8), Data([0x89,0x50,0x4E,0x47,0x0D,0x0A,0x1A,0x0A]))
         }
     }
 
-    @Test("Non-zero exit throws toolFailed and stays on stage")
-    func failure() async throws {
+    func testFailure() async throws {
         let dir = try makeFixture("""
             #!/bin/sh
             echo "oops" >&2
@@ -377,15 +347,16 @@ struct ArgyllRunnerPrinttargTests {
         let runner = ArgyllRunner(
             processManager: ProcessManager(),
             binaryResolver: BinaryResolver(bundledRoot: dir, overrideDir: dir))
-        await #expect(throws: ArgyllRunnerError.toolFailed(
-            tool: "printtarg", code: 3, logs: ["oops"])) {
+        await assertAsyncThrows(expectedType: ArgyllRunnerError.self) {
             try await runner.runPrinttarg(
                 config: PrinttargConfig(basename: "x", workingDirectory: dir))
+        } errorHandler: { error in
+            XCTAssertEqual(error, .toolFailed(
+                tool: "printtarg", code: 3, logs: ["oops"]))
         }
     }
 
-    @Test("Exit 0 without manifest → malformedManifest")
-    func noManifest() async throws {
+    func testNoManifest() async throws {
         let dir = try makeFixture("""
             #!/bin/sh
             last=""
@@ -398,14 +369,13 @@ struct ArgyllRunnerPrinttargTests {
         let runner = ArgyllRunner(
             processManager: ProcessManager(),
             binaryResolver: BinaryResolver(bundledRoot: dir, overrideDir: dir))
-        await #expect(throws: ArgyllRunnerError.self) {
+        await assertAsyncThrows(expectedType: ArgyllRunnerError.self) {
             try await runner.runPrinttarg(
                 config: PrinttargConfig(basename: "x", workingDirectory: dir))
         }
     }
 
-    @Test("Exit 0 without .ti2 → missingArtefact")
-    func noTi2() async throws {
+    func testNoTi2() async throws {
         let dir = try makeFixture("""
             #!/bin/sh
             printf '{\\n"event":"manifest",\\n"pages":[]\\n}\\n'
@@ -415,14 +385,13 @@ struct ArgyllRunnerPrinttargTests {
         let runner = ArgyllRunner(
             processManager: ProcessManager(),
             binaryResolver: BinaryResolver(bundledRoot: dir, overrideDir: dir))
-        await #expect(throws: ArgyllRunnerError.self) {
+        await assertAsyncThrows(expectedType: ArgyllRunnerError.self) {
             try await runner.runPrinttarg(
                 config: PrinttargConfig(basename: "x", workingDirectory: dir))
         }
     }
 
-    @Test("Deterministic config produces byte-identical .ti2")
-    func determinism() async throws {
+    func testDeterminism() async throws {
         let dir = try makeFixture("""
             #!/bin/sh
             last=""
@@ -442,6 +411,6 @@ struct ArgyllRunnerPrinttargTests {
             config: PrinttargConfig(basename: "b", workingDirectory: dir))
         let d1 = try Data(contentsOf: dir.appendingPathComponent("a.ti2"))
         let d2 = try Data(contentsOf: dir.appendingPathComponent("b.ti2"))
-        #expect(d1 == d2)
+        XCTAssertEqual(d1, d2)
     }
 }

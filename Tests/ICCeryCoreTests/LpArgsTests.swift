@@ -1,12 +1,11 @@
-import Testing
+import XCTest
 import Foundation
 @testable import ICCeryCore
 
 /// Issue 15 — `lp` argv goldens (docs/11 `build_lp_args`).
 /// `-d`/`options`/`-t` handling is in `CupsService`; these tests cover
 /// flag order, captured-option precedence, and sanitisation.
-@Suite("LpArgs")
-struct LpArgsTests {
+final class LpArgsTests: XCTestCase {
 
     private let tiff = "/tmp/work/target_001.tif"
     private let queue = "EPSON_XP_55_Series"
@@ -20,112 +19,100 @@ struct LpArgsTests {
             options: options, optionKeys: optionKeys)
     }
 
-    @Test("Header: -d queue -t title, both AP_* first, TIFF last")
-    func header() throws {
+    func testHeader() throws {
         let argv = try build()
-        #expect(Array(argv[0...1]) == ["-d", queue])
-        #expect(Array(argv[2...3]) == ["-t", "ICCery Target - target_001.tif"])
-        #expect(Array(argv[4...5])
-            == ["-o", "AP_ColorMatchingMode=AP_ApplicationColorMatching"])
-        #expect(Array(argv[6...7])
-            == ["-o", "AP.ColorMatchingMode=AP_ApplicationColorMatching"])
-        #expect(argv.last == tiff)
-        #expect(!argv.contains { $0 == "raw" || $0 == "-o raw" })
+        XCTAssertEqual(Array(argv[0...1]), ["-d", queue])
+        XCTAssertEqual(Array(argv[2...3]), ["-t", "ICCery Target - target_001.tif"])
+        XCTAssertEqual(Array(argv[4...5]), ["-o", "AP_ColorMatchingMode=AP_ApplicationColorMatching"])
+        XCTAssertEqual(Array(argv[6...7]), ["-o", "AP.ColorMatchingMode=AP_ApplicationColorMatching"])
+        XCTAssertEqual(argv.last, tiff)
+        XCTAssertFalse(argv.contains { $0 == "raw" || $0 == "-o raw" })
     }
 
-    @Test("Never emits -o raw; captured raw= is dropped")
-    func neverRaw() throws {
+    func testNeverRaw() throws {
         let argv = try build(options: PrintOptions(
             cupsOptions: "raw=true MediaType=Photo"))
         for (i, arg) in argv.enumerated() where arg == "-o" {
-            #expect(argv[i + 1] != "raw")
-            #expect(argv[i + 1] != "raw=true")
+            XCTAssertNotEqual(argv[i + 1], "raw")
+            XCTAssertNotEqual(argv[i + 1], "raw=true")
         }
-        #expect(!argv.contains { $0.hasPrefix("raw=") })
-        #expect(argv.contains("MediaType=Photo"))
+        XCTAssertFalse(argv.contains { $0.hasPrefix("raw=") })
+        XCTAssertTrue(argv.contains("MediaType=Photo"))
     }
 
-    @Test("Captured options replayed after AP_* headers")
-    func capturedReplay() throws {
+    func testCapturedReplay() throws {
         let argv = try build(options: PrintOptions(
             cupsOptions: "InputSlot=Rear MediaType=Photo"))
         let rear = argv.firstIndex(of: "InputSlot=Rear")!
         let apFirst = argv.firstIndex(of:
             "AP_ColorMatchingMode=AP_ApplicationColorMatching")!
-        #expect(rear > apFirst)
+        XCTAssertTrue(rear > apFirst)
     }
 
-    @Test("Captured wins: media key present → derived media skipped")
-    func capturedWinsMedia() throws {
+    func testCapturedWinsMedia() throws {
         let argv = try build(
             options: PrintOptions(
                 mediaType: "Plain",
                 cupsOptions: "MediaType=Glossy"),
             optionKeys: ["MediaType"])
-        #expect(argv.contains("MediaType=Glossy"))
-        #expect(!argv.contains("MediaType=Plain"))
+        XCTAssertTrue(argv.contains("MediaType=Glossy"))
+        XCTAssertFalse(argv.contains("MediaType=Plain"))
     }
 
-    @Test("Media emitted via detected key when not captured")
-    func mediaDerived() throws {
+    func testMediaDerived() throws {
         let argv = try build(
             options: PrintOptions(mediaType: "SemiGloss"),
             optionKeys: ["CNIJMediaType", "MediaType"])
         // CNIJMediaType wins over MediaType in detection order.
-        #expect(argv.contains("CNIJMediaType=SemiGloss"))
-        #expect(!argv.contains("MediaType=SemiGloss"))
+        XCTAssertTrue(argv.contains("CNIJMediaType=SemiGloss"))
+        XCTAssertFalse(argv.contains("MediaType=SemiGloss"))
     }
 
-    @Test("Driver bypass emitted when absent, skipped when captured")
-    func bypassRules() throws {
+    func testBypassRules() throws {
         let withBypass = try build(
             optionKeys: ["EPIJ_CMat"])
-        #expect(withBypass.contains("EPIJ_CMat=3"))
+        XCTAssertTrue(withBypass.contains("EPIJ_CMat=3"))
 
         let captured = try build(
             options: PrintOptions(cupsOptions: "EPIJ_CMat=1"),
             optionKeys: ["EPIJ_CMat"])
         // Captured value kept, detection not re-applied.
-        #expect(captured.filter { $0.hasPrefix("EPIJ_CMat") }
-            == ["EPIJ_CMat=1"])
+        XCTAssertEqual(captured.filter { $0.hasPrefix("EPIJ_CMat") }, ["EPIJ_CMat=1"])
     }
 
-    @Test("Orientation: portrait=3 landscape=4; captured wins")
-    func orientation() throws {
-        #expect(try build(options: PrintOptions(orientation: "portrait"))
+    func testOrientation() throws {
+        XCTAssertTrue(try build(options: PrintOptions(orientation: "portrait"))
             .contains("orientation-requested=3"))
-        #expect(try build(options: PrintOptions(orientation: "landscape"))
+        XCTAssertTrue(try build(options: PrintOptions(orientation: "landscape"))
             .contains("orientation-requested=4"))
         let capturedOrients = try build(options: PrintOptions(
             orientation: "landscape",
             cupsOptions: "orientation-requested=5"))
-        #expect(!capturedOrients.contains("orientation-requested=4"))
-        #expect(capturedOrients.contains("orientation-requested=5"))
+        XCTAssertFalse(capturedOrients.contains("orientation-requested=4"))
+        XCTAssertTrue(capturedOrients.contains("orientation-requested=5"))
     }
 
-    @Test("PageSize emitted unless captured")
-    func pageSize() throws {
-        #expect(try build(options: PrintOptions(paperSize: "A4"))
+    func testPageSize() throws {
+        XCTAssertTrue(try build(options: PrintOptions(paperSize: "A4"))
             .contains("PageSize=A4"))
         let capturedSize = try build(options: PrintOptions(
             paperSize: "A4", cupsOptions: "PageSize=Letter"))
-        #expect(!capturedSize.contains("PageSize=A4"))
-        #expect(capturedSize.contains("PageSize=Letter"))
+        XCTAssertFalse(capturedSize.contains("PageSize=A4"))
+        XCTAssertTrue(capturedSize.contains("PageSize=Letter"))
     }
 
-    @Test("Sanitise rejects `;`, newline, and shell metachars")
-    func sanitise() throws {
-        #expect(throws: LpArgsError.self) {
-            _ = try build(options: PrintOptions(
-                cupsOptions: "InputSlot=Rear;rm -rf /"))
+    func testSanitise() throws {
+        XCTAssertThrowsError(try build(options: PrintOptions(
+            cupsOptions: "InputSlot=Rear;rm -rf /"))) { error in
+            XCTAssertTrue(error is LpArgsError)
         }
-        #expect(throws: LpArgsError.self) {
-            _ = try build(options: PrintOptions(
-                cupsOptions: "InputSlot=Rear\nMediaType=Photo"))
+        XCTAssertThrowsError(try build(options: PrintOptions(
+            cupsOptions: "InputSlot=Rear\nMediaType=Photo"))) { error in
+            XCTAssertTrue(error is LpArgsError)
         }
-        #expect(throws: LpArgsError.self) {
-            _ = try build(options: PrintOptions(
-                cupsOptions: "InputSlot=$(whoami)"))
+        XCTAssertThrowsError(try build(options: PrintOptions(
+            cupsOptions: "InputSlot=$(whoami)"))) { error in
+            XCTAssertTrue(error is LpArgsError)
         }
     }
 }

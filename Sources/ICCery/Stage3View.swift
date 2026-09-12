@@ -4,7 +4,15 @@ import ICCeryCore
 
 /// Stage 3 — measurement, live swatches, and multi-pass averaging.
 struct Stage3View: View {
-    @Bindable var model: MeasurementWorkflowViewModel
+    @ObservedObject var model: MeasurementWorkflowViewModel
+    /// `model.basename`/`model.workingDirectory` delegate to `wizard`;
+    /// observe it directly so header updates propagate.
+    @ObservedObject private var wizard: WizardViewModel
+
+    init(model: MeasurementWorkflowViewModel) {
+        self.model = model
+        self._wizard = ObservedObject(wrappedValue: model.wizard)
+    }
 
     var body: some View {
         VStack(spacing: 0) {

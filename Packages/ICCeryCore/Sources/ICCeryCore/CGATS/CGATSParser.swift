@@ -72,8 +72,8 @@ public enum CGATSParser {
     public static func parse(
         _ contents: String,
         sourceURL: URL? = nil
-    ) throws(CGATSParseError) -> CGATSDataset {
-        guard !contents.isEmpty else { throw .emptyFile }
+    ) throws -> CGATSDataset {
+        guard !contents.isEmpty else { throw CGATSParseError.emptyFile }
 
         let ext = sourceURL?.pathExtension.lowercased() ?? ""
         let isCSV = ext == "csv" || contents.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -101,10 +101,10 @@ public enum CGATSParser {
         }
 
         guard let formatStart, let formatEnd, formatEnd > formatStart + 1 else {
-            throw .missingBeginDataFormat
+            throw CGATSParseError.missingBeginDataFormat
         }
         guard let dataStart, let dataEnd, dataEnd > dataStart + 1 else {
-            throw .missingBeginData
+            throw CGATSParseError.missingBeginData
         }
 
         let rawFieldNames = splitFields(lines[formatStart + 1])
@@ -139,7 +139,7 @@ public enum CGATSParser {
             let lineIndex = dataStart + offset
             let rawRow = splitFields(lines[lineIndex])
             guard rawRow.count == fieldNames.count else {
-                throw .incorrectArity(line: lineIndex + 1, expected: fieldNames.count, got: rawRow.count)
+                throw CGATSParseError.incorrectArity(line: lineIndex + 1, expected: fieldNames.count, got: rawRow.count)
             }
 
             var sample = RawSample(id: String(offset), lineIndex: lineIndex)
@@ -153,7 +153,7 @@ public enum CGATSParser {
                             groupMax[group, default: 0] = max(groupMax[group, default: 0], number)
                         }
                     } else if !cleaned.isEmpty {
-                        throw .nonNumericValue(field: name, value: raw, line: lineIndex + 1)
+                        throw CGATSParseError.nonNumericValue(field: name, value: raw, line: lineIndex + 1)
                     }
                 } else {
                     sample.strings[name] = raw
@@ -213,7 +213,7 @@ public enum CGATSParser {
     private static func preprocess(
         _ contents: String,
         isCSV: Bool
-    ) throws(CGATSParseError) -> (CGATSFormat, [String]) {
+    ) throws -> (CGATSFormat, [String]) {
         let allLines = contents.components(separatedBy: .newlines)
         var lines = [String]()
 
@@ -239,7 +239,7 @@ public enum CGATSParser {
             lines.append(line)
         }
 
-        guard !lines.isEmpty else { throw .emptyFile }
+        guard !lines.isEmpty else { throw CGATSParseError.emptyFile }
 
         // Wrap a bare CSV / ISO28178 file in the canonical CGATS block
         // structure so the boundary-based parser below can handle it.

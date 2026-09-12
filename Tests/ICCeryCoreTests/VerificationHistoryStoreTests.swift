@@ -1,12 +1,10 @@
 import Foundation
-import Testing
+import XCTest
 @testable import ICCeryCore
 
-@Suite("VerificationHistoryStore")
-struct VerificationHistoryStoreTests {
+final class VerificationHistoryStoreTests: XCTestCase {
 
-    @Test("Append and cap")
-    func appendAndCap() async throws {
+    func testAppendAndCap() async throws {
         let fm = FileManager.default
         let tmp = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try fm.createDirectory(at: tmp, withIntermediateDirectories: true)
@@ -29,12 +27,11 @@ struct VerificationHistoryStoreTests {
         }
 
         let all = await store.all()
-        #expect(all.count == 3)
-        #expect(all.first?.avgDE == 2.0)
+        XCTAssertEqual(all.count, 3)
+        XCTAssertEqual(all.first?.avgDE, 2.0)
     }
 
-    @Test("Parse failure preserves file")
-    func parseFailurePreservesFile() async {
+    func testParseFailurePreservesFile() async {
         let fm = FileManager.default
         let tmp = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try? fm.createDirectory(at: tmp, withIntermediateDirectories: true)
@@ -45,14 +42,13 @@ struct VerificationHistoryStoreTests {
         let store = VerificationHistoryStore(url: url)
         do {
             _ = try await store.load()
-            Issue.record("load() should throw on invalid JSON")
+            XCTFail("load() should throw on invalid JSON")
         } catch {
-            #expect(fm.fileExists(atPath: url.path))
+            XCTAssertTrue(fm.fileExists(atPath: url.path))
         }
     }
 
-    @Test("Append loads existing records first")
-    func appendLoadsExisting() async throws {
+    func testAppendLoadsExisting() async throws {
         let fm = FileManager.default
         let tmp = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try fm.createDirectory(at: tmp, withIntermediateDirectories: true)
@@ -89,13 +85,12 @@ struct VerificationHistoryStoreTests {
         _ = try await store2.append(new)
 
         let all = await store2.all()
-        #expect(all.count == 2)
-        #expect(all.contains { $0.id == "vr-existing" })
-        #expect(all.contains { $0.id == "vr-new" })
+        XCTAssertEqual(all.count, 2)
+        XCTAssertTrue(all.contains { $0.id == "vr-existing" })
+        XCTAssertTrue(all.contains { $0.id == "vr-new" })
     }
 
-    @Test("Append does not overwrite an unparseable file")
-    func appendPreservesUnparseableFile() async {
+    func testAppendPreservesUnparseableFile() async {
         let fm = FileManager.default
         let tmp = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try? fm.createDirectory(at: tmp, withIntermediateDirectories: true)
@@ -119,20 +114,19 @@ struct VerificationHistoryStoreTests {
 
         do {
             _ = try await store.append(record)
-            Issue.record("append() should propagate the load error")
+            XCTFail("append() should propagate the load error")
         } catch {
-            #expect(fm.fileExists(atPath: url.path))
+            XCTAssertTrue(fm.fileExists(atPath: url.path))
             if let data = try? Data(contentsOf: url),
                let contents = String(data: data, encoding: .utf8) {
-                #expect(contents == badJSON)
+                XCTAssertEqual(contents, badJSON)
             } else {
-                Issue.record("Could not read preserved file")
+                XCTFail("Could not read preserved file")
             }
         }
     }
 
-    @Test("Clear does not overwrite an unparseable file")
-    func clearPreservesUnparseableFile() async {
+    func testClearPreservesUnparseableFile() async {
         let fm = FileManager.default
         let tmp = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try? fm.createDirectory(at: tmp, withIntermediateDirectories: true)
@@ -144,15 +138,14 @@ struct VerificationHistoryStoreTests {
         let store = VerificationHistoryStore(url: url)
         do {
             try await store.clear()
-            Issue.record("clear() should propagate the load error")
+            XCTFail("clear() should propagate the load error")
         } catch {
             let contents = try? String(contentsOf: url, encoding: .utf8)
-            #expect(contents == badJSON)
+            XCTAssertEqual(contents, badJSON)
         }
     }
 
-    @Test("ISO-8601 timestamps round-trip through a fresh store")
-    func iso8601RoundTrip() async throws {
+    func testIso8601RoundTrip() async throws {
         let fm = FileManager.default
         let tmp = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try fm.createDirectory(at: tmp, withIntermediateDirectories: true)
@@ -174,16 +167,15 @@ struct VerificationHistoryStoreTests {
         _ = try await store1.append(record)
 
         let text = try String(contentsOf: url, encoding: .utf8)
-        #expect(text.contains(ISO8601DateFormatter().string(from: timestamp)))
+        XCTAssertTrue(text.contains(ISO8601DateFormatter().string(from: timestamp)))
 
         let store2 = VerificationHistoryStore(url: url)
         let loaded = try await store2.load()
-        #expect(loaded.count == 1)
-        #expect(loaded.first?.timestamp == timestamp)
+        XCTAssertEqual(loaded.count, 1)
+        XCTAssertEqual(loaded.first?.timestamp, timestamp)
     }
 
-    @Test("CSV export quoting")
-    func csvQuoting() async throws {
+    func testCsvQuoting() async throws {
         let fm = FileManager.default
         let tmp = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try fm.createDirectory(at: tmp, withIntermediateDirectories: true)
@@ -204,7 +196,7 @@ struct VerificationHistoryStoreTests {
         _ = try await store.append(record)
 
         let csv = await store.exportCSV()
-        #expect(csv.contains("\"a,b\""))
-        #expect(csv.contains("\"\"quoted\"\""))
+        XCTAssertTrue(csv.contains("\"a,b\""))
+        XCTAssertTrue(csv.contains("\"\"quoted\"\""))
     }
 }

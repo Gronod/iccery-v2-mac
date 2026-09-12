@@ -1,65 +1,57 @@
 import Foundation
-import Testing
+import XCTest
 @testable import ICCeryCore
 
-@Suite("DriftAlert")
-struct DriftAlertTests {
+final class DriftAlertTests: XCTestCase {
 
-    @Test("No alert with fewer than two poor results")
-    func notEnough() {
+    func testNotEnough() {
         let records = [
             record(avg: 4.0, at: 1000)
         ]
-        #expect(DriftAlert.compute(from: records) == nil)
+        XCTAssertNil(DriftAlert.compute(from: records))
     }
 
-    @Test("Alert on two poor results one hour apart")
-    func oneHourApart() {
+    func testOneHourApart() {
         let records = [
             record(avg: 4.0, at: 1000),
             record(avg: 5.0, at: 4600)
         ]
-        #expect(DriftAlert.compute(from: records) != nil)
+        XCTAssertNotNil(DriftAlert.compute(from: records))
     }
 
-    @Test("No alert if same day and under one hour")
-    func sameDayUnderHour() {
+    func testSameDayUnderHour() {
         let records = [
             record(avg: 4.0, at: 1000),
             record(avg: 5.0, at: 2000)
         ]
-        #expect(DriftAlert.compute(from: records) == nil)
+        XCTAssertNil(DriftAlert.compute(from: records))
     }
 
-    @Test("Alert on distinct days")
-    func distinctDays() {
+    func testDistinctDays() {
         let day1 = record(avg: 4.0, at: 0)
         let day2 = record(avg: 5.0, at: 86400 + 1000)
-        #expect(DriftAlert.compute(from: [day1, day2]) != nil)
+        XCTAssertNotNil(DriftAlert.compute(from: [day1, day2]))
     }
 
-    @Test("Non-poor records do not trigger")
-    func nonPoor() {
+    func testNonPoor() {
         let records = [
             record(avg: 1.0, at: 0),
             record(avg: 1.5, at: 86400)
         ]
-        #expect(DriftAlert.compute(from: records) == nil)
+        XCTAssertNil(DriftAlert.compute(from: records))
     }
 
-    @Test("Non-poor records break the consecutive poor run")
-    func nonPoorBreaksRun() {
+    func testNonPoorBreaksRun() {
         let records = [
             record(avg: 4.0, at: 0),      // poor
             record(avg: 4.5, at: 86400),  // poor, far apart
             record(avg: 1.0, at: 90000),  // good — breaks the run
             record(avg: 4.0, at: 92000)   // poor, recent but close to previous poor
         ]
-        #expect(DriftAlert.compute(from: records) == nil)
+        XCTAssertNil(DriftAlert.compute(from: records))
     }
 
-    @Test("Only the final consecutive poor run is considered")
-    func onlySuffixRun() {
+    func testOnlySuffixRun() {
         let records = [
             record(avg: 4.0, at: 0),     // poor
             record(avg: 4.5, at: 18000), // poor, > 1h from first
@@ -67,26 +59,24 @@ struct DriftAlertTests {
             record(avg: 4.0, at: 25000), // poor
             record(avg: 4.5, at: 26000)  // poor, < 1h and same day
         ]
-        #expect(DriftAlert.compute(from: records) == nil)
+        XCTAssertNil(DriftAlert.compute(from: records))
     }
 
-    @Test("Final consecutive poor run alerts when far apart")
-    func suffixRunAlerts() {
+    func testSuffixRunAlerts() {
         let records = [
             record(avg: 1.0, at: 0),      // good
             record(avg: 4.0, at: 1000),   // poor
             record(avg: 4.5, at: 4600)    // poor, 1h after previous
         ]
-        #expect(DriftAlert.compute(from: records) != nil)
+        XCTAssertNotNil(DriftAlert.compute(from: records))
     }
 
-    @Test("A single final poor record after good records does not alert")
-    func singleFinalPoor() {
+    func testSingleFinalPoor() {
         let records = [
             record(avg: 1.0, at: 0),
             record(avg: 4.0, at: 86400)
         ]
-        #expect(DriftAlert.compute(from: records) == nil)
+        XCTAssertNil(DriftAlert.compute(from: records))
     }
 
     private func record(avg: Double, at offset: TimeInterval) -> VerificationRecord {

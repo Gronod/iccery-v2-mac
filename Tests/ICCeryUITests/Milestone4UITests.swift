@@ -111,16 +111,9 @@ final class Milestone4UITests: XCTestCase {
         }
         app.buttons["btnCalibrate"].click()
 
-        // Trigger strip A.
-        _ = waitFor("btnTrigger", timeout: 20)
-        app.buttons["btnTrigger"].click()
-
-        // Trigger strip B.
-        _ = waitFor("btnTrigger", timeout: 20)
-        app.buttons["btnTrigger"].click()
-
-        // All strips read → Done & Save appears.
-        _ = waitFor("btnDoneRead", timeout: 20)
+        // Trigger each strip until all are read → Done & Save appears.
+        driveStripsUntilDone()
+        XCTAssertTrue(element("btnDoneRead").exists)
         app.buttons["btnDoneRead"].firstMatch.click()
 
         // Averaging panel appears with one pass snapshot.
@@ -186,11 +179,21 @@ final class Milestone4UITests: XCTestCase {
         start.click()
         _ = waitFor("btnCalibrate", timeout: 25)
         app.buttons["btnCalibrate"].click()
-        _ = waitFor("btnTrigger", timeout: 20)
-        app.buttons["btnTrigger"].click()
-        _ = waitFor("btnTrigger", timeout: 20)
-        app.buttons["btnTrigger"].click()
-        _ = waitFor("btnDoneRead", timeout: 20)
+        driveStripsUntilDone()
+        XCTAssertTrue(element("btnDoneRead").exists)
         app.buttons["btnDoneRead"].firstMatch.click()
+    }
+
+    /// Clicks Trigger for each remaining strip until `btnDoneRead`
+    /// appears — the button is re-polled each pass so a click that
+    /// races a state transition isn't lost.
+    private func driveStripsUntilDone() {
+        let deadline = Date().addingTimeInterval(40)
+        while !element("btnDoneRead").exists, Date() < deadline {
+            if app.buttons["btnTrigger"].waitForExistence(timeout: 10) {
+                app.buttons["btnTrigger"].click()
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+        }
     }
 }

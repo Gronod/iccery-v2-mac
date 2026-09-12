@@ -46,7 +46,12 @@ final class AboutHelpUITests: XCTestCase {
         launchApp()
 
         let openAbout = app.buttons["openAboutBtn"]
-        XCTAssertTrue(openAbout.waitForExistence(timeout: 10))
+        if !openAbout.waitForExistence(timeout: 10) {
+            // CI triage (#128): print the a11y tree so an empty or
+            // unexpected hierarchy shows up directly in the job log.
+            print("AXTREE-BEGIN windows=\(app.windows.count)\n\(app.debugDescription)\nAXTREE-END")
+        }
+        XCTAssertTrue(openAbout.exists)
         openAbout.click()
 
         _ = waitFor("aboutVersion", timeout: 10)
@@ -64,14 +69,20 @@ final class AboutHelpUITests: XCTestCase {
         let toggle = app.buttons["btnToggleAllHelp"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 10))
 
-        let sidebar = app.groups.containing(.button, identifier: "openSettingsBtn").element
-        let before = sidebar.frame
+        // SDK 13.1 emits no AXGroup for the sidebar root, and an
+        // identifier on the container clobbers child identifiers
+        // (#130) — measure a stable sidebar child instead. Query the
+        // pop-up by type: the Picker's "Preset" label inherits the same
+        // identifier, so an .any query matches twice.
+        let sidebarChild = app.popUpButtons["presetSelect"]
+        XCTAssertTrue(sidebarChild.waitForExistence(timeout: 10))
+        let before = sidebarChild.frame
 
         toggle.click()
-        let after = sidebar.frame
+        let after = sidebarChild.frame
 
-        XCTAssertEqual(before.size.height, after.size.height,
-                       "Toggling global help must not reflow the sidebar height.")
+        XCTAssertEqual(before, after,
+                       "Toggling global help must not reflow the sidebar.")
         XCTAssertTrue(app.descendants(matching: .any)["openSettingsBtn"].exists)
     }
 }

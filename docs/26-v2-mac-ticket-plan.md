@@ -66,7 +66,7 @@ Do not create issues until labels and milestones exist.
 - Artefact gating on disk; atomic writes (`.tmp` + rename); user strings via SwiftUI `Text` only.
 - Branching: `develop` ← `milestone/mN-<name>` ← `feat/<issue#>-<slug>`; PRs via Gitea MCP.
 - Labels: every issue/PR has `Project/ICCery-v2` + one `Feature/*` or `Bug/*` + `Priority/*`.
-- Verify: `xcodebuild test -scheme ICCery -destination 'platform=macOS' ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO`; sidecar `codesign -dvv`.
+- Verify: `xcodebuild test -scheme ICCery -destination 'platform=macOS' ARCHS="$(uname -m)"` (host arch; universal reserved for release packaging); sidecar `codesign -dvv`.
 - Private ColorSync SPI: 2-arg `(PMPrintSession, CFStringRef) -> OSStatus`. Never pass integer `1`.
 
 ### `BUILD-PLAN.md`
@@ -566,7 +566,7 @@ Labels: `Feature/DevOps`, `Priority/High`
 Milestone: M6
 
 - **Self-hosted Mac runner** (Gitea has no `macos-latest` unless you attach one). Optional GitHub Actions mirror.
-- Pipeline: `fetch-argyll` → ad-hoc `codesign -s -` + `codesign -dvv` on every sidecar Mach-O (hard fail) → `xcodebuild build test -scheme ICCery ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO` → unit + mock fixtures (#215) → **dmgbuild** with background art (**not** Finder AppleScript, #189) → upload artefact.
+- Pipeline: `fetch-argyll` → ad-hoc `codesign -s -` + `codesign -dvv` on every sidecar Mach-O (hard fail) → `xcodebuild build test -scheme ICCery ARCHS="$(uname -m)"` (host arch; the dmgbuild leg still builds universal) → unit + mock fixtures (#215) → **dmgbuild** with background art (**not** Finder AppleScript, #189) → upload artefact.
 - App signing: Developer ID + **notarize/staple** for the `.app` / `.dmg`. Sidecars remain **ad-hoc** inside the bundle (#165). These are two different gates — do not conflate.
 - Confirm entitlements: sandbox **false**.
 - Spec: [04](04-argyll-binaries.md) §0.6, [05](05-argyll-fork.md) §8–9, [23](23-assets.md), [24](24-issues-invariants.md).

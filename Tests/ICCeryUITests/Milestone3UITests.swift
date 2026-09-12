@@ -198,7 +198,37 @@ final class Milestone3UITests: XCTestCase {
         }
         XCTAssertTrue(app.buttons["btnPrintAll"].isEnabled)
 
-        app.buttons["btnPrintPage-0"].click()
+        // The gallery cell's Print button sits at the window's bottom
+        // edge where synthesized scroll-wheel events are inert on the
+        // LazyVGrid (#132). Drag the NSScrollView's vertical AXScrollBar
+        // thumb instead — a real scroll that re-renders the cell onscreen.
+        var printPage = app.buttons["btnPrintPage-0"]
+        let scrollDeadline = Date().addingTimeInterval(15)
+        while !printPage.isHittable, Date() < scrollDeadline {
+            let scroller = app.scrollBars.allElementsBoundByIndex
+                .first { $0.frame.height > $0.frame.width }
+            if let scroller {
+                scroller.coordinate(withNormalizedOffset:
+                    CGVector(dx: 0.5, dy: 0.1))
+                    .press(forDuration: 0.1, thenDragTo:
+                        scroller.coordinate(withNormalizedOffset:
+                            CGVector(dx: 0.5, dy: 0.6)))
+            } else {
+                app.scrollViews["stage-2"].scroll(byDeltaX: 0, deltaY: -1)
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+            printPage = app.buttons["btnPrintPage-0"]
+        }
+        if printPage.isHittable {
+            printPage.click()
+        } else {
+            // LazyVGrid cells can report a stale a11y frame — click the
+            // point directly; the lp argv assert below still verifies.
+            print("AXTREE-BEGIN frame=\(printPage.frame)\n" +
+                  "\(app.debugDescription)\nAXTREE-END")
+            printPage.coordinate(withNormalizedOffset:
+                CGVector(dx: 0.5, dy: 0.5)).click()
+        }
         let argv = waitForLpLine()
         XCTAssertTrue(argv.contains("AP_ColorMatchingMode"), argv)
         XCTAssertTrue(argv.contains("page1.tif"), argv)

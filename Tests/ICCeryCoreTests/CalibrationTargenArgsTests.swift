@@ -1,12 +1,10 @@
 import Foundation
-import Testing
+import XCTest
 @testable import ICCeryCore
 
-@Suite("CalibrationTargenArgs")
-struct CalibrationTargenArgsTests {
+final class CalibrationTargenArgsTests: XCTestCase {
 
-    @Test("RGB baseline")
-    func rgbBaseline() throws {
+    func testRgbBaseline() throws {
         let config = CalibrationTargenConfig(
             colourSpace: .rgb,
             steps: 21,
@@ -15,11 +13,10 @@ struct CalibrationTargenArgsTests {
             workingDirectory: URL(fileURLWithPath: "/tmp")
         )
         let args = try CalibrationTargenArgs.build(config: config)
-        #expect(args == ["-v", "-d", "2", "-s", "21", "-g", "21", "-e", "4", "-f", "0", "CAL_demo"])
+        XCTAssertEqual(args, ["-v", "-d", "2", "-s", "21", "-g", "21", "-e", "4", "-f", "0", "CAL_demo"])
     }
 
-    @Test("CMYK baseline with ink limit and neutral emphasis")
-    func cmykWithOptions() throws {
+    func testCmykWithOptions() throws {
         let config = CalibrationTargenConfig(
             colourSpace: .cmyk,
             steps: 25,
@@ -30,33 +27,26 @@ struct CalibrationTargenArgsTests {
             workingDirectory: URL(fileURLWithPath: "/tmp")
         )
         let args = try CalibrationTargenArgs.build(config: config)
-        #expect(args == ["-v", "-d", "4", "-s", "25", "-g", "25", "-e", "4", "-f", "0", "-n", "25", "-l", "320", "CAL_printer"])
+        XCTAssertEqual(args, ["-v", "-d", "4", "-s", "25", "-g", "25", "-e", "4", "-f", "0", "-n", "25", "-l", "320", "CAL_printer"])
     }
 
-    @Test("Rejects out-of-range steps")
-    func rejectsBadSteps() {
+    func testRejectsBadSteps() {
         let config = CalibrationTargenConfig(steps: 5, basename: "demo")
-        #expect(throws: (any Error).self) {
-            _ = try CalibrationTargenArgs.build(config: config)
-        }
+        XCTAssertThrowsError(try CalibrationTargenArgs.build(config: config))
     }
 
-    @Test("Rejects bad CMYK ink limit")
-    func rejectsBadInkLimit() {
+    func testRejectsBadInkLimit() {
         let config = CalibrationTargenConfig(
             colourSpace: .cmyk,
             inkLimit: 500,
             basename: "demo"
         )
-        #expect(throws: (any Error).self) {
-            _ = try CalibrationTargenArgs.build(config: config)
-        }
+        XCTAssertThrowsError(try CalibrationTargenArgs.build(config: config))
     }
 
-    @Test("Does not double-prefix an existing CAL_ basename")
-    func noDoublePrefix() throws {
+    func testNoDoublePrefix() throws {
         let config = CalibrationTargenConfig(basename: "CAL_test")
         let args = try CalibrationTargenArgs.build(config: config)
-        #expect(args.last == "CAL_test")
+        XCTAssertEqual(args.last, "CAL_test")
     }
 }

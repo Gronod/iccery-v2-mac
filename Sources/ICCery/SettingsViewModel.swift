@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import Foundation
 import ICCeryCore
 
@@ -6,12 +7,11 @@ import ICCeryCore
 /// validation; the log level is applied live via `LogSink` (#158) and a
 /// `settingsDidChange` notification fans out to #20.
 @MainActor
-@Observable
-final class SettingsViewModel {
+final class SettingsViewModel: ObservableObject {
 
-    var settings: AppSettings
-    var validationErrors: [String] = []
-    var savedFlash = false
+    @Published var settings: AppSettings
+    @Published var validationErrors: [String] = []
+    @Published var savedFlash = false
 
     private let store: SettingsStore
     private let sink: LogSink
@@ -33,7 +33,7 @@ final class SettingsViewModel {
             sink.applySettings(settings)
             savedFlash = true
             Task {
-                try? await Task.sleep(for: .seconds(1.5))
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
                 savedFlash = false
             }
             return true

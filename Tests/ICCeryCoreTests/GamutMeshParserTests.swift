@@ -1,10 +1,9 @@
 import Foundation
-import Testing
+import XCTest
 @testable import ICCeryCore
 
 /// ``GamutMeshParser`` acceptance + edge-case tests.
-@Suite("Gamut mesh parser")
-struct GamutMeshParserTests {
+final class GamutMeshParserTests: XCTestCase {
 
     /// Returns the bundled real `sRGB.gam` in `Resources/Argyll/reference_gamuts`.
     private var bundledSRGBGamURL: URL {
@@ -13,16 +12,14 @@ struct GamutMeshParserTests {
         return resource.appendingPathComponent("Argyll/reference_gamuts/sRGB.gam")
     }
 
-    @Test("Parses bundled sRGB.gam")
-    func parsesBundledSRGB() throws {
+    func testParsesBundledSRGB() throws {
         let mesh = try GamutMeshParser.parse(url: bundledSRGBGamURL)
 
-        #expect(mesh.vertices.count == 448, "sRGB.gam has 448 vertices")
-        #expect(mesh.faces.count == 892, "sRGB.gam has 892 faces")
+        XCTAssertEqual(mesh.vertices.count, 448, "sRGB.gam has 448 vertices")
+        XCTAssertEqual(mesh.faces.count, 892, "sRGB.gam has 892 faces")
     }
 
-    @Test("Discards VERTEX_NO and uses push-order indices")
-    func discardsVertexNo() throws {
+    func testDiscardsVertexNo() throws {
         let text = """
         GAMUT
         NUMBER_OF_FIELDS 4
@@ -49,14 +46,13 @@ struct GamutMeshParserTests {
 
         let mesh = try GamutMeshParser.parse(text: text)
 
-        #expect(mesh.vertices.count == 4)
-        #expect(mesh.faces.count == 2)
-        #expect(mesh.vertices[0].lab == LabColor(l: 10, a: 20, b: 30))
-        #expect(mesh.vertices[3].lab == LabColor(l: 40, a: 50, b: 60))
+        XCTAssertEqual(mesh.vertices.count, 4)
+        XCTAssertEqual(mesh.faces.count, 2)
+        XCTAssertEqual(mesh.vertices[0].lab, LabColor(l: 10, a: 20, b: 30))
+        XCTAssertEqual(mesh.vertices[3].lab, LabColor(l: 40, a: 50, b: 60))
     }
 
-    @Test("Ignores comments and blank lines")
-    func ignoresComments() throws {
+    func testIgnoresComments() throws {
         let text = """
         # Header comment
         NUMBER_OF_FIELDS 4
@@ -81,12 +77,11 @@ struct GamutMeshParserTests {
         """
 
         let mesh = try GamutMeshParser.parse(text: text)
-        #expect(mesh.vertices.count == 2)
-        #expect(mesh.faces.count == 1)
+        XCTAssertEqual(mesh.vertices.count, 2)
+        XCTAssertEqual(mesh.faces.count, 1)
     }
 
-    @Test("Remaps coordinates to x=a*, y=L*, z=b*")
-    func remapsCoordinates() throws {
+    func testRemapsCoordinates() throws {
         let text = """
         NUMBER_OF_FIELDS 4
         BEGIN_DATA_FORMAT
@@ -99,11 +94,10 @@ struct GamutMeshParserTests {
         """
 
         let mesh = try GamutMeshParser.parse(text: text)
-        #expect(mesh.vertices.first?.position == SIMD3<Float>(-20, 50, 80))
+        XCTAssertEqual(mesh.vertices.first?.position, SIMD3<Float>(-20, 50, 80))
     }
 
-    @Test("Computes per-vertex sRGB colour")
-    func computesVertexColor() throws {
+    func testComputesVertexColor() throws {
         let text = """
         NUMBER_OF_FIELDS 4
         BEGIN_DATA_FORMAT
@@ -116,14 +110,13 @@ struct GamutMeshParserTests {
         """
 
         let mesh = try GamutMeshParser.parse(text: text)
-        let white = try #require(mesh.vertices.first).rgb
-        #expect(white.r > 0.95)
-        #expect(white.g > 0.95)
-        #expect(white.b > 0.95)
+        let white = try XCTUnwrap(mesh.vertices.first).rgb
+        XCTAssertTrue(white.r > 0.95)
+        XCTAssertTrue(white.g > 0.95)
+        XCTAssertTrue(white.b > 0.95)
     }
 
-    @Test("Drops out-of-bounds face indices")
-    func dropsOutOfBoundsFaces() throws {
+    func testDropsOutOfBoundsFaces() throws {
         let text = """
         NUMBER_OF_FIELDS 4
         BEGIN_DATA_FORMAT
@@ -146,21 +139,23 @@ struct GamutMeshParserTests {
         """
 
         let mesh = try GamutMeshParser.parse(text: text)
-        #expect(mesh.faces.count == 1)
+        XCTAssertEqual(mesh.faces.count, 1)
     }
 
-    @Test("Throws on empty file")
-    func throwsOnEmptyFile() {
-        #expect(throws: GamutMeshParseError.noDataBlock) {
-            _ = try GamutMeshParser.parse(text: "")
+    func testThrowsOnEmptyFile() {
+        XCTAssertThrowsError(try GamutMeshParser.parse(text: "")) { error in
+            guard case GamutMeshParseError.noDataBlock = error else {
+                return XCTFail("Expected GamutMeshParseError.noDataBlock, got \(error)")
+            }
         }
     }
 
-    @Test("Throws when file is missing")
-    func throwsWhenMissing() {
+    func testThrowsWhenMissing() {
         let url = URL(fileURLWithPath: "/nonexistent/path/to/mesh.gam")
-        #expect(throws: GamutMeshParseError.missingFile) {
-            _ = try GamutMeshParser.parse(url: url)
+        XCTAssertThrowsError(try GamutMeshParser.parse(url: url)) { error in
+            guard case GamutMeshParseError.missingFile = error else {
+                return XCTFail("Expected GamutMeshParseError.missingFile, got \(error)")
+            }
         }
     }
 }

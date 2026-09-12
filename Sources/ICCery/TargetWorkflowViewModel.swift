@@ -1,5 +1,5 @@
+import Combine
 import Foundation
-import Observation
 import ICCeryCore
 
 /// Stage 1/2 form state, runner orchestration, resume flow, and preset
@@ -10,8 +10,7 @@ import ICCeryCore
 /// All process work runs through `ArgyllRunner` off `@MainActor`; only
 /// coalesced log batches and completion hop back.
 @MainActor
-@Observable
-final class TargetWorkflowViewModel {
+final class TargetWorkflowViewModel: ObservableObject {
 
     let wizard: WizardViewModel
     let environment: AppEnvironment
@@ -19,95 +18,95 @@ final class TargetWorkflowViewModel {
 
     // MARK: - Stage 1 form (targen)
 
-    var colourSpace: ColourSpace = .rgb {
+    @Published var colourSpace: ColourSpace = .rgb {
         didSet {
             guard colourSpace != oldValue else { return }
             // CMYK black patches default to 0, RGB to 4 (docs/08).
             blackPatches = colourSpace == .cmyk ? 0 : 4
         }
     }
-    var patchPreset: PatchCountPreset = .standard800
+    @Published var patchPreset: PatchCountPreset = .standard800
     /// `#patchCountCustom` — used when `patchPreset == .custom`.
-    var customPatchCount = 2500
-    var whitePatches = 4
-    var blackPatches = 4
+    @Published var customPatchCount = 2500
+    @Published var whitePatches = 4
+    @Published var blackPatches = 4
 
     // Advanced — each optional flag is enabled + value, so an untouched
     // control emits nothing (#advanced fields are opt-in).
-    var greyStepsEnabled = false
-    var greySteps = 5
-    var singleChannelEnabled = false
-    var singleChannelSteps = 5
-    var neutralStepsEnabled = false
-    var neutralSteps = 3
-    var neutralConcEnabled = false
-    var neutralConcentration = 0.50
-    var preconditioningProfile: String?
-    var highQuality = false
-    var adaptationEnabled = false
-    var adaptation = 0.10
-    var algorithm: FullSpreadAlgorithm = .ofps
-    var inkLimitEnabled = false
-    var totalInkLimit = 320
-    var darkEmphasisEnabled = false
-    var darkEmphasis = 1.0
-    var devicePowerEnabled = false
-    var devicePower = 1.0
+    @Published var greyStepsEnabled = false
+    @Published var greySteps = 5
+    @Published var singleChannelEnabled = false
+    @Published var singleChannelSteps = 5
+    @Published var neutralStepsEnabled = false
+    @Published var neutralSteps = 3
+    @Published var neutralConcEnabled = false
+    @Published var neutralConcentration = 0.50
+    @Published var preconditioningProfile: String?
+    @Published var highQuality = false
+    @Published var adaptationEnabled = false
+    @Published var adaptation = 0.10
+    @Published var algorithm: FullSpreadAlgorithm = .ofps
+    @Published var inkLimitEnabled = false
+    @Published var totalInkLimit = 320
+    @Published var darkEmphasisEnabled = false
+    @Published var darkEmphasis = 1.0
+    @Published var devicePowerEnabled = false
+    @Published var devicePower = 1.0
 
     /// `#targetBasename` — no placeholder is ever invented (#60).
-    var targetBasename = ""
+    @Published var targetBasename = ""
     /// `#selectedPathDisplay` / resolved cwd.
-    var targetDirectory: URL?
+    @Published var targetDirectory: URL?
 
     // MARK: - Stage 2 form (printtarg)
 
-    var instrument: PrintInstrument = .i1
-    var pageSize: PageSize = .a4
-    var customPageW = 210.0
-    var customPageH = 297.0
-    var bitDepth: TiffBitDepth = .eight
+    @Published var instrument: PrintInstrument = .i1
+    @Published var pageSize: PageSize = .a4
+    @Published var customPageW = 210.0
+    @Published var customPageH = 297.0
+    @Published var bitDepth: TiffBitDepth = .eight
     /// `#tiffDpi` — two-way bound; presets can change it (150-DPI draft
     /// regression must be visible here).
-    var tiffDpi = 300
-    var layoutOrder: LayoutOrder = .deterministic
-    var customSeed = 1
-    var labelIsCustom = false
-    var customLabel = ""
-    var metaPrinter = ""
-    var metaInkSet = ""
-    var metaDriverPaper = ""
-    var metaActualPaper = ""
+    @Published var tiffDpi = 300
+    @Published var layoutOrder: LayoutOrder = .deterministic
+    @Published var customSeed = 1
+    @Published var labelIsCustom = false
+    @Published var customLabel = ""
+    @Published var metaPrinter = ""
+    @Published var metaInkSet = ""
+    @Published var metaDriverPaper = ""
+    @Published var metaActualPaper = ""
 
     // MARK: - Run state
 
-    var targenRunning = false
-    var targenLog: [String] = []
-    var printtargRunning = false
-    var printtargLog: [String] = []
-    var printtargResult: PrinttargResult?
+    @Published var targenRunning = false
+    @Published var targenLog: [String] = []
+    @Published var printtargRunning = false
+    @Published var printtargLog: [String] = []
+    @Published var printtargResult: PrinttargResult?
     /// Sticky until the target changes: `.ti2` resume landed us on
     /// Stage 3 (`#stage3LoadedTargetBanner` data).
-    var resumedFromTi2 = false
+    @Published var resumedFromTi2 = false
 
     // MARK: - Presets
 
-    var presets: [ProfilingPreset] = []
-    var selectedPresetID = "none"
-    var showingSavePreset = false
-    var showingManagePresets = false
-    var savePresetName = ""
-    var savePresetDesc = ""
+    @Published var presets: [ProfilingPreset] = []
+    @Published var selectedPresetID = "none"
+    @Published var showingSavePreset = false
+    @Published var showingManagePresets = false
+    @Published var savePresetName = ""
+    @Published var savePresetDesc = ""
 
     /// Stage 3 measurement workflow, owned at the app level so it persists
     /// across stage switches and can observe settings changes.
-    var measurement: MeasurementWorkflowViewModel
+    @Published var measurement: MeasurementWorkflowViewModel
     /// Stage 4/5 profile workflow, owned at the app level so it persists
     /// across stage switches and can observe preset values.
-    var profile: ProfileWorkflowViewModel
+    @Published var profile: ProfileWorkflowViewModel
     /// Stage 0 calibration workflow.
-    var calibration: CalibrationViewModel!
+    @Published var calibration: CalibrationViewModel!
     /// Stage 2 unmanaged print session.
-    var print: PrintSessionViewModel!
+    @Published var print: PrintSessionViewModel!
 
     init(environment: AppEnvironment = .live()) {
         self.environment = environment

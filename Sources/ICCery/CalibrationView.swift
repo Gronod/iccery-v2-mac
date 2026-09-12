@@ -3,8 +3,8 @@ import ICCeryCore
 
 /// Stage 0 calibration dashboard (issue #29, docs/07).
 struct CalibrationView: View {
-    @Bindable var model: CalibrationViewModel
-    @Bindable var wizard: WizardViewModel
+    @ObservedObject var model: CalibrationViewModel
+    @ObservedObject var wizard: WizardViewModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -73,7 +73,7 @@ struct CalibrationView: View {
 
                     if let url = model.computedCalURL {
                         Toggle("Apply calibration to next profile", isOn: $model.applyToProfile)
-                            .onChange(of: model.applyToProfile) { model.updateApplyToProfile() }
+                            .onChange(of: model.applyToProfile) { _ in model.updateApplyToProfile() }
                             .accessibilityIdentifier("calApplyToggle")
 
                         Text("Loaded: \(url.lastPathComponent)")
@@ -96,7 +96,6 @@ struct CalibrationView: View {
                     }
                 }
             }
-            .formStyle(.grouped)
 
             HStack {
                 Spacer()

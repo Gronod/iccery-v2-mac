@@ -1,21 +1,19 @@
-import Testing
 import Foundation
+import XCTest
 @testable import ICCeryCore
 @testable import ICCery
 
 /// Issue #82 — preset application through the live view models, under an
 /// isolated `TestAppEnvironment` (temp stores, fresh ProcessManager).
-@Suite("PresetViewModelMapping")
 @MainActor
-struct PresetViewModelMappingTests {
+final class PresetViewModelMappingTests: XCTestCase {
 
     private func makeWorkflow() throws -> (TestAppEnvironment, TargetWorkflowViewModel) {
         let env = try TestAppEnvironment.make()
         return (env, TargetWorkflowViewModel(environment: env.environment))
     }
 
-    @Test("Applying a nil-FWA preset after a custom FWA clears the stale path")
-    func nilFwaClearsCustomPath() throws {
+    func testNilFwaClearsCustomPath() throws {
         let (env, vm) = try makeWorkflow()
         defer { env.cleanup() }
 
@@ -24,18 +22,17 @@ struct PresetViewModelMappingTests {
             colprofFwa: "/tmp/fwa.sp"
         )
         vm.applyPreset(customPreset)
-        #expect(vm.profile.fwaSelection == .custom)
-        #expect(vm.profile.fwaCustomPath == "/tmp/fwa.sp")
+        XCTAssertEqual(vm.profile.fwaSelection, .custom)
+        XCTAssertEqual(vm.profile.fwaCustomPath, "/tmp/fwa.sp")
 
         customPreset.colprofFwa = nil
         vm.applyPreset(customPreset)
-        #expect(vm.profile.fwaSelection == .none)
-        #expect(vm.profile.fwaCustomPath == "")
-        #expect(vm.profile.fwaValue == nil)
+        XCTAssertEqual(vm.profile.fwaSelection, .none)
+        XCTAssertEqual(vm.profile.fwaCustomPath, "")
+        XCTAssertNil(vm.profile.fwaValue)
     }
 
-    @Test("Custom FWA preset path survives the round-trip to colprof_fwa")
-    func customFwaRoundTrip() throws {
+    func testCustomFwaRoundTrip() throws {
         let (env, vm) = try makeWorkflow()
         defer { env.cleanup() }
 
@@ -44,13 +41,12 @@ struct PresetViewModelMappingTests {
             colprofFwa: "/tmp/other.sp"
         )
         vm.applyPreset(preset)
-        #expect(vm.profile.fwaSelection == .custom)
-        #expect(vm.profile.fwaCustomPath == "/tmp/other.sp")
-        #expect(vm.profile.fwaValue == "/tmp/other.sp")
+        XCTAssertEqual(vm.profile.fwaSelection, .custom)
+        XCTAssertEqual(vm.profile.fwaCustomPath, "/tmp/other.sp")
+        XCTAssertEqual(vm.profile.fwaValue, "/tmp/other.sp")
     }
 
-    @Test("Preset calibration reaches Stage 2 instead of stale live state")
-    func presetCalibrationReachesStage2() throws {
+    func testPresetCalibrationReachesStage2() throws {
         let (env, vm) = try makeWorkflow()
         defer { env.cleanup() }
 
@@ -65,13 +61,12 @@ struct PresetViewModelMappingTests {
         )
         vm.applyPreset(preset)
 
-        #expect(vm.profile.applyCalibration)
-        #expect(vm.profile.calibrationFile == "/tmp/preset.cal")
-        #expect(vm.buildPrinttargConfig().calibrationFile == "/tmp/preset.cal")
+        XCTAssertTrue(vm.profile.applyCalibration)
+        XCTAssertEqual(vm.profile.calibrationFile, "/tmp/preset.cal")
+        XCTAssertEqual(vm.buildPrinttargConfig().calibrationFile, "/tmp/preset.cal")
     }
 
-    @Test("Preset with calibration disabled clears Stage 2 calibration")
-    func disabledCalibrationClearsStage2() throws {
+    func testDisabledCalibrationClearsStage2() throws {
         let (env, vm) = try makeWorkflow()
         defer { env.cleanup() }
 
@@ -85,12 +80,11 @@ struct PresetViewModelMappingTests {
         )
         vm.applyPreset(preset)
 
-        #expect(!vm.profile.applyCalibration)
-        #expect(vm.buildPrinttargConfig().calibrationFile == nil)
+        XCTAssertFalse(vm.profile.applyCalibration)
+        XCTAssertNil(vm.buildPrinttargConfig().calibrationFile)
     }
 
-    @Test("Preset Stage 1/2 form fields apply to the live form")
-    func formFieldsApply() throws {
+    func testFormFieldsApply() throws {
         let (env, vm) = try makeWorkflow()
         defer { env.cleanup() }
 
@@ -106,22 +100,22 @@ struct PresetViewModelMappingTests {
         )
         vm.applyPreset(preset)
 
-        #expect(vm.colourSpace == .cmyk)
-        #expect(vm.effectivePatchCount == 1500)
-        #expect(vm.whitePatches == 6)
-        #expect(vm.blackPatches == 8)
-        #expect(vm.greyStepsEnabled && vm.greySteps == 9)
-        #expect(vm.algorithm == .random)
-        #expect(vm.tiffDpi == 150)
-        #expect(vm.pageSize == .custom)
-        #expect(vm.customPageW == 250 && vm.customPageH == 300)
-        #expect(vm.selectedPresetID == "c-form")
+        XCTAssertEqual(vm.colourSpace, .cmyk)
+        XCTAssertEqual(vm.effectivePatchCount, 1500)
+        XCTAssertEqual(vm.whitePatches, 6)
+        XCTAssertEqual(vm.blackPatches, 8)
+        XCTAssertTrue(vm.greyStepsEnabled && vm.greySteps == 9)
+        XCTAssertEqual(vm.algorithm, .random)
+        XCTAssertEqual(vm.tiffDpi, 150)
+        XCTAssertEqual(vm.pageSize, .custom)
+        XCTAssertTrue(vm.customPageW == 250 && vm.customPageH == 300)
+        XCTAssertEqual(vm.selectedPresetID, "c-form")
 
         // Disabled advanced controls stay nil in the snapshot, not
         // numeric sentinels.
         preset.greySteps = nil
         vm.applyPreset(preset)
-        #expect(!vm.greyStepsEnabled)
-        #expect(vm.buildTargenConfig().greySteps == nil)
+        XCTAssertFalse(vm.greyStepsEnabled)
+        XCTAssertNil(vm.buildTargenConfig().greySteps)
     }
 }

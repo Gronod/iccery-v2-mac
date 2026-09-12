@@ -76,7 +76,14 @@ final class Milestone6CalibrationUITests: XCTestCase {
         // After generation the wizard should advance to Stage 2 (layout) because
         // a CAL_ .ti1 now exists and the session is in calibration mode.
         let layout = app.buttons["btnCreateLayout"]
-        XCTAssertTrue(layout.waitForExistence(timeout: 25))
+        if !layout.waitForExistence(timeout: 25) {
+            // The generate tap can be dropped while the dashboard is still
+            // settling after the stage transition; retry once before failing.
+            if calGenerate.waitForExistence(timeout: 2) {
+                calGenerate.tap()
+            }
+            XCTAssertTrue(layout.waitForExistence(timeout: 25))
+        }
     }
 
     /// A failing calibration targen surfaces the error through the

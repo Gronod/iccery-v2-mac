@@ -4,7 +4,7 @@ import ICCeryCore
 /// Settings sheet (issue #5, docs/21 §Settings). Dark-theme Form with
 /// the full v1 field set; ΔE validation shows inline under the fields.
 struct SettingsView: View {
-    @State var model = SettingsViewModel()
+    @StateObject var model = SettingsViewModel()
     @Environment(\.dismiss) private var dismiss
 
     private static let instruments: [(code: String, label: String)] = [
@@ -143,7 +143,6 @@ struct SettingsView: View {
                     }
                 }
             }
-            .formStyle(.grouped)
 
             Divider()
 

@@ -1,5 +1,5 @@
+import Combine
 import Foundation
-import Observation
 import SwiftUI
 import ICCeryCore
 
@@ -32,8 +32,7 @@ enum XYStep: Equatable, Sendable {
 
 /// Stage 3 workflow state and interaction (issues #18–#22).
 @MainActor
-@Observable
-final class MeasurementWorkflowViewModel {
+final class MeasurementWorkflowViewModel: ObservableObject {
 
     // MARK: - Authorities
 
@@ -42,37 +41,37 @@ final class MeasurementWorkflowViewModel {
 
     // MARK: - Settings-driven thresholds
 
-    private(set) var goodMax: Double = 2.0
-    private(set) var warningMax: Double = 5.0
-    private(set) var enableLEDs: Bool = false
+    @Published private(set) var goodMax: Double = 2.0
+    @Published private(set) var warningMax: Double = 5.0
+    @Published private(set) var enableLEDs: Bool = false
 
     // MARK: - Instrument detection
 
-    var instruments: [InstrumentDevice] = []
-    var selectedInstrument: InstrumentSelection = .auto
-    var isDetecting = false
-    var detectionError: String?
+    @Published var instruments: [InstrumentDevice] = []
+    @Published var selectedInstrument: InstrumentSelection = .auto
+    @Published var isDetecting = false
+    @Published var detectionError: String?
 
     // MARK: - Chartread session
 
-    var isChartreadRunning = false
-    var chartreadState: ChartreadState = .idle
-    var currentPrompt: String?
-    var requestedWarningKey: String?
-    var chartreadLog: [String] = []
-    var rows: [ChartreadRow] = []
-    var swatchRows: [SwatchRow] = []
-    var showRemoveSheetNotice = false
+    @Published var isChartreadRunning = false
+    @Published var chartreadState: ChartreadState = .idle
+    @Published var currentPrompt: String?
+    @Published var requestedWarningKey: String?
+    @Published var chartreadLog: [String] = []
+    @Published var rows: [ChartreadRow] = []
+    @Published var swatchRows: [SwatchRow] = []
+    @Published var showRemoveSheetNotice = false
     /// Stage-local chartread error notice (`#chartreadLastError`, #80).
-    var chartreadNotice: Notice?
+    @Published var chartreadNotice: Notice?
     private var chartreadTask: Task<Void, Never>?
 
     // MARK: - Averaging
 
-    var passSnapshots: [URL] = []
-    var isFinishing = false
-    var finishNotice: Notice?
-    var resumedFromTi2 = false
+    @Published var passSnapshots: [URL] = []
+    @Published var isFinishing = false
+    @Published var finishNotice: Notice?
+    @Published var resumedFromTi2 = false
 
     init(wizard: WizardViewModel, environment: AppEnvironment) {
         self.wizard = wizard
