@@ -62,6 +62,13 @@ targets:
         OTHER_SWIFT_FLAGS: ["$(inherited)", "-strict-concurrency=minimal"]
         MACOSX_DEPLOYMENT_TARGET: "12.0"
         ARCHS: "$(ARCHS_STANDARD)"
+      # Debug builds sign ad-hoc; hardened-runtime library validation would
+      # reject the unsigned embedded ICCeryCore package framework when the
+      # test host launches (run 31992, #119). Release keeps validation and
+      # links the package statically anyway.
+      configs:
+        Debug:
+          DISABLE_LIBRARY_VALIDATION: YES
 
   ICCeryCoreTests:
     type: bundle.unit-test
