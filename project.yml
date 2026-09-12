@@ -19,6 +19,7 @@ targets:
       - path: Resources
         excludes:
           - ICCery.entitlements
+          - ICCery.Debug.entitlements
           - Argyll
       - path: Resources/Argyll
         type: folder
@@ -63,12 +64,14 @@ targets:
         MACOSX_DEPLOYMENT_TARGET: "12.0"
         ARCHS: "$(ARCHS_STANDARD)"
       # Debug builds sign ad-hoc; hardened-runtime library validation would
-      # reject the unsigned embedded ICCeryCore package framework when the
-      # test host launches (run 31992, #119). Release keeps validation and
-      # links the package statically anyway.
+      # reject the embedded ICCeryCore package framework (no Team ID) when
+      # the test host launches (run 31992, #119). DISABLE_LIBRARY_VALIDATION
+      # does not inject the entitlement on Xcode 14.2, so use a dedicated
+      # Debug entitlements file. Release keeps validation and links the
+      # package statically anyway.
       configs:
         Debug:
-          DISABLE_LIBRARY_VALIDATION: YES
+          CODE_SIGN_ENTITLEMENTS: Resources/ICCery.Debug.entitlements
 
   ICCeryCoreTests:
     type: bundle.unit-test
