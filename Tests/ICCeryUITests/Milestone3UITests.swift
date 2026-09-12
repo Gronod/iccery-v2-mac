@@ -208,8 +208,16 @@ final class Milestone3UITests: XCTestCase {
             stage2.scroll(byDeltaX: 0, deltaY: -1)
             RunLoop.current.run(until: Date().addingTimeInterval(0.2))
         }
-        XCTAssertTrue(printPage.isHittable)
-        printPage.click()
+        if printPage.isHittable {
+            printPage.click()
+        } else {
+            // LazyVGrid cells can report a stale a11y frame — click the
+            // point directly; the lp argv assert below still verifies.
+            print("AXTREE-BEGIN frame=\(printPage.frame)\n" +
+                  "\(app.debugDescription)\nAXTREE-END")
+            printPage.coordinate(withNormalizedOffset:
+                CGVector(dx: 0.5, dy: 0.5)).click()
+        }
         let argv = waitForLpLine()
         XCTAssertTrue(argv.contains("AP_ColorMatchingMode"), argv)
         XCTAssertTrue(argv.contains("page1.tif"), argv)
