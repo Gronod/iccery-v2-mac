@@ -39,14 +39,17 @@ jobs:
       - name: Generate Xcode project
         run: xcodegen generate --spec project.yml
 
-      - name: Build for testing (universal)
+      # Tests only ever run on the runner's own architecture; build
+      # just that slice. Packaging (scripts/package-release.sh) still
+      # produces the universal Release binary.
+      - name: Build for testing (host arch)
         run: |
           xcodebuild build-for-testing \
             -scheme ICCery \
             -destination 'platform=macOS' \
             -derivedDataPath "$DERIVED" \
             -configuration Debug \
-            ARCHS='arm64 x86_64' \
+            ARCHS="$(uname -m)" \
             ONLY_ACTIVE_ARCH=NO \
             CODE_SIGNING_ALLOWED=YES \
             CODE_SIGN_IDENTITY='-'

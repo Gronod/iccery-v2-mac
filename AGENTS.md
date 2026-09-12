@@ -45,9 +45,10 @@ PRs via Gitea MCP. Every issue/PR: `Project/ICCery-v2` + `Feature/*` or `Bug/*` 
 
 ## Verify
 ```
-xcodebuild test -scheme ICCery -destination 'platform=macOS' ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO
+xcodebuild test -scheme ICCery -destination 'platform=macOS' ARCHS="$(uname -m)"
 codesign -dvv <sidecar>
 ```
+Universal (`ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO`) is still required for release verification / packaging.
 
 ## Private ColorSync SPI
 2-arg `(PMPrintSession, CFStringRef) -> OSStatus`. Never pass integer `1`.

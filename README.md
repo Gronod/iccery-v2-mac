@@ -57,8 +57,10 @@ Equivalent without Make:
 xcodegen generate
 xcodebuild test -scheme ICCery \
   -destination 'platform=macOS' \
-  ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO
+  ARCHS="$(uname -m)"
 ```
+
+`project.yml` sets `ARCHS: "$(ARCHS_STANDARD)"`, so a plain `xcodebuild test` (and `make test`) builds universal; the `ARCHS="$(uname -m)"` override narrows it to the host slice.
 
 Sidecars are **not** in git. `scripts/fetch-argyll.sh` pulls the latest (or `ARGYLL_RELEASE_TAG`) macOS-universal release from `gronod/argyllcms`, extracts to `Vendor/Argyll/macos-universal/`, ad-hoc signs every Mach-O, and fails if `codesign -dvv` or the `instlist` marker is missing.
 
@@ -124,10 +126,13 @@ docs/                      functional spec + v2 ticket plan
 ## Tests
 
 ```bash
-# full suite (universal)
+# full suite (host arch)
 xcodebuild test -scheme ICCery \
   -destination 'platform=macOS' \
-  ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO
+  ARCHS="$(uname -m)"
+
+# to compile-check both slices instead:
+#   ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO
 
 # examples
 xcodebuild test -scheme ICCery -destination 'platform=macOS' \
