@@ -198,7 +198,18 @@ final class Milestone3UITests: XCTestCase {
         }
         XCTAssertTrue(app.buttons["btnPrintAll"].isEnabled)
 
-        app.buttons["btnPrintPage-0"].click()
+        // The gallery cell's Print button can sit at the window's bottom
+        // edge where XCUI's automatic scroll-to-visible is inert (#132)
+        // — scroll stage-2 explicitly until the hit point is onscreen.
+        let printPage = app.buttons["btnPrintPage-0"]
+        let stage2 = app.scrollViews["stage-2"]
+        let scrollDeadline = Date().addingTimeInterval(10)
+        while Date() < scrollDeadline, !printPage.isHittable {
+            stage2.scroll(byDeltaX: 0, deltaY: -1)
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        }
+        XCTAssertTrue(printPage.isHittable)
+        printPage.click()
         let argv = waitForLpLine()
         XCTAssertTrue(argv.contains("AP_ColorMatchingMode"), argv)
         XCTAssertTrue(argv.contains("page1.tif"), argv)
