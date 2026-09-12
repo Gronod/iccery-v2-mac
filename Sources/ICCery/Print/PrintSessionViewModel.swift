@@ -24,24 +24,41 @@ final class PrintSessionViewModel: ObservableObject {
         self.environment = environment
     }
 
+    private var printerEnumTask: Task<[Printer]?, Never>?
+
     func refreshPrinters() {
-        let cups = environment.cupsService
-        Task { @MainActor in
+        Task { @MainActor in _ = await enumeratePrinters() }
+    }
+
+    /// Serialized queue enumeration — `listPrinters` uses fixed process
+    /// ids, so overlapping calls would throw `duplicateID`. Concurrent
+    /// callers coalesce onto the in-flight task (#146).
+    @discardableResult
+    func enumeratePrinters() async -> [Printer]? {
+        if let pending = printerEnumTask { return await pending.value }
+        let task = Task { @MainActor [weak self] () -> [Printer]? in
+            guard let self else { return nil }
             do {
-                let list = try await cups.listPrinters()
-                printers = list
-                if !list.contains(where: { $0.name == selectedPrinter }) {
-                    selectedPrinter = list.first { $0.isDefault }?.name
+                let list = try await self.environment.cupsService.listPrinters()
+                self.printers = list
+                if !list.contains(where: { $0.name == self.selectedPrinter }) {
+                    self.selectedPrinter = list.first { $0.isDefault }?.name
                         ?? list.first?.name ?? ""
                 }
-                await reloadSelectedCapabilities()
+                await self.reloadSelectedCapabilities()
+                return list
             } catch {
-                printNotice = Notice(
+                self.printNotice = Notice(
                     kind: .error,
                     text: "Could not list printers: \(error.localizedDescription)"
                 )
+                return nil
             }
         }
+        printerEnumTask = task
+        let result = await task.value
+        printerEnumTask = nil
+        return result
     }
 
     func reloadSelectedCapabilities() async {

@@ -56,6 +56,17 @@ struct RootView: View {
         .sheet(isPresented: $workflow.showingManagePresets) {
             ManagePresetsDialog(workflow: workflow)
         }
+        // Media library sheets live on RootView, never inside the
+        // 270 pt sidebar column (#146).
+        .sheet(isPresented: $workflow.showingSaveMedia) {
+            SaveMediaRecipeDialog(workflow: workflow)
+        }
+        .sheet(
+            isPresented: $workflow.showingManageMedia,
+            onDismiss: { workflow.media.manageDismissed() }
+        ) {
+            ManageMediaDialog(workflow: workflow)
+        }
         .sheet(isPresented: $showingAbout) {
             AboutView { showingAbout = false }
         }

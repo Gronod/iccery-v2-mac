@@ -9,6 +9,8 @@ struct SidebarView: View {
     /// through the parent's `objectWillChange`.
     @ObservedObject private var model: WizardViewModel
     @ObservedObject private var profile: ProfileWorkflowViewModel
+    @ObservedObject private var media: MediaLibraryViewModel
+    @ObservedObject private var printSession: PrintSessionViewModel
     var onOpenSettings: () -> Void
     var onOpenAbout: () -> Void
     @Binding var showingAllHelp: Bool
@@ -22,6 +24,8 @@ struct SidebarView: View {
         self.workflow = workflow
         self._model = ObservedObject(wrappedValue: workflow.wizard)
         self._profile = ObservedObject(wrappedValue: workflow.profile)
+        self._media = ObservedObject(wrappedValue: workflow.media)
+        self._printSession = ObservedObject(wrappedValue: workflow.print)
         self.onOpenSettings = onOpenSettings
         self.onOpenAbout = onOpenAbout
         self._showingAllHelp = showingAllHelp
@@ -85,6 +89,56 @@ struct SidebarView: View {
                     .accessibilityIdentifier("btnSavePresetModal")
                 Button("Manage") { workflow.showingManagePresets = true }
                     .accessibilityIdentifier("btnOpenPresetsDialog")
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 8)
+
+            // Media library (`#mediaSelect`) — issue #146. Selection
+            // applies the recipe immediately, like presets; names render
+            // via Text only (#114). Never reuses `presetSelect` (#137).
+            Picker("Media", selection: Binding(
+                get: { media.selectedRecipeID },
+                set: { media.selectRecipe($0) }
+            )) {
+                Text("No media recipe").tag("none")
+                ForEach(media.recipes) { recipe in
+                    Text(recipe.name).tag(recipe.id)
+                }
+            }
+            .pickerStyle(.menu)
+            .accessibilityIdentifier("mediaSelect")
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .helpOverlay(
+                "Saved printer + paper + ink + .cal bound to a preset.",
+                showing: $showingAllHelp)
+
+            if let reasons = media.staleReasons[media.selectedRecipeID],
+               !reasons.isEmpty {
+                Text(reasons.contains(.printer)
+                     ? "Printer not installed" : "Calibration stale")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 12)
+                    .accessibilityIdentifier("mediaRecipeStale")
+                    .helpOverlay(
+                        "Re-run Stage 0 or pick a different recipe.",
+                        showing: $showingAllHelp)
+            }
+
+            HStack(spacing: 8) {
+                Button("Capture") { media.beginCapture() }
+                    .disabled(printSession.selectedPrinter.isEmpty)
+                    .accessibilityIdentifier("btnMediaLibraryCapture")
+                    .helpOverlay(
+                        "Select a printer in Stage 2 first",
+                        showing: $showingAllHelp)
+                Button("Manage") { workflow.showingManageMedia = true }
+                    .accessibilityIdentifier("btnMediaLibraryManage")
+                    .helpOverlay(
+                        "Apply or delete saved media recipes.",
+                        showing: $showingAllHelp)
                 Spacer()
             }
             .padding(.horizontal, 12)

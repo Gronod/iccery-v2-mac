@@ -67,3 +67,25 @@ Built-ins cannot be deleted. Custom presets overlay by `id`. Import/export is JS
 All four: `instrument: "i1"`, `colprof_algorithm: "l"`, `random_seed: 1`, `no_randomize: false`, `colprof_fwa: "D50"`.
 
 UI: `#presetSelect`, `#btnSavePresetModal` → `#savePresetDialog` (`savePresetName`, `savePresetDesc`, `btnConfirmSavePreset`), `#btnOpenPresetsDialog` → `#managePresetsDialog` (`managePresetsList`, `btnExportActivePreset`, `btnImportPreset`).
+
+## Media library (`media_library.json`)
+
+Persisted at `{app_data}/media_library.json` — a sibling of `settings.json`, never a field inside it (issue #146). A `MediaRecipe` binds a CUPS queue + paper + ink set + optional `.cal` to a `ProfilingPreset`. Cap: 200 entries; the 201st is refused with an error, never silently evicted. Corrupt JSON → keep the file, load `[]`, persistent warning banner.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `id` | string | `recipe-<uuid>`, never user-typed |
+| `name`, `notes` | string | Rendered through `Text` only (#114) |
+| `printer_id` | string | CUPS queue id (`lpstat -e` name) |
+| `printer_display_name` | string | Human label; applied to `wizard.printerName` |
+| `paper_name`, `ink_set` | string | Library metadata only — never written to targen flags |
+| `driver_media_type` | string? | Last captured CUPS `media_type` (read-only) |
+| `colour_space` | `"rgb"` \| `"cmyk"` | Must match the bound preset |
+| `preset_id` | string | `ProfilingPreset.id` (built-in or custom) |
+| `calibration_url` | string? | Absolute `.cal` path, stored verbatim |
+| `apply_calibration` | bool | Forced off for `CAL_` stems or missing files |
+| `created`, `updated` | iso8601 | |
+
+Apply path: recipe → `applyPreset` (#82 mapping, no second Stage 1 form) → queue re-enumerated (`lpstat -e`) → `printer_id` absent from a non-empty list warns "not installed" and leaves the queue untouched; an empty list is indeterminate and never flags. `CAL_` bound cal **or** a live `CAL_` wizard basename forces `applyCalibration` off — `printtarg -K` can never see a `CAL_` file (literal refusal; escape hatch is rename + re-capture). Staleness: `.printer` = absent from enumerated queues; `.calibration` = bound cal `CREATED + calibration_stale_days < now`.
+
+Capture with no preset selected auto-snapshots the live form as a `custom-` preset and binds to it. UI: `#mediaSelect` (immediate apply, `#presetSelect`-style), `#btnMediaLibraryCapture` → `#saveMediaRecipeDialog`, `#btnMediaLibraryManage` → `#manageMediaDialog` (`mediaLibraryList`, `mediaRow-{id}`, `btnMediaLibraryApply-{id}`, `btnMediaLibraryDelete-{id}`), stale badge `#mediaRecipeStale`.
