@@ -146,6 +146,30 @@ jobs:
           echo "warning: skipping UI tests after repeated runner attach/activate failures"
           exit 0
 
+      # XCTest stores the a11y hierarchy snapshot and screenshots in the
+      # xcresult on failure — upload it so UI failures can be triaged
+      # without access to the runner (#126).
+      - name: Prepare Node CA bundle (failure path)
+        if: failure()
+        run: |
+          NODE_CA_FILE="/tmp/macos-ca-bundle.pem"
+          security find-certificate -a -p \
+            /System/Library/Keychains/SystemRootCertificates.keychain \
+            /Library/Keychains/System.keychain \
+            > "$NODE_CA_FILE" 2>/dev/null || true
+          if [ ! -s "$NODE_CA_FILE" ] && [ -f /etc/ssl/cert.pem ]; then
+            cp /etc/ssl/cert.pem "$NODE_CA_FILE"
+          fi
+
+      - name: Upload UI test xcresult
+        if: failure()
+        uses: actions/upload-artifact@v3
+        env:
+          NODE_EXTRA_CA_CERTS: /tmp/macos-ca-bundle.pem
+        with:
+          name: ui-test-xcresult
+          path: build/DerivedData-test/Logs/Test
+
   package:
     needs: build-and-test
     runs-on: macos-12
