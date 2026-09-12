@@ -129,7 +129,6 @@ struct SidebarView: View {
         }
         .frame(width: Theme.Metrics.sidebarWidth)
         .background(Theme.panel)
-        .accessibilityIdentifier("sidebar")
     }
 }
 

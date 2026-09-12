@@ -69,15 +69,18 @@ final class AboutHelpUITests: XCTestCase {
         let toggle = app.buttons["btnToggleAllHelp"]
         XCTAssertTrue(toggle.waitForExistence(timeout: 10))
 
-        let sidebar = app.descendants(matching: .any)["sidebar"]
-        XCTAssertTrue(sidebar.waitForExistence(timeout: 10))
-        let before = sidebar.frame
+        // SDK 13.1 emits no AXGroup for the sidebar root, and an
+        // identifier on the container clobbers child identifiers
+        // (#130) — measure a stable sidebar child instead.
+        let sidebarChild = app.descendants(matching: .any)["presetSelect"]
+        XCTAssertTrue(sidebarChild.waitForExistence(timeout: 10))
+        let before = sidebarChild.frame
 
         toggle.click()
-        let after = sidebar.frame
+        let after = sidebarChild.frame
 
-        XCTAssertEqual(before.size.height, after.size.height,
-                       "Toggling global help must not reflow the sidebar height.")
+        XCTAssertEqual(before, after,
+                       "Toggling global help must not reflow the sidebar.")
         XCTAssertTrue(app.descendants(matching: .any)["openSettingsBtn"].exists)
     }
 }
