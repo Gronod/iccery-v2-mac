@@ -46,7 +46,12 @@ final class AboutHelpUITests: XCTestCase {
         launchApp()
 
         let openAbout = app.buttons["openAboutBtn"]
-        XCTAssertTrue(openAbout.waitForExistence(timeout: 10))
+        if !openAbout.waitForExistence(timeout: 10) {
+            // CI triage (#128): print the a11y tree so an empty or
+            // unexpected hierarchy shows up directly in the job log.
+            print("AXTREE-BEGIN windows=\(app.windows.count)\n\(app.debugDescription)\nAXTREE-END")
+        }
+        XCTAssertTrue(openAbout.exists)
         openAbout.click()
 
         _ = waitFor("aboutVersion", timeout: 10)
