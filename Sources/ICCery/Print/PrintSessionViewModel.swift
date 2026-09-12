@@ -110,7 +110,8 @@ final class PrintSessionViewModel: ObservableObject {
         isPrinting = true
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
-            defer { self.printTask = nil }
+            // `defer` cannot mutate isolated state under Swift 5.7
+            // (Xcode 14.2 / macOS 12 runner), so clear explicitly (#113).
             var printed = 0
             for page in result.pages {
                 do {
@@ -123,6 +124,7 @@ final class PrintSessionViewModel: ObservableObject {
                             + error.localizedDescription
                     )
                     isPrinting = false
+                    self.printTask = nil
                     return
                 }
             }
@@ -132,6 +134,7 @@ final class PrintSessionViewModel: ObservableObject {
                 autoHideAfter: nil
             )
             isPrinting = false
+            self.printTask = nil
         }
         printTask = task
     }
@@ -141,7 +144,6 @@ final class PrintSessionViewModel: ObservableObject {
         isPrinting = true
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
-            defer { self.printTask = nil }
             do {
                 try await spool(page, index: page.index, pageSize: pageSize)
                 printNotice = Notice(
@@ -156,6 +158,7 @@ final class PrintSessionViewModel: ObservableObject {
                 )
             }
             isPrinting = false
+            self.printTask = nil
         }
         printTask = task
     }
