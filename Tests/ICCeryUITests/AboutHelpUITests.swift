@@ -71,8 +71,10 @@ final class AboutHelpUITests: XCTestCase {
 
         // SDK 13.1 emits no AXGroup for the sidebar root, and an
         // identifier on the container clobbers child identifiers
-        // (#130) — measure a stable sidebar child instead.
-        let sidebarChild = app.descendants(matching: .any)["presetSelect"]
+        // (#130) — measure a stable sidebar child instead. Query the
+        // pop-up by type: the Picker's "Preset" label inherits the same
+        // identifier, so an .any query matches twice.
+        let sidebarChild = app.popUpButtons["presetSelect"]
         XCTAssertTrue(sidebarChild.waitForExistence(timeout: 10))
         let before = sidebarChild.frame
 
