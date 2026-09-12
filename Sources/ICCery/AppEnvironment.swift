@@ -13,6 +13,7 @@ struct AppEnvironment: Sendable {
     let runner: ArgyllRunner
     let cupsService: CupsService
     let historyStore: VerificationHistoryStore
+    let mediaStore: MediaLibraryStore
 
     static func live(
         environment: [String: String] = ProcessInfo.processInfo.environment
@@ -40,7 +41,8 @@ struct AppEnvironment: Sendable {
             cupsService: CupsService(
                 processManager: .shared,
                 binaryDir: cupsDir),
-            historyStore: VerificationHistoryStore()
+            historyStore: VerificationHistoryStore(),
+            mediaStore: MediaLibraryStore()
         )
     }
 }

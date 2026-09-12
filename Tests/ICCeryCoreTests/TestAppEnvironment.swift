@@ -19,6 +19,9 @@ struct TestAppEnvironment {
     var historyURL: URL {
         root.appendingPathComponent("verification_history.json")
     }
+    var mediaLibraryURL: URL {
+        root.appendingPathComponent("media_library.json")
+    }
 
     /// Creates an isolated environment under `NSTemporaryDirectory()`.
     /// Call `cleanup()` when finished.
@@ -49,6 +52,9 @@ struct TestAppEnvironment {
             ),
             historyStore: VerificationHistoryStore(
                 url: root.appendingPathComponent("verification_history.json")
+            ),
+            mediaStore: MediaLibraryStore(
+                url: root.appendingPathComponent("media_library.json")
             )
         )
         return TestAppEnvironment(root: root, environment: environment)

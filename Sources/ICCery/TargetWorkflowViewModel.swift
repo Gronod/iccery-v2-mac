@@ -97,6 +97,11 @@ final class TargetWorkflowViewModel: ObservableObject {
     @Published var savePresetName = ""
     @Published var savePresetDesc = ""
 
+    // MARK: - Media library (issue #146)
+
+    @Published var showingSaveMedia = false
+    @Published var showingManageMedia = false
+
     /// Stage 3 measurement workflow, owned at the app level so it persists
     /// across stage switches and can observe settings changes.
     @Published var measurement: MeasurementWorkflowViewModel
@@ -107,6 +112,8 @@ final class TargetWorkflowViewModel: ObservableObject {
     @Published var calibration: CalibrationViewModel!
     /// Stage 2 unmanaged print session.
     @Published var print: PrintSessionViewModel!
+    /// Media recipe library, created last — it needs a complete `self`.
+    @Published var media: MediaLibraryViewModel!
 
     init(environment: AppEnvironment = .live()) {
         self.environment = environment
@@ -124,6 +131,10 @@ final class TargetWorkflowViewModel: ObservableObject {
         self.calibration = CalibrationViewModel(
             workflow: self,
             profile: self.profile,
+            environment: environment
+        )
+        self.media = MediaLibraryViewModel(
+            workflow: self,
             environment: environment
         )
         reloadPresets()
