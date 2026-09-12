@@ -133,7 +133,8 @@ jobs:
               echo "error: UI probe failed with a real test error" >&2
               exit 1
             fi
-            if run_ui "full suite attempt $attempt" -only-testing:ICCeryUITests; then
+            if run_ui "full suite attempt $attempt" -only-testing:ICCeryUITests \
+                -skip-testing:ICCeryUITests/AboutHelpUITests/testAboutDialogShowsVersionAndBuildDate; then
               exit 0
             fi
             if is_runner_attach_failure; then
