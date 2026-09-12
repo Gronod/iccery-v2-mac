@@ -45,6 +45,19 @@ jobs:
             CODE_SIGNING_ALLOWED=YES \
             CODE_SIGN_IDENTITY='-'
 
+      # Xcode embeds the shared ICCeryCore package framework into the app
+      # and the test bundle without signing it. Ad-hoc hosts still require
+      # every loaded dylib to carry a cdhash — dyld killed the test host at
+      # launch (run 31992) — so sign every embedded copy once the build is
+      # done (embed steps run after any build script phase) (#119).
+      - name: Sign package product frameworks
+        run: |
+          find "$DERIVED/Build/Products/Debug" -depth -name '*_PackageProduct.framework' -print0 \
+            | while IFS= read -r -d '' fw; do
+                echo "signing $fw"
+                codesign --force --sign - --timestamp=none "$fw"
+              done
+
       - name: Test unit (ICCeryCoreTests)
         run: |
           XCTESTRUN="$(find "$DERIVED" -name 'ICCery*.xctestrun' | head -n 1)"
