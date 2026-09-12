@@ -21,7 +21,9 @@ final class ProcessRunSupportTests: XCTestCase {
             setRunning: { running.append($0) },
             resetLog: { resets += 1 },
             onLog: { batch in
-                MainActor.assertIsolated()
+                // MainActor.assertIsolated() needs Swift 5.9; the runner is
+                // on Xcode 14.2 (Swift 5.7) (#115).
+                XCTAssertTrue(Thread.isMainThread)
                 received.append(contentsOf: batch)
             }
         ) { onLog in
