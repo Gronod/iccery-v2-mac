@@ -198,15 +198,26 @@ final class Milestone3UITests: XCTestCase {
         }
         XCTAssertTrue(app.buttons["btnPrintAll"].isEnabled)
 
-        // The gallery cell's Print button can sit at the window's bottom
-        // edge where XCUI's automatic scroll-to-visible is inert (#132)
-        // — scroll stage-2 explicitly until the hit point is onscreen.
-        let printPage = app.buttons["btnPrintPage-0"]
-        let stage2 = app.scrollViews["stage-2"]
-        let scrollDeadline = Date().addingTimeInterval(10)
-        while Date() < scrollDeadline, !printPage.isHittable {
-            stage2.scroll(byDeltaX: 0, deltaY: -1)
-            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        // The gallery cell's Print button sits at the window's bottom
+        // edge where synthesized scroll-wheel events are inert on the
+        // LazyVGrid (#132). Drag the NSScrollView's vertical AXScrollBar
+        // thumb instead — a real scroll that re-renders the cell onscreen.
+        var printPage = app.buttons["btnPrintPage-0"]
+        let scrollDeadline = Date().addingTimeInterval(15)
+        while !printPage.isHittable, Date() < scrollDeadline {
+            let scroller = app.scrollBars.allElementsBoundByIndex
+                .first { $0.frame.height > $0.frame.width }
+            if let scroller {
+                scroller.coordinate(withNormalizedOffset:
+                    CGVector(dx: 0.5, dy: 0.1))
+                    .press(forDuration: 0.1, thenDragTo:
+                        scroller.coordinate(withNormalizedOffset:
+                            CGVector(dx: 0.5, dy: 0.6)))
+            } else {
+                app.scrollViews["stage-2"].scroll(byDeltaX: 0, deltaY: -1)
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+            printPage = app.buttons["btnPrintPage-0"]
         }
         if printPage.isHittable {
             printPage.click()
