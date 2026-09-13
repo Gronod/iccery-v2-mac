@@ -77,6 +77,11 @@ struct SettingsView: View {
                             format: .number
                         )
                         .frame(width: 60)
+                    }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("settingsDeltaEGood")
+
+                    HStack {
                         Text("Warning ΔE ≤")
                         TextField(
                             "5.0",
@@ -85,6 +90,13 @@ struct SettingsView: View {
                         )
                         .frame(width: 60)
                     }
+                    .accessibilityElement(children: .contain)
+                    .accessibilityIdentifier("settingsDeltaEWarning")
+
+                    Text("Swatch and verify status use these as the green / amber cutoffs. Fail is anything above Warning.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
                     ForEach(model.validationErrors, id: \.self) { error in
                         Text(error)
                             .font(.caption)
@@ -143,6 +155,7 @@ struct SettingsView: View {
                     }
                 }
             }
+            .padding(.leading, 45)
 
             Divider()
 
