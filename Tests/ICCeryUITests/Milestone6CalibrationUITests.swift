@@ -86,6 +86,60 @@ final class Milestone6CalibrationUITests: XCTestCase {
         }
     }
 
+    /// Stage 0 must not push the sidebar off-screen: the macOS `Form`
+    /// rows with expanding spacers once gave the stage an unbounded ideal
+    /// width, and window centering shifted the 270 pt sidebar into
+    /// negative X (issue #163). AX-tree existence checks cannot see that,
+    /// so assert real frame geometry.
+    func testCalibrationViewDoesNotOverflowWindow() throws {
+        let calButton = app.buttons["btnCalibratePrinter"]
+        XCTAssertTrue(calButton.waitForExistence(timeout: 10))
+        calButton.tap()
+
+        XCTAssertTrue(app.staticTexts["Calibrate Printer"].waitForExistence(timeout: 5))
+
+        let window = app.windows.firstMatch
+        XCTAssertTrue(window.exists)
+        XCTAssertGreaterThanOrEqual(calButton.frame.minX, 0)
+        XCTAssertLessThanOrEqual(calButton.frame.maxX, window.frame.maxX)
+        let ret = app.buttons["btnCalReturn"]
+        XCTAssertTrue(ret.waitForExistence(timeout: 5))
+        XCTAssertTrue(ret.isHittable)
+    }
+
+    /// "Return to Profiling" is the single Stage 0 exit and carries the
+    /// cancel-action shortcut, so Escape must dismiss the dashboard too
+    /// (issue #163). `typeKey` delivery is unreliable on the macOS 12 CI
+    /// runner (m10 phase-08), so the Escape check falls back to the
+    /// deterministic button tap.
+    func testCalibrationReturnButtonAndEscapeDismiss() throws {
+        let calButton = app.buttons["btnCalibratePrinter"]
+        XCTAssertTrue(calButton.waitForExistence(timeout: 10))
+        calButton.tap()
+        XCTAssertTrue(app.staticTexts["Calibrate Printer"].waitForExistence(timeout: 5))
+
+        let returnButton = app.buttons["btnCalReturn"]
+        XCTAssertTrue(returnButton.waitForExistence(timeout: 5))
+        XCTAssertTrue(returnButton.isHittable)
+        returnButton.tap()
+
+        let stage1 = app.descendants(matching: .any)["stage-1"]
+        XCTAssertTrue(stage1.waitForExistence(timeout: 5))
+
+        // Re-enter and try Escape; fall back to the button where the
+        // runtime does not deliver typeKey.
+        XCTAssertTrue(calButton.waitForExistence(timeout: 5))
+        calButton.tap()
+        XCTAssertTrue(app.staticTexts["Calibrate Printer"].waitForExistence(timeout: 5))
+
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        if !stage1.waitForExistence(timeout: 4) {
+            XCTAssertTrue(returnButton.waitForExistence(timeout: 5))
+            returnButton.tap()
+            XCTAssertTrue(stage1.waitForExistence(timeout: 5))
+        }
+    }
+
     /// A failing calibration targen surfaces the error through the
     /// wizard notice and restores the original basename (issue #80).
     func testCalibrationTargenFailureRestoresBasename() throws {

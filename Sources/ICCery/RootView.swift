@@ -39,6 +39,7 @@ struct RootView: View {
                 }
                 WizardStageContent(model: model, workflow: workflow)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(minWidth: 1100, minHeight: 700)
         .background(Theme.background)
