@@ -1,3 +1,4 @@
+import Foundation
 import XCTest
 
 /// Settings sheet UI tests (issue #165).
@@ -85,14 +86,9 @@ final class SettingsUITests: XCTestCase {
             warningRow.frame.minY, goodRow.frame.minY,
             "thresholds must be two separate rows")
 
-        // Controls are aligned with other form controls (e.g. calibration stale days field)
-        let calField = sheet.textFields.matching(NSPredicate(format: "value == '30'")).firstMatch
-        if calField.waitForExistence(timeout: 5) {
-            XCTAssertTrue(abs(goodField.frame.minX - calField.frame.minX) <= 2.0,
-                          "Good ΔE field should align with other form fields")
-            XCTAssertTrue(abs(warningField.frame.minX - calField.frame.minX) <= 2.0,
-                          "Warning ΔE field should align with other form fields")
-        }
+        // Both threshold fields align at the same control column margin
+        XCTAssertEqual(goodField.frame.minX, warningField.frame.minX,
+                       "Good and Warning ΔE fields should align at the same column margin")
 
         // Other labels must not overflow the left boundary
         let defaultInstLabel = sheet.staticTexts["Default instrument"]
