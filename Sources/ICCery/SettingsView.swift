@@ -58,7 +58,7 @@ struct SettingsView: View {
                             Text($0.label).tag($0.code)
                         }
                     }
-                    Text("Display-only — Stage 2's instrument select is used for actual runs.")
+                    Text("Seeds Spot Read and Stage 3 when the instrument is plugged in. printtarg -i is still chosen on Stage 2.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 

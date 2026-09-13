@@ -25,7 +25,15 @@ struct TestAppEnvironment {
 
     /// Creates an isolated environment under `NSTemporaryDirectory()`.
     /// Call `cleanup()` when finished.
-    static func make() throws -> TestAppEnvironment {
+    /// `argyllBinDir` overrides the `BinaryResolver` tool directory so
+    /// tests can point at mock sidecar scripts (#148).
+    /// `bundledArgyllRoot` replaces the real app-bundle sidecar root so
+    /// tests can simulate a missing sidecar even when the build phase
+    /// copied real binaries into the host app.
+    static func make(
+        argyllBinDir: URL? = nil,
+        bundledArgyllRoot: URL? = nil
+    ) throws -> TestAppEnvironment {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("iccery-test-env-\(UUID().uuidString)")
         try FileManager.default.createDirectory(
@@ -44,7 +52,9 @@ struct TestAppEnvironment {
             presetStore: PresetStore(settingsStore: settingsStore),
             runner: ArgyllRunner(
                 processManager: processManager,
-                binaryResolver: BinaryResolver(overrideDir: nil)
+                binaryResolver: BinaryResolver(
+                    bundledRoot: bundledArgyllRoot ?? AppPaths.bundledArgyllDir,
+                    overrideDir: argyllBinDir)
             ),
             cupsService: CupsService(
                 processManager: processManager,

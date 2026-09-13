@@ -67,6 +67,14 @@ struct RootView: View {
         ) {
             ManageMediaDialog(workflow: workflow)
         }
+        // Spot-read console sheet (issue #148). Dismiss runs the same
+        // `q\n` + ~500 ms + kill path as the sheet's Stop button.
+        .sheet(
+            isPresented: $workflow.showingSpotRead,
+            onDismiss: { workflow.spotRead.sheetClosed() }
+        ) {
+            SpotReadView(model: workflow.spotRead)
+        }
         .sheet(isPresented: $showingAbout) {
             AboutView { showingAbout = false }
         }

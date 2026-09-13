@@ -11,6 +11,7 @@ struct SidebarView: View {
     @ObservedObject private var profile: ProfileWorkflowViewModel
     @ObservedObject private var media: MediaLibraryViewModel
     @ObservedObject private var printSession: PrintSessionViewModel
+    @ObservedObject private var measurement: MeasurementWorkflowViewModel
     var onOpenSettings: () -> Void
     var onOpenAbout: () -> Void
     @Binding var showingAllHelp: Bool
@@ -26,6 +27,7 @@ struct SidebarView: View {
         self._profile = ObservedObject(wrappedValue: workflow.profile)
         self._media = ObservedObject(wrappedValue: workflow.media)
         self._printSession = ObservedObject(wrappedValue: workflow.print)
+        self._measurement = ObservedObject(wrappedValue: workflow.measurement)
         self.onOpenSettings = onOpenSettings
         self.onOpenAbout = onOpenAbout
         self._showingAllHelp = showingAllHelp
@@ -159,6 +161,26 @@ struct SidebarView: View {
             }
             .controlSize(.large)
             .accessibilityIdentifier("btnViewGamut")
+            .padding(.horizontal, 12)
+
+            // Spot Read sheet (`#btnSpotRead`) — issue #148. Enabled
+            // only with a working folder (#59) and while no Stage 3
+            // chartread child is live; opening never kills
+            // `chartread_{basename}`.
+            Button(action: { workflow.showingSpotRead = true }) {
+                Label("Spot Read", systemImage: "eyedropper")
+                    .frame(maxWidth: .infinity)
+            }
+            .controlSize(.large)
+            .disabled(model.workingDirectory == nil || measurement.isChartreadRunning)
+            .helpOverlay(
+                model.workingDirectory == nil
+                    ? "Set a working folder in Stage 1 first."
+                    : (measurement.isChartreadRunning
+                        ? "Stop the Stage 3 chart read first."
+                        : "Read a single patch as Lab/XYZ from the instrument."),
+                showing: $showingAllHelp)
+            .accessibilityIdentifier("btnSpotRead")
             .padding(.horizontal, 12)
 
             Divider().overlay(Theme.border)

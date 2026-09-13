@@ -102,6 +102,11 @@ final class TargetWorkflowViewModel: ObservableObject {
     @Published var showingSaveMedia = false
     @Published var showingManageMedia = false
 
+    // MARK: - Spot read (issue #148)
+
+    /// `RootView` sheet binding for the spot-read console.
+    @Published var showingSpotRead = false
+
     /// Stage 3 measurement workflow, owned at the app level so it persists
     /// across stage switches and can observe settings changes.
     @Published var measurement: MeasurementWorkflowViewModel
@@ -112,8 +117,10 @@ final class TargetWorkflowViewModel: ObservableObject {
     @Published var calibration: CalibrationViewModel!
     /// Stage 2 unmanaged print session.
     @Published var print: PrintSessionViewModel!
-    /// Media recipe library, created last — it needs a complete `self`.
+    /// Media recipe library — needs a complete `self`.
     @Published var media: MediaLibraryViewModel!
+    /// Spot-read console, created last — needs `wizard` / `measurement`.
+    @Published var spotRead: SpotReadViewModel!
 
     init(environment: AppEnvironment = .live()) {
         self.environment = environment
@@ -134,6 +141,10 @@ final class TargetWorkflowViewModel: ObservableObject {
             environment: environment
         )
         self.media = MediaLibraryViewModel(
+            workflow: self,
+            environment: environment
+        )
+        self.spotRead = SpotReadViewModel(
             workflow: self,
             environment: environment
         )
