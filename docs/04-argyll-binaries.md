@@ -695,7 +695,7 @@ Consumes ICC/ICM. Produces `{stem}.gam` next to the profile (Argyll default). Bu
 |---|---|
 | `dispwin` | Never spawned. ICCery#90 “Emissive display calibration (dispwin & dispread)” = Won't Fix |
 | `dispread` | Same |
-| `spotread`, `dispcal`, `collink`, `cctiff`, `spec2cie`, `illumread`, `synthacc` | Not referenced |
+| `dispcal`, `collink`, `cctiff`, `spec2cie`, `illumread`, `synthacc` | Not referenced |
 | Generic `spawn_process` | **Registered** (`lib.rs:55`, `commands.rs:6–14`) but **no JS caller**. Always `cwd=None`. Exists as an escape hatch |
 
 ---
@@ -725,6 +725,7 @@ The `Child` itself lives only in the wait task (not in a map) so `wait()` cannot
 | `profcheck_{ti3_path}` | profcheck (full path) |
 | `iccgamut_{stem}` | iccgamut |
 | `instlist` | instlist (literal) |
+| `spotread` | spotread (literal, issue #148) |
 | caller-supplied | unused `spawn_process` |
 
 ### 12.3 Duplicate rejection (ICCery#116, `07d28eb`)
@@ -830,6 +831,7 @@ From `lib.rs:54–119` plus the command bodies:
 | `run_profcheck` | profcheck | `profcheck_{ti3_path}` |
 | `extract_gamut` | iccgamut | `iccgamut_{stem}` |
 | `detect_instruments` | instlist | `instlist` |
+| `run_spotread` | spotread (`-v -e [-c port] [-Y l]`, no `-u`) | `spotread` |
 | `generate_calibration_target` | targen | `targen_{CAL_basename}` |
 
 ### Argyll runners (captured, no events)

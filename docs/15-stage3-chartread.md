@@ -80,3 +80,14 @@ If an unpatched binary rejects `-Y l`, capture last stderr line and expand Proce
 ## Interactive buttons vs real keys
 
 See [05](05-argyll-fork.md) §12. Real strip-mode keys are `f/b/n/d/q`, Space, Return, `y/n`. UI labels "Skip" / "Undo" send `s\n` / `u\n` which the **mock** understands; upstream strip mode treats unknown letters as trigger. Preserve current UI behaviour or document a protocol change — do not silently change what bytes are sent without updating tests.
+
+## Spot Read (issue #148)
+
+The Spot Read sheet (`btnSpotRead` in the sidebar) runs the bundled
+`spotread` sidecar under the single-lease process id `spotread` — it is
+**not** Stage 3 and shares no identifiers or process ids with
+`chartread`. Stage 3 is unchanged: `chartread_{basename}` remains the
+only chart path. `spotread` argv is `-v -e [-c port] [-Y l]` — never
+`-u` (the v2.0 `-u` policy covers printtarg + chartread + profcheck
+only). Stdin reuses the `chartread` byte table (`" \n"` trigger,
+`"q\n"` quit + ~500 ms + kill).

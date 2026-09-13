@@ -742,6 +742,148 @@ public struct ArgyllRunner: Sendable {
         }
     }
 
+    // MARK: - spotread (spot-read console, issue #148)
+
+    /// Runs `spotread` and returns an `AsyncStream` of typed events.
+    ///
+    /// Same subscribe-before-spawn shape as `runChartread`, but there is
+    /// no artefact: the stream ends with `.exit(code)`. The single-lease
+    /// process id is `ProcessID.spotread` — never `chartread_{basename}`.
+    /// Missing sidecar surfaces as `.failed`; there is no `$PATH` or
+    /// `chartread` fallback (#116, R14/R21).
+    public func runSpotread(config: SpotReadConfig) -> AsyncStream<SpotReadEvent> {
+        let cwd = PathSecurity.resolveSafeCwd(config.workingDirectory)
+        let args = SpotReadArgs.build(config: config)
+        let binaryURL = binaryResolver.resolve("spotread")
+        let processId = ProcessID.spotread
+        let processManager = self.processManager
+        let isXY = config.isXY
+        let instrumentName = config.instrumentName
+        let instrumentPort = config.instrumentPort
+
+        return AsyncStream { continuation in
+            let task = Task {
+                await ensureNotRunning(id: processId)
+                let events = processManager.events()
+
+                // XY parking hook before any kill, same as chartread.
+                await processManager.setPreKillHook(id: processId) { [processManager] in
+                    if isXY {
+                        try? await processManager.sendStdin(id: processId, bytes: ChartreadInput.quit.bytes)
+                        try? await Task.sleep(nanoseconds: Self.testAwareDelay(500_000_000))
+                    }
+                }
+
+                guard binaryResolver.exists(binaryURL) else {
+                    continuation.yield(.failed(ArgyllRunnerError.toolFailed(
+                        tool: "spotread", code: -1,
+                        logs: ["spotread sidecar missing — run fetch-argyll"])))
+                    continuation.finish()
+                    return
+                }
+
+                do {
+                    try await processManager.runStreaming(
+                        id: processId,
+                        binary: binaryURL,
+                        arguments: args,
+                        workingDirectory: cwd
+                    )
+                } catch {
+                    continuation.yield(.failed(ArgyllRunnerError.toolFailed(
+                        tool: "spotread", code: -1, logs: [error.localizedDescription])))
+                    continuation.finish()
+                    return
+                }
+
+                var state: ChartreadState = .idle
+                var pendingLogs: [String] = []
+                var lastFlush = Date()
+                var exitCode: Int32?
+
+                func flushLogs() {
+                    guard !pendingLogs.isEmpty else { return }
+                    let batch = pendingLogs
+                    pendingLogs.removeAll(keepingCapacity: true)
+                    continuation.yield(.log(batch))
+                }
+
+                for await event in events {
+                    guard event.id == processId else { continue }
+
+                    switch event {
+                    case .stdout(_, let line):
+                        if let parsed = SpotReadParser.parse(line: line) {
+                            continuation.yield(.sample(SpotReadSample(
+                                lab: parsed.lab,
+                                xyz: parsed.xyz,
+                                instrumentName: instrumentName,
+                                port: instrumentPort,
+                                rawLine: line
+                            )))
+                        }
+                        let classified = SpotReadClassifier.classify(
+                            line: line, previousState: state)
+                        if classified.state != state
+                            || classified.requestedWarningKey != nil {
+                            state = classified.state
+                            continuation.yield(.prompt(classified))
+                        }
+                        pendingLogs.append(line)
+
+                    case .stderr(_, let line):
+                        pendingLogs.append(line)
+
+                    case .jsonRow:
+                        // spotread is never run with `-u`.
+                        break
+
+                    case .error(_, let message):
+                        pendingLogs.append("Error: \(message)")
+
+                    case .exit(_, let code):
+                        exitCode = code
+                    }
+
+                    if exitCode == nil,
+                       pendingLogs.count >= 20 || Date().timeIntervalSince(lastFlush) >= 0.1 {
+                        flushLogs()
+                        lastFlush = Date()
+                    }
+
+                    if exitCode != nil {
+                        flushLogs()
+                        break
+                    }
+                }
+
+                continuation.yield(.exit(exitCode ?? -1))
+                continuation.finish()
+            }
+
+            continuation.onTermination = { _ in
+                task.cancel()
+                Task {
+                    await processManager.kill(id: processId)
+                }
+            }
+        }
+    }
+
+    /// Send input bytes to the running `spotread` child. Reuses
+    /// `ChartreadInput` — the stdin protocol is identical.
+    public func sendSpotreadInput(_ input: ChartreadInput) async throws {
+        try await processManager.sendStdin(id: ProcessID.spotread, bytes: input.bytes)
+    }
+
+    /// Terminate a running `spotread` child. The XY park (`q\n` +
+    /// ~500 ms) runs in the pre-kill hook registered by `runSpotread`.
+    public func cancelSpotread() {
+        Task {
+            await processManager.kill(id: ProcessID.spotread)
+        }
+    }
+
     // MARK: - Stage 0 calibration
 
     /// Generates a calibration wedge `.ti1`.
@@ -825,6 +967,20 @@ public enum ChartreadEvent: Sendable {
     /// Successful completion with the canonical `.ti3` URL.
     case completed(URL)
     /// Failure (non-zero exit, missing artefact, spawn/parse error).
+    case failed(ArgyllRunnerError)
+}
+
+/// Events emitted by a running `spotread` session (issue #148).
+public enum SpotReadEvent: Sendable {
+    /// Classified prompt / state update (reuses `ChartreadState`).
+    case prompt(ChartreadClassifyResult)
+    /// A parsed `Result is …` sample line.
+    case sample(SpotReadSample)
+    /// A batched log chunk (stdout + stderr lines).
+    case log([String])
+    /// Process exited with the given code.
+    case exit(Int32)
+    /// Failure (missing sidecar, spawn error).
     case failed(ArgyllRunnerError)
 }
 

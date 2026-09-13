@@ -21,10 +21,14 @@ struct AppEnvironment: Sendable {
         let settingsStore = SettingsStore()
         var overrideDir = settingsStore.load().argyllBinaryDir
             .map { URL(fileURLWithPath: $0) }
+        var bundledRoot = AppPaths.bundledArgyllDir
         var cupsDir = URL(fileURLWithPath: "/usr/bin")
         #if DEBUG
         if let dir = environment["ICCERY_ARGYLL_BINARY_DIR"], !dir.isEmpty {
             overrideDir = URL(fileURLWithPath: dir)
+        }
+        if let dir = environment["ICCERY_ARGYLL_BUNDLED_ROOT"], !dir.isEmpty {
+            bundledRoot = URL(fileURLWithPath: dir)
         }
         if let dir = environment["ICCERY_CUPS_BIN_DIR"], !dir.isEmpty {
             cupsDir = URL(fileURLWithPath: dir)
@@ -36,7 +40,8 @@ struct AppEnvironment: Sendable {
             presetStore: PresetStore(settingsStore: settingsStore),
             runner: ArgyllRunner(
                 processManager: .shared,
-                binaryResolver: BinaryResolver(overrideDir: overrideDir)
+                binaryResolver: BinaryResolver(
+                    bundledRoot: bundledRoot, overrideDir: overrideDir)
             ),
             cupsService: CupsService(
                 processManager: .shared,
@@ -76,6 +81,8 @@ enum UITestHooks {
     static var presetImportURL: URL? { url("ICCERY_TEST_PRESET_IMPORT") }
     /// Preset export destination.
     static var presetExportURL: URL? { url("ICCERY_TEST_PRESET_EXPORT") }
+    /// Spot-read CSV export destination (`selectCsvSavePath`, #148).
+    static var csvExportURL: URL? { url("ICCERY_TEST_CSV_EXPORT") }
 
     // MARK: - Print panel / CUPS stubs (issue 13/17)
 

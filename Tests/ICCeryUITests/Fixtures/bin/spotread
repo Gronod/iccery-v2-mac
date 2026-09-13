@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+"""Mock spotread for Milestone10SpotReadUITests.
+
+Emits the real spotread prompt phrasing; each trigger line produces one
+"Result is XYZ: …, D50 Lab: …" sample. Override the emitted colour with
+MOCK_SPOTREAD_LAB / MOCK_SPOTREAD_XYZ. 'q' quits with exit 0.
+Usage: spotread -v -e [-c port] [-Y l]
+"""
+import os
+import sys
+
+LAB = os.environ.get("MOCK_SPOTREAD_LAB", "51.9 -8.3 12.2")
+XYZ = os.environ.get("MOCK_SPOTREAD_XYZ", "18.51 20.05 15.71")
+
+
+def read_line():
+    try:
+        return sys.stdin.readline()
+    except Exception:
+        return ""
+
+
+def main():
+    print("Spot read needs a calibration before continuing")
+    print("Place instrument on spot reading white calibration tile,")
+    print(" and then hit any key to continue,")
+    print("or hit Esc or Q to abort:")
+    sys.stdout.flush()
+    if not read_line():
+        return 0
+    print("Calibration successful.")
+
+    while True:
+        print("Place instrument on a spot to be measured,")
+        print(" and hit a key to take a reading,")
+        print("or hit Esc or Q to abort:")
+        sys.stdout.flush()
+        line = read_line()
+        if not line:
+            return 0
+        if line.strip().lower().startswith("q"):
+            return 0
+        print("Result is XYZ: %s, D50 Lab: %s" % (XYZ, LAB))
+        sys.stdout.flush()
+
+
+if __name__ == "__main__":
+    sys.exit(main())

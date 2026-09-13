@@ -4,6 +4,8 @@ import Foundation
 /// filter events on `id` — historical bug #56 was an id mismatch.
 public enum ProcessID {
     public static let instlist = "instlist"
+    /// Spot-read console (issue #148) — single lease, like `instlist`.
+    public static let spotread = "spotread"
 
     public static func targen(_ basename: String) -> String { "targen_\(basename)" }
     public static func printtarg(_ basename: String) -> String { "printtarg_\(basename)" }
