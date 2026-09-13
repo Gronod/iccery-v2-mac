@@ -1,9 +1,14 @@
 import Foundation
+import Metal
 import XCTest
 
 /// Milestone 6 — Issue #28 native SceneKit gamut viewer acceptance tests.
 @MainActor
 final class Milestone6GamutUITests: XCTestCase {
+
+    /// Metal on the test host — the app under test runs on the same
+    /// machine, so this predicts whether the sheet mounts SceneKit.
+    private var hasGPU: Bool { MTLCreateSystemDefaultDevice() != nil }
 
     private var app: XCUIApplication!
     private var testRoot: URL!
@@ -64,6 +69,10 @@ final class Milestone6GamutUITests: XCTestCase {
     }
 
     override func tearDown() async throws {
+        // Never leave the gamut sheet up for `terminate()` (#147).
+        if app != nil, element("btnCloseGamut").exists {
+            element("btnCloseGamut").click()
+        }
         app?.terminate()
         app = nil
         if let testRoot {
@@ -90,10 +99,29 @@ final class Milestone6GamutUITests: XCTestCase {
         return el
     }
 
+    /// Inverse of `waitFor` — polls until the element leaves the tree.
+    private func waitForGone(_ id: String, timeout: TimeInterval = 10) {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if !element(id).exists { return }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        XCTAssertFalse(element(id).exists, "Expected element \(id) to disappear")
+    }
+
+    /// `btnCloseGamut` dismisses the sheet so `tearDown`'s `terminate()`
+    /// is not stuck behind a key sheet (#147). No-op when already closed.
+    private func closeGamutSheet() {
+        let close = element("btnCloseGamut")
+        guard close.waitForExistence(timeout: 5) else { return }
+        close.click()
+        waitForGone("gamutView")
+    }
+
     /// Build and verify the mock profile, then open the native gamut viewer.
     /// The viewer should load both the reference sRGB mesh and the profile
     /// gamut copied from that reference.
-    func testViewGamutOpensSceneKitSheet() throws {
+    private func openGamutSheet() {
         app.launch()
         if !app.wait(for: .runningForeground, timeout: 10) {
             app.activate()
@@ -105,6 +133,12 @@ final class Milestone6GamutUITests: XCTestCase {
 
         waitFor("btnViewGamut").click()
 
+        _ = waitFor("gamutView")
+    }
+
+    func testViewGamutOpensSceneKitSheet() throws {
+        openGamutSheet()
+
         let gamutView = waitFor("gamutView")
         XCTAssertTrue(gamutView.exists)
 
@@ -112,9 +146,33 @@ final class Milestone6GamutUITests: XCTestCase {
         let value = status.value as? String ?? ""
         XCTAssertTrue(value.contains("faces"), "Gamut status should report mesh faces, got: \(value)")
 
+        // The fallback banner appears exactly when the host lacks Metal
+        // — no SCNView is constructed without a GPU (#147).
+        if hasGPU {
+            XCTAssertFalse(
+                element("gamutViewerUnavailable").exists,
+                "GPU host must mount the SceneKit view, not the fallback")
+        } else {
+            _ = waitFor("gamutViewerUnavailable")
+        }
+
         // The reset button demonstrates that the viewer is interactive.
         let reset = waitFor("btnResetGamutCamera")
         XCTAssertTrue(reset.isEnabled)
+
+        closeGamutSheet()
+    }
+
+    /// Clicking Reset drives the live `SCNView` — runs only on Metal
+    /// hosts, skipped on GPU-less runners so the same suite exercises
+    /// 3D once CI has a GPU (#147).
+    func testResetCameraInteractsWithScene() throws {
+        guard hasGPU else { throw XCTSkip("No Metal") }
+        openGamutSheet()
+
+        let reset = waitFor("btnResetGamutCamera")
         reset.click()
+
+        closeGamutSheet()
     }
 }

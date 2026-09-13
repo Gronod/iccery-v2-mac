@@ -1,4 +1,5 @@
 import Foundation
+import Metal
 import XCTest
 
 /// Milestone 10 — Issue #147 gamut compare chrome tests.
@@ -8,6 +9,11 @@ import XCTest
 /// `GamutContainmentTests`.
 @MainActor
 final class Milestone10GamutCompareUITests: XCTestCase {
+
+    /// Metal on the test host — the app under test runs on the same
+    /// machine, so this predicts whether the sheet mounts SceneKit.
+    /// GPU-less runners still get the banner/Close assertions (#147).
+    private var hasGPU: Bool { MTLCreateSystemDefaultDevice() != nil }
 
     private var app: XCUIApplication!
     private var testRoot: URL!
@@ -46,6 +52,10 @@ final class Milestone10GamutCompareUITests: XCTestCase {
     }
 
     override func tearDown() async throws {
+        // Never leave the gamut sheet up for `terminate()` (#147).
+        if app != nil, element("btnCloseGamut").exists {
+            element("btnCloseGamut").click()
+        }
         app?.terminate()
         app = nil
         if let testRoot {
@@ -104,6 +114,25 @@ final class Milestone10GamutCompareUITests: XCTestCase {
         _ = waitFor("gamutView")
     }
 
+    /// Inverse of `waitFor` — polls until the element leaves the tree.
+    private func waitForGone(_ id: String, timeout: TimeInterval = 10) {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if !element(id).exists { return }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        XCTAssertFalse(element(id).exists, "Expected element \(id) to disappear")
+    }
+
+    /// `btnCloseGamut` dismisses the sheet so `tearDown`'s `terminate()`
+    /// is not stuck behind a key sheet (#147). No-op when already closed.
+    private func closeGamutSheet() {
+        let close = element("btnCloseGamut")
+        guard close.waitForExistence(timeout: 5) else { return }
+        close.click()
+        waitForGone("gamutView")
+    }
+
     func testLayerTogglesExistWithSRGB() throws {
         openGamutSheet()
 
@@ -119,6 +148,7 @@ final class Milestone10GamutCompareUITests: XCTestCase {
         let status = waitFor("gamutStatusText")
         let statusValue = status.value as? String ?? ""
         XCTAssertTrue(statusValue.contains("sRGB"), "Status should list the sRGB layer, got: \(statusValue)")
+        closeGamutSheet()
     }
 
     func testAddCompareButtonExists() throws {
@@ -132,6 +162,7 @@ final class Milestone10GamutCompareUITests: XCTestCase {
         let status = waitFor("gamutStatusText")
         let value = status.value as? String ?? ""
         XCTAssertTrue(value.contains("sRGB"), "Status should keep the sRGB clause, got: \(value)")
+        closeGamutSheet()
     }
 
     func testCompareGamLoadEnablesToggle() throws {
@@ -154,6 +185,7 @@ final class Milestone10GamutCompareUITests: XCTestCase {
 
         let remove = waitFor("btnGamutRemoveCompare")
         XCTAssertTrue(remove.isEnabled)
+        closeGamutSheet()
     }
 
     func testOpenProfileRunsIccgamutForCompare() throws {
@@ -175,6 +207,7 @@ final class Milestone10GamutCompareUITests: XCTestCase {
         let status = waitFor("gamutStatusText")
         let statusValue = status.value as? String ?? ""
         XCTAssertTrue(statusValue.contains("myprinter"), "Status should list the compare layer, got: \(statusValue)")
+        closeGamutSheet()
     }
 
     func testInspectPanelIdleStableHeight() throws {
@@ -184,6 +217,7 @@ final class Milestone10GamutCompareUITests: XCTestCase {
         XCTAssertTrue(panel.exists)
         XCTAssertTrue(element("gamutInspectIdle").exists)
         XCTAssertTrue(element("gamutStatusText").exists)
+        closeGamutSheet()
     }
 
     func testManualLabInspectShowsContainment() throws {
@@ -203,11 +237,55 @@ final class Milestone10GamutCompareUITests: XCTestCase {
         XCTAssertTrue(value.contains("in"), "Lab(50,0,0) should be inside sRGB, got: \(value)")
         XCTAssertTrue(element("gamutInspectL").exists)
         XCTAssertTrue(element("gamutInspectSwatch").exists)
+        closeGamutSheet()
     }
 
     func testResetIdentifierUnchanged() throws {
         openGamutSheet()
         let reset = waitFor("btnResetGamutCamera")
         XCTAssertTrue(reset.isEnabled)
+        closeGamutSheet()
+    }
+
+    /// `btnCloseGamut` is always enabled — including on the fallback
+    /// banner — and dismisses the sheet (#147).
+    func testCloseButtonDismissesSheet() throws {
+        openGamutSheet()
+
+        let close = waitFor("btnCloseGamut")
+        XCTAssertTrue(close.isEnabled)
+        close.click()
+        waitForGone("gamutView")
+    }
+
+    /// The fallback banner exists exactly when the host lacks Metal —
+    /// no `SCNView` is mounted on a GPU-less runner, and none may be
+    /// reported unavailable on a GPU host.
+    func testFallbackBannerMatchesGPUAvailability() throws {
+        openGamutSheet()
+
+        if hasGPU {
+            XCTAssertFalse(
+                element("gamutViewerUnavailable").exists,
+                "GPU host must mount the SceneKit view, not the fallback")
+        } else {
+            _ = waitFor("gamutViewerUnavailable")
+        }
+        closeGamutSheet()
+    }
+
+    /// `ICCERY_TEST_SKIP_SCENEKIT=1` forces the fallback even on a GPU
+    /// host — banner plus a working Close, no `SCNView` mounted (#147).
+    /// The env is set for this test only; the default launch env must
+    /// not carry it, or CI's future GPU run would skip SceneKit too.
+    func testForcedSceneKitSkipShowsBannerAndClose() throws {
+        app.launchEnvironment["ICCERY_TEST_SKIP_SCENEKIT"] = "1"
+        openGamutSheet()
+
+        _ = waitFor("gamutViewerUnavailable")
+        let close = waitFor("btnCloseGamut")
+        XCTAssertTrue(close.isEnabled)
+        close.click()
+        waitForGone("gamutView")
     }
 }

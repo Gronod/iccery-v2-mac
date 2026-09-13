@@ -1,7 +1,20 @@
 import Combine
 import Foundation
 import ICCeryCore
+import Metal
 import simd
+
+/// Whether the SceneKit gamut scene can render on this host (#147).
+///
+/// Checked **before** `GamutSceneView` is mounted — constructing an
+/// `SCNView` on a Metal-less machine can wedge the main thread, which
+/// also stalls app quit behind the open sheet.
+enum GamutSceneAvailability {
+    static var isAvailable: Bool {
+        if UITestHooks.skipSceneKit { return false }
+        return MTLCreateSystemDefaultDevice() != nil
+    }
+}
 
 /// View model for the native SceneKit gamut viewer (issues #28, #147).
 ///
@@ -73,6 +86,8 @@ final class GamutViewModel: ObservableObject {
     init(environment: AppEnvironment, profileGamURL: URL? = nil) {
         self.environment = environment
         self.profileGamURL = profileGamURL
+        // Never let the view mount an SCNView without Metal (#147).
+        viewerUnavailable = !GamutSceneAvailability.isAvailable
         loadTask = Task { await load() }
     }
 

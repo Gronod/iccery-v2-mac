@@ -1,4 +1,5 @@
 import Foundation
+import Metal
 import XCTest
 @testable import ICCeryCore
 @testable import ICCery
@@ -34,6 +35,15 @@ final class GamutViewModelTests: XCTestCase {
 
         XCTAssertNotNil(vm.layer(id: GamutViewModel.srgbLayerID))
         XCTAssertTrue(vm.status.contains("faces"), "status: \(vm.status)")
+    }
+
+    /// #147 — `viewerUnavailable` is decided before any `SCNView` is
+    /// mounted: it must exactly mirror Metal presence on this host.
+    func testViewerUnavailableMirrorsMetalAvailability() async throws {
+        let vm = try makeViewModel()
+        XCTAssertEqual(
+            vm.viewerUnavailable,
+            MTLCreateSystemDefaultDevice() == nil)
     }
 
     func testMissingCompareGamLeavesSRGBAndSetsNotice() async throws {

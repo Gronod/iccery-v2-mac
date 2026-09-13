@@ -74,6 +74,7 @@ struct GamutView: View {
     @StateObject private var viewModel: GamutViewModel
     @State private var pause: () -> Void = {}
     @FocusState private var isFocused: Bool
+    @Environment(\.dismiss) private var dismiss
     @Binding var showingAllHelp: Bool
 
     init(
@@ -94,6 +95,8 @@ struct GamutView: View {
             Divider().overlay(Theme.border)
             statusLine
             inspectPanel
+            Divider().overlay(Theme.border)
+            footer
         }
         .frame(minWidth: 720, minHeight: 520)
         .background(Theme.background)
@@ -322,6 +325,21 @@ struct GamutView: View {
         }
     }
 
+    // MARK: - Footer
+
+    /// Always-visible Close (#147) — the fallback banner keeps it
+    /// reachable and Escape works via `.cancelAction` without SceneKit.
+    private var footer: some View {
+        HStack {
+            Spacer()
+            Button("Close") { dismiss() }
+                .keyboardShortcut(.cancelAction)
+                .accessibilityIdentifier("btnCloseGamut")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
+
     // MARK: - TIFF sample sheet
 
     private var tiffPreviewSheet: some View {
@@ -381,7 +399,9 @@ private struct GamutSceneView: NSViewRepresentable {
         context.coordinator.installKeyMonitor()
         context.coordinator.installClickGesture()
 
-        // No GPU → the docs/18 fallback; never respawn the view in a loop.
+        // Safety net only — the primary no-Metal check is
+        // `GamutSceneAvailability.isAvailable`, evaluated before this
+        // view is mounted. Never respawn the view in a loop.
         if MTLCreateSystemDefaultDevice() == nil {
             DispatchQueue.main.async { onUnavailable() }
         }
