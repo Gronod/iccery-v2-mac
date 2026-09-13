@@ -82,7 +82,10 @@ struct RootView: View {
             get: { workflow.wizard.showingGamutViewer },
             set: { workflow.wizard.showingGamutViewer = $0 }
         )) {
-            GamutView(profileGamURL: workflow.wizard.gamutProfileURL)
+            GamutView(
+                environment: workflow.environment,
+                profileGamURL: workflow.wizard.gamutProfileURL,
+                showingAllHelp: $showingAllHelp)
         }
     }
 

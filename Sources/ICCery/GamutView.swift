@@ -1,5 +1,6 @@
 import SwiftUI
 import SceneKit
+import Metal
 import ICCeryCore
 import simd
 
@@ -62,72 +63,300 @@ internal struct GamutSceneGeometryBuilder {
     }
 }
 
-/// Native SceneKit 3D gamut viewer.
+/// Native SceneKit 3D gamut viewer (issues #28, #147).
 ///
-/// Displays a profile gamut mesh and the bundled `sRGB.gam` reference.  Uses
-/// the CIELAB coordinate convention `x = a*`, `y = L*`, `z = b*` so that the
-/// a* (green-red) axis is horizontal, L* (lightness) is vertical, and b*
-/// (blue-yellow) is depth.
+/// Displays the bundled `sRGB.gam` reference plus up to two profile
+/// meshes with independent visibility toggles, a status line, and an
+/// inspect panel (click a mesh, type a Lab value, or sample a TIFF
+/// pixel). Uses the CIELAB coordinate convention `x = a*`, `y = L*`,
+/// `z = b*`.
 struct GamutView: View {
     @StateObject private var viewModel: GamutViewModel
     @State private var pause: () -> Void = {}
     @FocusState private var isFocused: Bool
+    @Binding var showingAllHelp: Bool
 
-    init(profileGamURL: URL? = nil) {
-        _viewModel = StateObject(wrappedValue: GamutViewModel(profileGamURL: profileGamURL))
+    init(
+        environment: AppEnvironment,
+        profileGamURL: URL? = nil,
+        showingAllHelp: Binding<Bool>
+    ) {
+        _viewModel = StateObject(wrappedValue: GamutViewModel(
+            environment: environment, profileGamURL: profileGamURL))
+        _showingAllHelp = showingAllHelp
     }
 
     var body: some View {
-        ZStack {
-            GamutSceneView(
-                profileMesh: viewModel.profileMesh,
-                referenceMesh: viewModel.sRGBMesh,
-                onReset: $viewModel.resetCamera,
-                onPause: $pause
-            )
-            .focusable()
-            .focused($isFocused)
-            .onAppear { isFocused = true }
-
-            VStack {
-                HStack {
-                    Spacer()
-                    Button(action: { viewModel.resetCamera() }) {
-                        Text("Reset view")
-                    }
-                    .accessibilityIdentifier("btnResetGamutCamera")
-                    .padding(8)
-                }
-                Spacer()
-                HStack {
-                    Text(viewModel.status)
-                        .font(.caption)
-                        .padding(8)
-                        .background(.thinMaterial)
-                        .cornerRadius(6)
-                        .accessibilityIdentifier("gamutStatusText")
-                    Spacer()
-                }
-                .padding(8)
-            }
+        VStack(spacing: 0) {
+            toolbar
+            Divider().overlay(Theme.border)
+            sceneArea
+            Divider().overlay(Theme.border)
+            statusLine
+            inspectPanel
         }
-        .frame(minWidth: 500, minHeight: 400)
+        .frame(minWidth: 720, minHeight: 520)
+        .background(Theme.background)
         .onDisappear { pause() }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("gamutView")
+        .sheet(isPresented: $viewModel.showingTiffPreview) {
+            tiffPreviewSheet
+        }
+    }
+
+    // MARK: - Toolbar
+
+    private var toolbar: some View {
+        HStack(spacing: 12) {
+            layerToggle(id: GamutViewModel.srgbLayerID, fallback: "sRGB")
+            layerToggle(id: GamutViewModel.profileLayerID, fallback: "Profile")
+            layerToggle(id: GamutViewModel.compareLayerID, fallback: "Compare")
+            Spacer()
+            addCompareMenu
+            Button("Remove compare") { viewModel.removeCompare() }
+                .disabled(viewModel.layer(id: GamutViewModel.compareLayerID) == nil)
+                .accessibilityIdentifier("btnGamutRemoveCompare")
+            Button("Sample TIFF…") { viewModel.openTiffSample() }
+                .accessibilityIdentifier("btnGamutSampleTiff")
+                .helpOverlay(
+                    "Sample a colour from a target TIFF page.",
+                    showing: $showingAllHelp)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
+
+    private func layerToggle(id: String, fallback: String) -> some View {
+        let layer = viewModel.layer(id: id)
+        return Toggle(isOn: Binding(
+            get: { layer != nil && viewModel.visibleIDs.contains(id) },
+            set: { on in
+                if on {
+                    viewModel.visibleIDs.insert(id)
+                } else {
+                    viewModel.visibleIDs.remove(id)
+                }
+            }
+        )) {
+            Text(layer?.displayName ?? fallback)
+        }
+        .toggleStyle(.checkbox)
+        .disabled(layer == nil || viewModel.viewerUnavailable)
+        .help(layer.map { $0.sourceURL.lastPathComponent } ?? "No profile .gam loaded")
+        .accessibilityIdentifier("gamutLayer-\(id)")
+    }
+
+    private var addCompareMenu: some View {
+        Menu("Add compare…") {
+            Button("Open .gam…") { viewModel.openCompareGam() }
+                .accessibilityIdentifier("btnGamutOpenGam")
+            Button("Open profile…") { viewModel.openCompareProfile() }
+                .accessibilityIdentifier("btnGamutOpenProfile")
+        }
+        .accessibilityIdentifier("btnGamutAddCompare")
+        .helpOverlay(
+            "Add a second profile or .gam mesh to compare against.",
+            showing: $showingAllHelp)
+    }
+
+    // MARK: - Scene
+
+    private var sceneArea: some View {
+        ZStack(alignment: .topTrailing) {
+            if viewModel.viewerUnavailable {
+                Text("3D gamut viewer is unavailable on this Mac; the rest of ICCery still works.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .accessibilityIdentifier("gamutViewerUnavailable")
+            } else {
+                GamutSceneView(
+                    layers: viewModel.layers,
+                    visibleIDs: viewModel.visibleIDs,
+                    onReset: $viewModel.resetCamera,
+                    onPause: $pause,
+                    onUnavailable: { viewModel.viewerUnavailable = true },
+                    onInspect: { point, layerID in
+                        if let layerID {
+                            viewModel.inspectSceneHit(world: point, layerID: layerID)
+                        } else {
+                            viewModel.clearInspect()
+                        }
+                    }
+                )
+                .focusable()
+                .focused($isFocused)
+                .onAppear { isFocused = true }
+            }
+            Button(action: { viewModel.resetCamera() }) {
+                Text("Reset view")
+            }
+            .accessibilityIdentifier("btnResetGamutCamera")
+            .padding(8)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: - Status
+
+    private var statusLine: some View {
+        HStack(spacing: 10) {
+            Text(viewModel.status)
+                .font(.caption)
+                .foregroundStyle(Theme.text)
+                .accessibilityIdentifier("gamutStatusText")
+            if let notice = viewModel.noticeText {
+                Text(notice)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("gamutNoticeText")
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+    }
+
+    // MARK: - Inspect panel
+
+    private var inspectPanel: some View {
+        HStack(spacing: 12) {
+            if let lab = viewModel.inspectLab {
+                inspectSwatch
+                labReadout(lab)
+                containmentColumn
+                if viewModel.inspectIsApproximate {
+                    Text("approx. Lab, not ColorSync")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .accessibilityIdentifier("gamutInspectApprox")
+                }
+            } else {
+                Text("Click the mesh, or enter Lab, to inspect.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("gamutInspectIdle")
+            }
+            Spacer()
+            labEntryFields
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(minHeight: 56)
+        .background(Theme.panel)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("gamutInspectPanel")
+        .helpOverlay(
+            "Inspect a Lab point against each loaded gamut.",
+            showing: $showingAllHelp)
+    }
+
+    @ViewBuilder
+    private var inspectSwatch: some View {
+        if let swatch = viewModel.inspectSwatch {
+            Color(red: swatch.r, green: swatch.g, blue: swatch.b)
+                .frame(width: 16, height: 16)
+                .clipShape(RoundedRectangle(cornerRadius: 2))
+                .overlay(RoundedRectangle(cornerRadius: 2).stroke(Theme.border))
+                .accessibilityIdentifier("gamutInspectSwatch")
+        }
+    }
+
+    private func labReadout(_ lab: LabColor) -> some View {
+        HStack(spacing: 10) {
+            Text(String(format: "L %.1f", lab.l))
+                .accessibilityIdentifier("gamutInspectL")
+            Text(String(format: "a %.1f", lab.a))
+                .accessibilityIdentifier("gamutInspectA")
+            Text(String(format: "b %.1f", lab.b))
+                .accessibilityIdentifier("gamutInspectB")
+        }
+        .font(.caption.monospacedDigit())
+        .foregroundStyle(Theme.text)
+    }
+
+    private var containmentColumn: some View {
+        HStack(spacing: 10) {
+            ForEach(viewModel.inspectResults, id: \.id) { result in
+                Text("\(result.name) \(containmentWord(result.containment))")
+                    .font(.caption)
+                    .foregroundStyle(Theme.text)
+                    .accessibilityIdentifier("gamutInspect-\(result.id)")
+            }
+        }
+    }
+
+    private func containmentWord(_ containment: GamutContainment) -> String {
+        switch containment {
+        case .inside: return "in"
+        case .outside: return "out"
+        case .unknown: return "?"
+        }
+    }
+
+    private var labEntryFields: some View {
+        HStack(spacing: 6) {
+            Text("Lab 0–100 · ±128")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            TextField("L", text: $viewModel.labEntryL)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 56)
+                .accessibilityIdentifier("gamutLabEntryL")
+            TextField("a", text: $viewModel.labEntryA)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 56)
+                .accessibilityIdentifier("gamutLabEntryA")
+            TextField("b", text: $viewModel.labEntryB)
+                .textFieldStyle(.roundedBorder)
+                .frame(width: 56)
+                .accessibilityIdentifier("gamutLabEntryB")
+            Button("Inspect") { viewModel.inspectEnteredLab() }
+                .disabled(!viewModel.canInspectLab)
+                .accessibilityIdentifier("btnGamutInspectLab")
+        }
+    }
+
+    // MARK: - TIFF sample sheet
+
+    private var tiffPreviewSheet: some View {
+        VStack(spacing: 12) {
+            Text("Click a pixel to sample its colour.")
+                .font(.headline)
+                .foregroundStyle(Theme.text)
+            if let png = viewModel.tiffPreviewPNG {
+                TiffSampleImageView(pngData: png) { r, g, b in
+                    viewModel.sampleTiffPixel(r: r, g: g, b: b)
+                }
+                .frame(minWidth: 320, minHeight: 240)
+            }
+            HStack {
+                Spacer()
+                Button("Cancel") { viewModel.showingTiffPreview = false }
+                    .accessibilityIdentifier("btnCloseGamutTiffPreview")
+            }
+        }
+        .padding(16)
+        .background(Theme.background)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("gamutTiffPreview")
     }
 }
 
-/// `NSViewRepresentable` wrapper around an `SCNView` that builds the scene from
-/// one or two ``GamutMesh`` values.
+/// `NSViewRepresentable` wrapper around an `SCNView` rendering one node
+/// per ``NamedGamut`` layer.
 ///
-/// Scene construction and camera reset are coordinated through a typed callback
-/// binding owned by the view model.
+/// Layer toggles hide/show `SCNNode`s — the scene is built once and the
+/// camera is only reset through the explicit reset path, never on a
+/// mesh or visibility update.
 private struct GamutSceneView: NSViewRepresentable {
-    var profileMesh: GamutMesh?
-    var referenceMesh: GamutMesh?
+    var layers: [NamedGamut]
+    var visibleIDs: Set<String>
     var onReset: Binding<() -> Void>
     var onPause: Binding<() -> Void>
+    var onUnavailable: () -> Void
+    var onInspect: (SIMD3<Float>, String?) -> Void
 
     func makeNSView(context: Context) -> SCNView {
         let scnView = SCNView()
@@ -142,14 +371,23 @@ private struct GamutSceneView: NSViewRepresentable {
 
         context.coordinator.scnView = scnView
         context.coordinator.scene = scene
-        context.coordinator.buildScene(profile: profileMesh, reference: referenceMesh)
+        context.coordinator.onInspect = onInspect
+        context.coordinator.buildSceneOnce()
+        context.coordinator.syncLayers(layers, visibleIDs: visibleIDs)
         context.coordinator.installKeyMonitor()
+        context.coordinator.installClickGesture()
+
+        // No GPU → the docs/18 fallback; never respawn the view in a loop.
+        if MTLCreateSystemDefaultDevice() == nil {
+            DispatchQueue.main.async { onUnavailable() }
+        }
 
         return scnView
     }
 
     func updateNSView(_ nsView: SCNView, context: Context) {
-        context.coordinator.buildScene(profile: profileMesh, reference: referenceMesh)
+        context.coordinator.onInspect = onInspect
+        context.coordinator.syncLayers(layers, visibleIDs: visibleIDs)
     }
 
     func makeCoordinator() -> Coordinator {
@@ -165,6 +403,9 @@ private struct GamutSceneView: NSViewRepresentable {
 
     static func dismantleNSView(_ nsView: SCNView, coordinator: Coordinator) {
         coordinator.removeKeyMonitor()
+        if let click = coordinator.clickGesture {
+            nsView.removeGestureRecognizer(click)
+        }
         nsView.isPlaying = false
     }
 
@@ -172,11 +413,14 @@ private struct GamutSceneView: NSViewRepresentable {
     final class Coordinator: NSObject {
         weak var scnView: SCNView?
         weak var scene: SCNScene?
+        var onInspect: (SIMD3<Float>, String?) -> Void = { _, _ in }
+        private(set) var clickGesture: NSClickGestureRecognizer?
         private var keyMonitor: Any?
 
-        private let profileNode = SCNNode()
-        private let referenceGroup = SCNNode()
+        /// One `SCNNode` per loaded layer, keyed by `NamedGamut.id`.
+        private var layerNodes: [String: SCNNode] = [:]
         private let axisNode = SCNNode()
+        private let layerGroup = SCNNode()
         private let cameraNode: SCNNode = {
             let node = SCNNode()
             node.camera = SCNCamera()
@@ -184,32 +428,96 @@ private struct GamutSceneView: NSViewRepresentable {
             return node
         }()
 
-        func buildScene(profile: GamutMesh?, reference: GamutMesh?) {
-            guard let scene else { return }
+        /// Builds the static scene furniture exactly once — axis
+        /// scaffold, lights, camera home. Layer content lives under
+        /// `layerGroup` and is managed by `syncLayers`.
+        func buildSceneOnce() {
+            guard let scene, scene.rootNode.childNodes.isEmpty else { return }
 
-            // Rebuild from scratch on every mesh change to avoid stale geometry.
-            scene.rootNode.childNodes.forEach { $0.removeFromParentNode() }
             scene.rootNode.addChildNode(axisNode)
-            scene.rootNode.addChildNode(profileNode)
-            scene.rootNode.addChildNode(referenceGroup)
+            scene.rootNode.addChildNode(layerGroup)
             scene.rootNode.addChildNode(cameraNode)
 
             buildAxisScaffold()
-
-            if let profile {
-                profileNode.addChildNode(profileMeshNode(profile, name: "profile"))
-            } else {
-                profileNode.childNodes.forEach { $0.removeFromParentNode() }
-            }
-
-            if let reference {
-                referenceGroup.childNodes.forEach { $0.removeFromParentNode() }
-                referenceGroup.addChildNode(referenceMeshNode(reference))
-            }
-
             addLights(to: scene)
             resetCamera()
         }
+
+        /// Reconciles the node set with `layers` and `visibleIDs`.
+        ///
+        /// New layers get a node; removed layers lose theirs; hidden
+        /// layers keep their mesh (`isHidden` only). Never rebuilds the
+        /// scene, so the camera is untouched by a checkbox toggle.
+        func syncLayers(_ layers: [NamedGamut], visibleIDs: Set<String>) {
+            guard scene != nil else { return }
+            let wanted = Set(layers.map { $0.id })
+            for (id, node) in layerNodes where !wanted.contains(id) {
+                node.removeFromParentNode()
+                layerNodes.removeValue(forKey: id)
+            }
+            for layer in layers {
+                if layerNodes[layer.id] == nil {
+                    let node = makeLayerNode(for: layer)
+                    layerNodes[layer.id] = node
+                    layerGroup.addChildNode(node)
+                }
+                layerNodes[layer.id]?.isHidden = !visibleIDs.contains(layer.id)
+            }
+        }
+
+        private func makeLayerNode(for layer: NamedGamut) -> SCNNode {
+            let node: SCNNode
+            switch layer.role {
+            case .reference:
+                node = referenceMeshNode(layer.mesh)
+            case .profileA:
+                node = profileMeshNode(layer.mesh)
+            case .profileB:
+                node = compareMeshNode(layer.mesh)
+            }
+            node.name = layer.id
+            return node
+        }
+
+        // MARK: - Click inspect (#147)
+
+        /// Click (not drag) hit-tests the scene. `NSClickGestureRecognizer`
+        /// only fires on a press+release in place, so orbit drags are
+        /// untouched.
+        func installClickGesture() {
+            guard let scnView, clickGesture == nil else { return }
+            let gesture = NSClickGestureRecognizer(target: self, action: #selector(handleClick(_:)))
+            scnView.addGestureRecognizer(gesture)
+            clickGesture = gesture
+        }
+
+        @objc private func handleClick(_ gesture: NSClickGestureRecognizer) {
+            guard let scnView else { return }
+            let point = gesture.location(in: scnView)
+            for hit in scnView.hitTest(point, options: nil) {
+                if let layerID = layerID(for: hit.node) {
+                    let world = hit.worldCoordinates
+                    onInspect(
+                        SIMD3<Float>(Float(world.x), Float(world.y), Float(world.z)),
+                        layerID)
+                    return
+                }
+            }
+            // Axis scaffold / empty background → back to idle.
+            onInspect(.zero, nil)
+        }
+
+        /// Walks the hit node's ancestor chain looking for a layer node.
+        private func layerID(for node: SCNNode) -> String? {
+            var current: SCNNode? = node
+            while let node = current {
+                if let name = node.name, layerNodes[name] != nil { return name }
+                current = node.parent
+            }
+            return nil
+        }
+
+        // MARK: - Scene furniture (unchanged from #28)
 
         private func addLights(to scene: SCNScene) {
             let ambient = SCNNode()
@@ -351,7 +659,8 @@ private struct GamutSceneView: NSViewRepresentable {
             return SCNNode(geometry: geometry)
         }
 
-        private func profileMeshNode(_ mesh: GamutMesh, name: String) -> SCNNode {
+        /// Profile A: solid vertex-coloured surface.
+        private func profileMeshNode(_ mesh: GamutMesh) -> SCNNode {
             let (geometry, _) = scnGeometry(for: mesh)
 
             let material = SCNMaterial()
@@ -361,11 +670,26 @@ private struct GamutSceneView: NSViewRepresentable {
             material.isDoubleSided = true
             geometry.materials = [material]
 
-            let node = SCNNode(geometry: geometry)
-            node.name = name
-            return node
+            return SCNNode(geometry: geometry)
         }
 
+        /// Compare profile B: same vertex colours at ~30 % opacity so
+        /// overlaps with A and the sRGB reference stay readable.
+        private func compareMeshNode(_ mesh: GamutMesh) -> SCNNode {
+            let (geometry, _) = scnGeometry(for: mesh)
+
+            let material = SCNMaterial()
+            material.lightingModel = .lambert
+            material.diffuse.contents = NSColor.white
+            material.transparency = 0.30
+            material.isDoubleSided = true
+            material.writesToDepthBuffer = false
+            geometry.materials = [material]
+
+            return SCNNode(geometry: geometry)
+        }
+
+        /// Bundled sRGB reference: faint fill + structural edge lines.
         private func referenceMeshNode(_ mesh: GamutMesh) -> SCNNode {
             let (geometry, _) = scnGeometry(for: mesh)
 
@@ -486,5 +810,83 @@ private struct GamutSceneView: NSViewRepresentable {
             matrix.columns.3 = SIMD4<Float>(eye, 1)
             return matrix
         }
+    }
+}
+
+/// Click-to-sample image view for the TIFF preview sheet (#147).
+///
+/// The TIFF is already decoded to PNG on the host side (#58); the view
+/// reports 8-bit sRGB pixel values at the clicked point — the Lab
+/// conversion is the documented approximate matrix helper, not a CMM.
+private struct TiffSampleImageView: NSViewRepresentable {
+    let pngData: Data
+    var onSample: (Int, Int, Int) -> Void
+
+    func makeNSView(context: Context) -> TiffSampleNSView {
+        let view = TiffSampleNSView()
+        view.image = NSImage(data: pngData)
+        view.onSample = onSample
+        return view
+    }
+
+    func updateNSView(_ nsView: TiffSampleNSView, context: Context) {
+        nsView.onSample = onSample
+    }
+}
+
+private final class TiffSampleNSView: NSView {
+    var image: NSImage? {
+        didSet {
+            bitmapRep = image?.cgImage(forProposedRect: nil, context: nil, hints: nil)
+                .flatMap { NSBitmapImageRep(cgImage: $0) }
+            invalidateIntrinsicContentSize()
+            needsDisplay = true
+        }
+    }
+    var onSample: ((Int, Int, Int) -> Void)?
+    private var bitmapRep: NSBitmapImageRep?
+
+    override var intrinsicContentSize: NSSize {
+        image?.size ?? NSSize(width: 320, height: 240)
+    }
+
+    override var acceptsFirstResponder: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor(red: 0.055, green: 0.055, blue: 0.078, alpha: 1).setFill()
+        dirtyRect.fill()
+        guard let image else { return }
+        image.draw(in: imageRect())
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        guard let rep = bitmapRep else { return }
+        let rect = imageRect()
+        let location = convert(event.locationInWindow, from: nil)
+        guard rect.contains(location), rect.width > 0, rect.height > 0 else { return }
+
+        let x = Int((location.x - rect.minX) / rect.width * CGFloat(rep.pixelsWide))
+        // This view is not flipped: y grows up, bitmap rows grow down.
+        let y = rep.pixelsHigh - 1
+            - Int((location.y - rect.minY) / rect.height * CGFloat(rep.pixelsHigh))
+        guard x >= 0, x < rep.pixelsWide, y >= 0, y < rep.pixelsHigh else { return }
+
+        guard let color = rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { return }
+        onSample?(
+            Int((color.redComponent * 255).rounded()),
+            Int((color.greenComponent * 255).rounded()),
+            Int((color.blueComponent * 255).rounded()))
+    }
+
+    /// Aspect-fit rect of the image inside `bounds`.
+    private func imageRect() -> NSRect {
+        guard let image, image.size.width > 0, image.size.height > 0 else { return .zero }
+        let scale = min(bounds.width / image.size.width, bounds.height / image.size.height)
+        let size = NSSize(width: image.size.width * scale, height: image.size.height * scale)
+        return NSRect(
+            x: (bounds.width - size.width) / 2,
+            y: (bounds.height - size.height) / 2,
+            width: size.width,
+            height: size.height)
     }
 }

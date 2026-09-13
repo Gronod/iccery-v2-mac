@@ -827,3 +827,35 @@ HTML ids that `_wireToggles` hard-codes: `chkProfileGamut`, `chkSrgbReference`,
 | #185 axes / EdgesGeometry / vertex colour / legend | All present (GridHelper kept; CSS2D parent-visibility bug). |
 | #212 Node test crash | Polyfill + dynamic import + `typeof window` guard. |
 | #225 Monterey WebGL | Lazy ensure, feature-detect, pause rAF, context-lost, low-power flags. |
+| #147 compare + inspect | macOS native: layer toggles (`gamutLayer-*`), compare slot (one extra profile or `.gam`), click/typed-Lab containment, TIFF pixel sample. |
+
+---
+
+## 13. macOS rewrite notes (#28, #147)
+
+The native viewer (`Sources/ICCery/GamutView.swift` + `GamutViewModel`) keeps
+the v1 contract points that matter — `(a*, L*, b*)` axes, camera home
+(180,120,180) lookAt (0,50,0), R resets via a local `NSEvent` monitor, native
+faces only — and adds the compare/inspect layer model:
+
+- **Layers.** `NamedGamut` (reference / profileA / profileB). sRGB cannot be
+  removed, only hidden. The compare slot holds exactly one profile; picking a
+  third replaces it and posts `gamutNoticeText`.
+- **Toggles hide, not unload.** `visibleIDs` maps to `SCNNode.isHidden`; the
+  scene is built once and a checkbox never resets the camera.
+- **Containment.** `GamutGeometry.containment` ray-casts the face table
+  (`GamutVertex.position` space) with off-axis retries on edge hits; no faces
+  → `.unknown`. `GamutGeometry.volume` sums signed tetrahedra from the vertex
+  centroid (Lab-cubic); the `vol % of sRGB` clause only prints when both
+  volumes are finite and > 0.
+- **Inspect.** Click a mesh (hit-test in the `SCNView` coordinator on
+  mouse-up, never a ZStack tap gesture), type Lab, or sample a TIFF pixel.
+  Per-layer in/out/? + swatch; `gamutInspectApprox` marks samples that went
+  through `ApproximateLab` (fixed-matrix sRGB→Lab D50, **not** ColorSync, no
+  CMM).
+- **Fallback.** No GPU → `gamutViewerUnavailable` text replaces the scene;
+  layer toggles stay visible but disabled; the representable is never
+  respawned in a loop.
+- **iccgamut** still runs only as the bundled sidecar, `-v -d {density}`
+  (density 10 = surface density, not a directory). Failure is an in-sheet
+  info notice — sRGB + profile A stay loaded (#24).
