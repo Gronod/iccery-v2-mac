@@ -46,9 +46,11 @@ struct SaveMediaRecipeDialog: View {
             || media.captureColourSpaceMismatch
     }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Save Media Recipe").font(.title3).foregroundStyle(Theme.text)
+    // Swift 5.7 (Xcode 14.2 CI runner) caps a ViewBuilder body at 10
+    // children (#146); Group blocks are layout-transparent, so field
+    // order and every docs/21 id are unchanged.
+    private var fields: some View {
+        Group {
             TextField("Name", text: $media.saveMediaName)
                 .textFieldStyle(.roundedBorder)
                 .accessibilityIdentifier("saveMediaName")
@@ -61,7 +63,11 @@ struct SaveMediaRecipeDialog: View {
             TextField("Ink set", text: $media.saveMediaInk)
                 .textFieldStyle(.roundedBorder)
                 .accessibilityIdentifier("saveMediaInk")
+        }
+    }
 
+    private var readOnlyRows: some View {
+        Group {
             captureRow("Printer", value: printerCaption,
                        identifier: "saveMediaPrinter")
             captureRow("Preset",
@@ -74,6 +80,14 @@ struct SaveMediaRecipeDialog: View {
                        value: workflow.profile.calibrationFile.isEmpty
                            ? "None" : workflow.profile.calibrationFile,
                        identifier: "saveMediaCal")
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Save Media Recipe").font(.title3).foregroundStyle(Theme.text)
+            fields
+            readOnlyRows
             Toggle("Apply calibration to profile",
                    isOn: $media.saveMediaApplyCal)
                 .disabled(!media.calApplyable)
