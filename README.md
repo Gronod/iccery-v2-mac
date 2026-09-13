@@ -8,7 +8,7 @@ All measurement, chart generation, and profile mathematics live in the [Gronod A
 |---|---|
 | Product | ICCery v2 for macOS |
 | Bundle | `com.gronod.iccery2` |
-| Floor | macOS 14 Sonoma, universal `arm64` + `x86_64` |
+| Floor | macOS 12.0 Monterey, universal `arm64` + `x86_64` |
 | Default branch | `develop` |
 | M6 | Stage 0 calibration, CGATS import, SceneKit gamut viewer, packaging — shipped on `develop` |
 | M7 | Pre-UAT hardening & baseline consolidation — shipped on `develop` |
