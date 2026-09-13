@@ -113,6 +113,59 @@ final class Milestone3UITests: XCTestCase {
         return recordedLpArgv()
     }
 
+    /// Drags `#galleryPage-0`'s TIFF upward so `identifier`'s button
+    /// moves up, clear of the Dock collision zone at the window's
+    /// bottom edge (#132).
+    ///
+    /// macOS overlay scrollbars are not in the AX tree — never use
+    /// `app.scrollBars` — and a synthesized scroll wheel is inert on
+    /// this LazyVGrid, so the scroll is a real drag on the gallery
+    /// cell's content. A stale/off-screen AX frame resolves to a screen
+    /// point that can be a Dock icon — a coordinate click there once
+    /// opened Calendar instead of Print. Callers must click only when
+    /// the returned element `isHittable`; never coordinate-click a
+    /// stale frame.
+    @discardableResult
+    private func scrollStage2UntilHittable(
+        _ identifier: String,
+        timeout: TimeInterval = 20
+    ) -> XCUIElement {
+        var button = app.buttons[identifier]
+        let cell = app.descendants(matching: .any)["galleryPage-0"].firstMatch
+        XCTAssertTrue(cell.waitForExistence(timeout: 10), "galleryPage-0")
+
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let windowBottom = app.windows.firstMatch.frame.maxY
+            if button.exists, button.isHittable,
+               button.frame.maxY < windowBottom - 80 {
+                return button
+            }
+            // Grab the upper half of the cell (the TIFF, not the Print
+            // button / Dock) and drag toward the top of the window.
+            // Mouse moves UP ⇒ gallery content moves UP ⇒ Print leaves
+            // the Dock zone.
+            if cell.isHittable {
+                let start = cell.coordinate(withNormalizedOffset:
+                    CGVector(dx: 0.5, dy: 0.25))
+                let end = start.withOffset(CGVector(dx: 0, dy: -280))
+                start.press(forDuration: 0.15, thenDragTo: end)
+            } else {
+                // Cell not hit-testable: drag the stage-2 content
+                // directly — still content, still never scrollBars.
+                let scrollView = app.scrollViews["stage-2"]
+                scrollView.coordinate(withNormalizedOffset:
+                    CGVector(dx: 0.5, dy: 0.55))
+                    .press(forDuration: 0.15, thenDragTo:
+                        scrollView.coordinate(withNormalizedOffset:
+                            CGVector(dx: 0.5, dy: 0.15)))
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+            button = app.buttons[identifier]
+        }
+        return button
+    }
+
     // MARK: - Tests
 
     /// Panel appears after the manifest; refresh populates the printer
@@ -199,36 +252,16 @@ final class Milestone3UITests: XCTestCase {
         XCTAssertTrue(app.buttons["btnPrintAll"].isEnabled)
 
         // The gallery cell's Print button sits at the window's bottom
-        // edge where synthesized scroll-wheel events are inert on the
-        // LazyVGrid (#132). Drag the NSScrollView's vertical AXScrollBar
-        // thumb instead — a real scroll that re-renders the cell onscreen.
-        var printPage = app.buttons["btnPrintPage-0"]
-        let scrollDeadline = Date().addingTimeInterval(15)
-        while !printPage.isHittable, Date() < scrollDeadline {
-            let scroller = app.scrollBars.allElementsBoundByIndex
-                .first { $0.frame.height > $0.frame.width }
-            if let scroller {
-                scroller.coordinate(withNormalizedOffset:
-                    CGVector(dx: 0.5, dy: 0.1))
-                    .press(forDuration: 0.1, thenDragTo:
-                        scroller.coordinate(withNormalizedOffset:
-                            CGVector(dx: 0.5, dy: 0.6)))
-            } else {
-                app.scrollViews["stage-2"].scroll(byDeltaX: 0, deltaY: -1)
-            }
-            RunLoop.current.run(until: Date().addingTimeInterval(0.5))
-            printPage = app.buttons["btnPrintPage-0"]
-        }
-        if printPage.isHittable {
-            printPage.click()
-        } else {
-            // LazyVGrid cells can report a stale a11y frame — click the
-            // point directly; the lp argv assert below still verifies.
+        // edge; scroll until it is genuinely hittable (#132). Never
+        // coordinate-click a stale frame — that point can be the Dock.
+        let printPage = scrollStage2UntilHittable("btnPrintPage-0")
+        guard printPage.isHittable else {
             print("AXTREE-BEGIN frame=\(printPage.frame)\n" +
                   "\(app.debugDescription)\nAXTREE-END")
-            printPage.coordinate(withNormalizedOffset:
-                CGVector(dx: 0.5, dy: 0.5)).click()
+            XCTFail("btnPrintPage-0 never became hittable; frame=\(printPage.frame)")
+            return
         }
+        printPage.click()
         let argv = waitForLpLine()
         XCTAssertTrue(argv.contains("AP_ColorMatchingMode"), argv)
         XCTAssertTrue(argv.contains("page1.tif"), argv)
