@@ -7,7 +7,7 @@ Persisted at `{app_data}/settings.json` via `load_settings` / `save_settings`. I
 | Field | Default | Notes |
 |-------|---------|-------|
 | `argyll_binary_dir` | `null` | Overrides bundled sidecars. `resolve_binary` checks this first. |
-| `default_instrument` | `null` | **Stored but not applied to argv.** Stage 2 `#instrumentSelect` is the source of truth. Do not start honouring this without an explicit product decision. |
+| `default_instrument` | `null` | Stored; seeds the Spot Read instrument picker when that instrument is present (#148). **Never** written into `printtarg -i` or `targen` argv. Stage 2 `#instrumentSelect` remains the printtarg instrument. |
 | `log_level` | `null` | `error` / `warn` / `info` / `debug` / `trace`. `null` → Debug in debug builds, Info in release. Applied at startup **and** on save (#158). |
 | `delta_e_good_max` | `2.0` | Stage 3 swatch traffic-light "Good". Must be ≥ 0. |
 | `delta_e_warning_max` | `5.0` | Stage 3 "Warning" band. Must be **strictly greater** than good. |
