@@ -83,6 +83,12 @@ enum UITestHooks {
     static var presetExportURL: URL? { url("ICCERY_TEST_PRESET_EXPORT") }
     /// Spot-read CSV export destination (`selectCsvSavePath`, #148).
     static var csvExportURL: URL? { url("ICCERY_TEST_CSV_EXPORT") }
+    /// `.gam` compare picker result (gamut sheet, #147). Unset → cancel.
+    static var gamutFileURL: URL? { url("ICCERY_TEST_GAMUT_FILE") }
+    /// `.icc/.icm` compare picker result (gamut sheet, #147). Unset → cancel.
+    static var gamutProfileURL: URL? { url("ICCERY_TEST_GAMUT_PROFILE") }
+    /// TIFF sample picker result (gamut sheet, #147). Unset → cancel.
+    static var gamutTiffURL: URL? { url("ICCERY_TEST_GAMUT_TIFF") }
 
     // MARK: - Print panel / CUPS stubs (issue 13/17)
 

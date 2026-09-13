@@ -70,6 +70,19 @@ final class FileDialogService {
              message: "Choose a calibration file (.cal)")
     }
 
+    /// `selectGamutFile` — `.gam` surface mesh for the compare slot (#147).
+    func selectGamutFile(startingAt start: URL? = nil) -> URL? {
+        open(extensions: ["gam"], startingAt: start,
+             message: "Choose a .gam surface mesh",
+             allowsOtherFileTypes: false)
+    }
+
+    /// `selectTiffFile` — `.tif`/`.tiff` target page for gamut sampling (#147).
+    func selectTiffFile(startingAt start: URL? = nil) -> URL? {
+        open(extensions: ["tif", "tiff"], startingAt: start,
+             message: "Choose a target TIFF page")
+    }
+
     /// `btnImportPreset` — open a `.json` preset file.
     func selectPresetFile(startingAt start: URL? = nil) -> URL? {
         open(extensions: ["json"], startingAt: start,
@@ -102,14 +115,15 @@ final class FileDialogService {
     private func open(
         extensions: [String],
         startingAt start: URL?,
-        message: String?
+        message: String?,
+        allowsOtherFileTypes: Bool = true
     ) -> URL? {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
         panel.allowsMultipleSelection = false
         panel.allowedContentTypes = utTypes(extensions)
-        panel.allowsOtherFileTypes = true
+        panel.allowsOtherFileTypes = allowsOtherFileTypes
         panel.directoryURL = start
         if let message { panel.message = message }
         return run(panel)

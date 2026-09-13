@@ -160,6 +160,9 @@ struct SidebarView: View {
                     .frame(maxWidth: .infinity)
             }
             .controlSize(.large)
+            .helpOverlay(
+                "View the profile gamut in 3D against sRGB.",
+                showing: $showingAllHelp)
             .accessibilityIdentifier("btnViewGamut")
             .padding(.horizontal, 12)
 
