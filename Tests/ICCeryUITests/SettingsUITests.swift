@@ -52,9 +52,6 @@ final class SettingsUITests: XCTestCase {
     }
 
     /// Both ΔE rows must render fully inside the 560×620 sheet with at
-    /// least the issue's 12 pt inset; the Warning row must sit below the
-    /// Good row so the two fields cannot overlap on one clipped line.
-    /// Both ΔE rows must render fully inside the 560×620 sheet with at
     /// least the issue's 12 pt inset, aligned with other form controls;
     /// the Warning row must sit below the Good row so the two fields
     /// cannot overlap on one clipped line.
@@ -91,10 +88,10 @@ final class SettingsUITests: XCTestCase {
         // Controls are aligned with other form controls (e.g. calibration stale days field)
         let calField = sheet.textFields.matching(NSPredicate(format: "value == '30'")).firstMatch
         if calField.waitForExistence(timeout: 5) {
-            XCTAssertEqual(goodField.frame.minX, calField.frame.minX, accuracy: 2.0,
-                           "Good ΔE field should align with other form fields")
-            XCTAssertEqual(warningField.frame.minX, calField.frame.minX, accuracy: 2.0,
-                           "Warning ΔE field should align with other form fields")
+            XCTAssertTrue(abs(goodField.frame.minX - calField.frame.minX) <= 2.0,
+                          "Good ΔE field should align with other form fields")
+            XCTAssertTrue(abs(warningField.frame.minX - calField.frame.minX) <= 2.0,
+                          "Warning ΔE field should align with other form fields")
         }
 
         // Other labels must not overflow the left boundary
