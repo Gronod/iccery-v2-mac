@@ -37,6 +37,21 @@ struct SidebarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            header
+            presetBlock
+            mediaBlock
+            studioButtons
+            stepperAndProject
+        }
+        .frame(width: Theme.Metrics.sidebarWidth)
+        .background(Theme.panel)
+    }
+
+    // Swift 5.7 (Xcode 14.2 CI runner) caps a ViewBuilder body at 10
+    // children (#146); these Group blocks are layout-transparent, so
+    // visual order, ids and the 270 pt column are unchanged.
+    private var header: some View {
+        Group {
             HStack {
                 Image("ICCery-logo")
                     .resizable()
@@ -65,7 +80,11 @@ struct SidebarView: View {
             .padding(12)
 
             Divider().overlay(Theme.border)
+        }
+    }
 
+    private var presetBlock: some View {
+        Group {
             // Preset select (`#presetSelect`) — issue #11. Selection
             // applies the preset immediately; names render via Text only.
             Picker("Preset", selection: Binding(
@@ -97,7 +116,11 @@ struct SidebarView: View {
             }
             .padding(.horizontal, 12)
             .padding(.bottom, 8)
+        }
+    }
 
+    private var mediaBlock: some View {
+        Group {
             // Media library (`#mediaSelect`) — issue #146. Selection
             // applies the recipe immediately, like presets; names render
             // via Text only (#114). Never reuses `presetSelect` (#137).
@@ -147,7 +170,11 @@ struct SidebarView: View {
             }
             .padding(.horizontal, 12)
             .padding(.bottom, 8)
+        }
+    }
 
+    private var studioButtons: some View {
+        Group {
             // Calibrate Printer (`#btnCalibratePrinter`).
             Button(action: { model.enterCalibration() }) {
                 Label("Calibrate Printer", systemImage: "slider.horizontal.3")
@@ -187,7 +214,11 @@ struct SidebarView: View {
                 showing: $showingAllHelp)
             .accessibilityIdentifier("btnSpotRead")
             .padding(.horizontal, 12)
+        }
+    }
 
+    private var stepperAndProject: some View {
+        Group {
             Divider().overlay(Theme.border)
                 .padding(.vertical, 8)
 
@@ -214,8 +245,6 @@ struct SidebarView: View {
             ProjectChip(project: project, showingAllHelp: $showingAllHelp)
                 .padding(8)
         }
-        .frame(width: Theme.Metrics.sidebarWidth)
-        .background(Theme.panel)
     }
 }
 
