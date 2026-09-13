@@ -12,6 +12,7 @@ struct SidebarView: View {
     @ObservedObject private var media: MediaLibraryViewModel
     @ObservedObject private var printSession: PrintSessionViewModel
     @ObservedObject private var measurement: MeasurementWorkflowViewModel
+    @ObservedObject private var project: ProjectSession
     var onOpenSettings: () -> Void
     var onOpenAbout: () -> Void
     @Binding var showingAllHelp: Bool
@@ -28,6 +29,7 @@ struct SidebarView: View {
         self._media = ObservedObject(wrappedValue: workflow.media)
         self._printSession = ObservedObject(wrappedValue: workflow.print)
         self._measurement = ObservedObject(wrappedValue: workflow.measurement)
+        self._project = ObservedObject(wrappedValue: workflow.project)
         self.onOpenSettings = onOpenSettings
         self.onOpenAbout = onOpenAbout
         self._showingAllHelp = showingAllHelp
@@ -205,6 +207,12 @@ struct SidebarView: View {
             .padding(.horizontal, 6)
 
             Spacer()
+
+            // Project chip (issue #149) — a compact footer in the
+            // spacer's bottom, under the stepper. The 270 pt column
+            // cannot take four more large buttons (R10).
+            ProjectChip(project: project, showingAllHelp: $showingAllHelp)
+                .padding(8)
         }
         .frame(width: Theme.Metrics.sidebarWidth)
         .background(Theme.panel)

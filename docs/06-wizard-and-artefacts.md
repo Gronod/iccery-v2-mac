@@ -46,3 +46,9 @@ Never spawn with `cwd: ""`. Initialize from `get_default_working_dir` (Documents
 ## No `"test_target"` fallbacks (#60)
 
 A rewrite must not invent default basenames. Later stages stay inert until `wizardState.basename` is set from a real artefact.
+
+## Project file (#149)
+
+A `.icceryproj` is a JSON **index** (`schema_version` 1) over `basename` + `cwd` + optional `media_recipe_id`/`preset_id`/`calibration_url`/`printer_*` + a `last_verification` ΔE₀₀ snapshot. It is never a second source of truth: opening one writes `WizardState` and re-runs the same artefact probe window focus uses — if JSON claims Stage 5 but disk stops at `.ti2`, the stepper follows the disk and the sidebar chip shows `projectChipStale` with an info banner.
+
+`wizard_state.json` remains the crash-resume file; there is no auto-save. Recents live in `appDataDir/recent_projects.json` (cap 20, bookmark + path, corrupt → `[]` + keep bytes). `Save Report…` writes `{basename}-report.md` in cwd atomically. A live `CAL_` basename is never persisted — Save resolves the persisted `calibrationOriginalBasename` or refuses with a banner.

@@ -14,6 +14,7 @@ struct AppEnvironment: Sendable {
     let cupsService: CupsService
     let historyStore: VerificationHistoryStore
     let mediaStore: MediaLibraryStore
+    let recentProjectsStore: RecentProjectsStore
 
     static func live(
         environment: [String: String] = ProcessInfo.processInfo.environment
@@ -47,7 +48,8 @@ struct AppEnvironment: Sendable {
                 processManager: .shared,
                 binaryDir: cupsDir),
             historyStore: VerificationHistoryStore(),
-            mediaStore: MediaLibraryStore()
+            mediaStore: MediaLibraryStore(),
+            recentProjectsStore: RecentProjectsStore()
         )
     }
 }
@@ -89,6 +91,12 @@ enum UITestHooks {
     static var gamutProfileURL: URL? { url("ICCERY_TEST_GAMUT_PROFILE") }
     /// TIFF sample picker result (gamut sheet, #147). Unset → cancel.
     static var gamutTiffURL: URL? { url("ICCERY_TEST_GAMUT_TIFF") }
+    /// `selectProjectFile` result (`.icceryproj` open, #149). Unset → cancel.
+    static var projectOpenURL: URL? { url("ICCERY_TEST_PROJECT_OPEN") }
+    /// `selectProjectSavePath` result (`.icceryproj` save-as, #149).
+    static var projectSaveURL: URL? { url("ICCERY_TEST_PROJECT_SAVE") }
+    /// Relocate-folder result when a project's `cwd` is missing (#149).
+    static var projectRelocateURL: URL? { url("ICCERY_TEST_PROJECT_RELOCATE") }
 
     // MARK: - Print panel / CUPS stubs (issue 13/17)
 

@@ -9,6 +9,7 @@ struct RootView: View {
     /// Observed directly: nested ObservableObjects are not tracked
     /// through the parent's `objectWillChange`.
     @ObservedObject private var model: WizardViewModel
+    @ObservedObject private var project: ProjectSession
     @State private var showingSettings = false
     @State private var showingAbout = false
     @State private var showingAllHelp = false
@@ -16,6 +17,7 @@ struct RootView: View {
     init(workflow: TargetWorkflowViewModel) {
         self.workflow = workflow
         self._model = ObservedObject(wrappedValue: workflow.wizard)
+        self._project = ObservedObject(wrappedValue: workflow.project)
     }
 
     var body: some View {
@@ -86,6 +88,37 @@ struct RootView: View {
                 environment: workflow.environment,
                 profileGamURL: workflow.wizard.gamutProfileURL,
                 showingAllHelp: $showingAllHelp)
+        }
+        // Project file chrome (issue #149): window title, New confirm
+        // alert, dirty alert, relocate sheet. Panels never appear from
+        // a View — UITestHooks inject fixture paths instead.
+        .onReceive(project.$windowTitle) { title in
+            for window in NSApp.windows where !(window is NSPanel) {
+                window.title = title
+            }
+        }
+        .alert("Start a new project?", isPresented: $project.showingNewAlert) {
+            Button("Cancel", role: .cancel) {}
+                .accessibilityIdentifier("btnProjectNewCancel")
+            Button("Start") { project.confirmNew() }
+                .accessibilityIdentifier("btnProjectNewConfirm")
+        } message: {
+            Text("The working folder and targets on disk are not deleted.")
+                .accessibilityIdentifier("projectNewAlert")
+        }
+        .alert(
+            "Save the current project first?",
+            isPresented: $project.showingDirtyAlert
+        ) {
+            Button("Save") { project.resolveDirty(save: true) }
+                .accessibilityIdentifier("btnProjectDirtySave")
+            Button("Don't Save") { project.resolveDirty(save: false) }
+                .accessibilityIdentifier("btnProjectDirtyDiscard")
+            Button("Cancel", role: .cancel) { project.cancelDirty() }
+                .accessibilityIdentifier("btnProjectDirtyCancel")
+        }
+        .sheet(isPresented: $project.showingRelocateSheet) {
+            ProjectRelocateSheet(project: project)
         }
     }
 

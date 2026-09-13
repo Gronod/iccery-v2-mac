@@ -22,6 +22,9 @@ struct TestAppEnvironment {
     var mediaLibraryURL: URL {
         root.appendingPathComponent("media_library.json")
     }
+    var recentProjectsURL: URL {
+        root.appendingPathComponent("recent_projects.json")
+    }
 
     /// Creates an isolated environment under `NSTemporaryDirectory()`.
     /// Call `cleanup()` when finished.
@@ -65,6 +68,9 @@ struct TestAppEnvironment {
             ),
             mediaStore: MediaLibraryStore(
                 url: root.appendingPathComponent("media_library.json")
+            ),
+            recentProjectsStore: RecentProjectsStore(
+                url: root.appendingPathComponent("recent_projects.json")
             )
         )
         return TestAppEnvironment(root: root, environment: environment)

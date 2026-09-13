@@ -95,6 +95,23 @@ final class FileDialogService {
              message: "Export this preset as JSON")
     }
 
+    /// `selectProjectFile` — open `.icceryproj` only (issue #149).
+    func selectProjectFile(startingAt start: URL? = nil) -> URL? {
+        open(extensions: ["icceryproj"], startingAt: start,
+             message: "Open ICCery Project",
+             title: "Open ICCery Project",
+             allowsOtherFileTypes: false)
+    }
+
+    /// `selectProjectSavePath` — save `.icceryproj`, suggested name
+    /// `{basename}.icceryproj` in the working folder (issue #149).
+    func selectProjectSavePath(
+        basename: String, startingAt start: URL? = nil
+    ) -> URL? {
+        save(named: "\(basename).icceryproj", extensions: ["icceryproj"],
+             startingAt: start, message: "Save ICCery Project")
+    }
+
     // MARK: - Internals (private — not a shared public picker API)
 
     private func save(
@@ -116,6 +133,7 @@ final class FileDialogService {
         extensions: [String],
         startingAt start: URL?,
         message: String?,
+        title: String? = nil,
         allowsOtherFileTypes: Bool = true
     ) -> URL? {
         let panel = NSOpenPanel()
@@ -126,6 +144,7 @@ final class FileDialogService {
         panel.allowsOtherFileTypes = allowsOtherFileTypes
         panel.directoryURL = start
         if let message { panel.message = message }
+        if let title { panel.title = title }
         return run(panel)
     }
 
