@@ -144,6 +144,10 @@ struct GamutView: View {
         .toggleStyle(.checkbox)
         .disabled(layer == nil || viewModel.viewerUnavailable)
         .help(layer.map { $0.sourceURL.lastPathComponent } ?? "No profile .gam loaded")
+        // macOS 12 puts the identifier on the Toggle's container, an
+        // element that never reports isEnabled — combine so the a11y
+        // leaf is the checkbox itself.
+        .accessibilityElement(children: .combine)
         .accessibilityIdentifier("gamutLayer-\(id)")
     }
 
