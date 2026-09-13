@@ -115,6 +115,10 @@ final class Milestone10GamutCompareUITests: XCTestCase {
         let compare = waitFor("gamutLayer-compare")
         XCTAssertTrue(compare.exists)
         XCTAssertFalse(compare.isEnabled, "Compare toggle must be disabled before a load")
+
+        let status = waitFor("gamutStatusText")
+        let statusValue = status.value as? String ?? ""
+        XCTAssertTrue(statusValue.contains("sRGB"), "Status should list the sRGB layer, got: \(statusValue)")
     }
 
     func testAddCompareButtonExists() throws {
@@ -142,6 +146,7 @@ final class Milestone10GamutCompareUITests: XCTestCase {
         // The pre-load placeholder also exists — wait for enabled.
         let compare = waitUntilEnabled("gamutLayer-compare")
         XCTAssertTrue(compare.isEnabled, "Compare toggle should enable after load")
+        XCTAssertEqual(compare.value as? Int, 1, "Compare layer should be on after load")
 
         let status = waitFor("gamutStatusText")
         let value = status.value as? String ?? ""
@@ -164,6 +169,12 @@ final class Milestone10GamutCompareUITests: XCTestCase {
 
         let compare = waitUntilEnabled("gamutLayer-compare")
         XCTAssertTrue(compare.isEnabled, "Compare toggle should enable after iccgamut")
+        XCTAssertEqual(compare.value as? Int, 1, "Compare layer should be on after iccgamut")
+
+        // The compare slot's display name is the .gam stem ("myprinter").
+        let status = waitFor("gamutStatusText")
+        let statusValue = status.value as? String ?? ""
+        XCTAssertTrue(statusValue.contains("myprinter"), "Status should list the compare layer, got: \(statusValue)")
     }
 
     func testInspectPanelIdleStableHeight() throws {
