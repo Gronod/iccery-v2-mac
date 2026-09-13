@@ -97,6 +97,12 @@ enum UITestHooks {
     static var projectSaveURL: URL? { url("ICCERY_TEST_PROJECT_SAVE") }
     /// Relocate-folder result when a project's `cwd` is missing (#149).
     static var projectRelocateURL: URL? { url("ICCERY_TEST_PROJECT_RELOCATE") }
+    /// Forces the gamut sheet into its no-Metal fallback even on a GPU
+    /// host (#147). Set per-test only — never in a default launch env,
+    /// or CI's future GPU run would skip SceneKit too.
+    static var skipSceneKit: Bool {
+        isEnabled && env["ICCERY_TEST_SKIP_SCENEKIT"] == "1"
+    }
 
     // MARK: - Print panel / CUPS stubs (issue 13/17)
 
