@@ -75,6 +75,22 @@ final class Milestone10GamutCompareUITests: XCTestCase {
         return el
     }
 
+    /// Exists **and** `isEnabled`. Layer toggles render as disabled
+    /// placeholders until the async layer load lands — on the macOS 12
+    /// runner `waitFor` alone wins the race against `parse`.
+    private func waitUntilEnabled(_ id: String, timeout: TimeInterval = 15) -> XCUIElement {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let el = element(id)
+            if el.exists && el.isEnabled { return el }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        let el = element(id)
+        XCTAssertTrue(
+            el.exists && el.isEnabled, "Expected enabled element \(id)")
+        return el
+    }
+
     private func launchApp() {
         app.launch()
         if !app.wait(for: .runningForeground, timeout: 10) {
@@ -91,9 +107,8 @@ final class Milestone10GamutCompareUITests: XCTestCase {
     func testLayerTogglesExistWithSRGB() throws {
         openGamutSheet()
 
-        let srgb = waitFor("gamutLayer-sRGB")
+        let srgb = waitUntilEnabled("gamutLayer-sRGB")
         XCTAssertTrue(srgb.exists)
-        XCTAssertTrue(srgb.isEnabled)
         // NSButton checkbox value is 1 when checked.
         XCTAssertEqual(srgb.value as? Int, 1, "sRGB layer should be on")
 
@@ -124,7 +139,8 @@ final class Milestone10GamutCompareUITests: XCTestCase {
         waitFor("btnGamutAddCompare").click()
         waitFor("btnGamutOpenGam").click()
 
-        let compare = waitFor("gamutLayer-compare")
+        // The pre-load placeholder also exists — wait for enabled.
+        let compare = waitUntilEnabled("gamutLayer-compare")
         XCTAssertTrue(compare.isEnabled, "Compare toggle should enable after load")
 
         let status = waitFor("gamutStatusText")
@@ -146,7 +162,7 @@ final class Milestone10GamutCompareUITests: XCTestCase {
         waitFor("btnGamutAddCompare").click()
         waitFor("btnGamutOpenProfile").click()
 
-        let compare = waitFor("gamutLayer-compare")
+        let compare = waitUntilEnabled("gamutLayer-compare")
         XCTAssertTrue(compare.isEnabled, "Compare toggle should enable after iccgamut")
     }
 

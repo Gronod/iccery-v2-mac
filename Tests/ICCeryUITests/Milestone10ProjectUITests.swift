@@ -3,8 +3,9 @@ import XCTest
 /// Milestone 10 UI tests — issue #149 project file. Panels are never
 /// real: `ICCERY_TEST_PROJECT_OPEN` / `ICCERY_TEST_PROJECT_SAVE`
 /// inject fixture paths through `UITestHooks`. Menu commands are driven
-/// by their keyboard shortcuts (⌘N) or the sidebar chip so the tests do
-/// not depend on menu AX exposure (R19). All queries by identifier.
+/// through the File menu when it is in the AX tree, else by their
+/// keyboard shortcuts (⌘N) — the tests do not depend on menu AX
+/// exposure (R19). All queries by identifier.
 @MainActor
 final class Milestone10ProjectUITests: XCTestCase {
 
@@ -77,6 +78,39 @@ final class Milestone10ProjectUITests: XCTestCase {
         return (el.value as? String) ?? el.label
     }
 
+    /// Alert/sheet button by visible title, falling back to the a11y
+    /// id; nil when neither matches. macOS 12 SwiftUI alerts often
+    /// drop `accessibilityIdentifier` on their buttons, so the title
+    /// is the reliable handle there.
+    private func alertButton(title: String, id: String) -> XCUIElement? {
+        let inDialog = app.dialogs.firstMatch.buttons[title].firstMatch
+        if inDialog.exists { return inDialog }
+        let inSheet = app.sheets.firstMatch.buttons[title].firstMatch
+        if inSheet.exists { return inSheet }
+        let byId = element(id)
+        return byId.exists ? byId : nil
+    }
+
+    /// Fires File ▸ New Project via the menu when it is in the AX
+    /// tree, else ⌘N. On macOS 12 `typeKey` may not reach the
+    /// `CommandGroup`, and menu item ids are unreliable — the menu
+    /// item is matched by its "New Project" label first.
+    private func triggerNewProject() {
+        let fileMenu = app.menuBarItems["File"]
+        if fileMenu.waitForExistence(timeout: 5) {
+            fileMenu.click()
+            let byTitle = app.menuItems["New Project"].firstMatch
+            let byId = app.menuItems["menuProjectNew"].firstMatch
+            let item = byTitle.exists ? byTitle : byId
+            if item.waitForExistence(timeout: 5) {
+                item.click()
+                return
+            }
+            app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+        }
+        app.typeKey("n", modifierFlags: .command)
+    }
+
     /// Writes a `.icceryproj` fixture under `testRoot` and points the
     /// open-picker hook at it.
     private func stageProjectFixture(
@@ -133,23 +167,26 @@ final class Milestone10ProjectUITests: XCTestCase {
         XCTAssertTrue(basenameField.waitForExistence(timeout: 10))
         XCTAssertEqual(basenameField.value as? String, "ui149job")
 
-        // ⌘N fires the File-menu New command even when the menu is not
-        // in the AX tree. Mock CUPS may have enumerated a queue that the
-        // fixture does not record, making the session dirty — in that
-        // case the dirty alert gates New first.
-        app.typeKey("n", modifierFlags: .command)
+        // File ▸ New Project when the menu is in the AX tree, else
+        // ⌘N. Mock CUPS may have enumerated a queue that the fixture
+        // does not record, making the session dirty — in that case
+        // the dirty alert gates New first. macOS 12 alerts often lack
+        // button identifiers, so confirm by title with id fallback.
+        triggerNewProject()
         let deadline = Date().addingTimeInterval(10)
         var confirmed = false
         while Date() < deadline {
             // Dirty sessions show the dirty alert first; discarding it
             // runs the New reset directly (no second confirm).
-            if element("btnProjectDirtyDiscard").exists {
-                element("btnProjectDirtyDiscard").click()
+            if let discard = alertButton(
+                title: "Don't Save", id: "btnProjectDirtyDiscard") {
+                discard.click()
                 confirmed = true
                 break
             }
-            if element("btnProjectNewConfirm").exists {
-                element("btnProjectNewConfirm").click()
+            if let start = alertButton(
+                title: "Start", id: "btnProjectNewConfirm") {
+                start.click()
                 confirmed = true
                 break
             }
