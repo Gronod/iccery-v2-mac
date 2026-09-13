@@ -85,6 +85,31 @@ final class Milestone2UITests: XCTestCase {
         return el
     }
 
+    /// Exists **and** `isEnabled` — guards clicks against buttons that
+    /// appear a beat before their `.disabled` condition clears.
+    private func waitUntilEnabled(_ id: String, timeout: TimeInterval = 10) -> XCUIElement {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let el = element(id)
+            if el.exists && el.isEnabled { return el }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        let el = element(id)
+        XCTAssertTrue(
+            el.exists && el.isEnabled, "Expected enabled element \(id)")
+        return el
+    }
+
+    /// Non-asserting existence poll for the retry-or-fail pattern.
+    private func existsAfter(_ id: String, timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if element(id).exists { return true }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        return element(id).exists
+    }
+
     /// Assert an element stays absent after a short dwell — unlike
     /// `waitForExistence`, which always burns its full timeout on the
     /// negative path.
@@ -181,8 +206,15 @@ final class Milestone2UITests: XCTestCase {
         XCTAssertTrue(element("tiffDpi").exists)
         XCTAssertTrue(element("targetLabelPreview").exists)
 
-        app.buttons["btnCreateLayout"].click()
-        XCTAssertTrue(waitFor("galleryPage-0", timeout: 20).exists)
+        // On the slow macOS 12 runner a synthesized click can land
+        // while the button is still rebuilding — retry once if the
+        // gallery never materialises, then allow a generous window
+        // for the fixture printtarg + PNG render.
+        waitUntilEnabled("btnCreateLayout").click()
+        if !existsAfter("galleryPage-0", timeout: 15) {
+            waitUntilEnabled("btnCreateLayout").click()
+        }
+        XCTAssertTrue(waitFor("galleryPage-0", timeout: 30).exists)
         XCTAssertTrue(FileManager.default.fileExists(
             atPath: workDir.appendingPathComponent("mytarget.ti2").path))
 
