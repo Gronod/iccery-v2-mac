@@ -119,8 +119,11 @@ final class TargetWorkflowViewModel: ObservableObject {
     @Published var print: PrintSessionViewModel!
     /// Media recipe library — needs a complete `self`.
     @Published var media: MediaLibraryViewModel!
-    /// Spot-read console, created last — needs `wizard` / `measurement`.
+    /// Spot-read console — needs `wizard` / `measurement`.
     @Published var spotRead: SpotReadViewModel!
+    /// Project file session (issue #149), created last — needs `media`
+    /// for recipe apply and `spotRead` for the live-child check.
+    @Published var project: ProjectSession!
 
     init(environment: AppEnvironment = .live()) {
         self.environment = environment
@@ -145,6 +148,10 @@ final class TargetWorkflowViewModel: ObservableObject {
             environment: environment
         )
         self.spotRead = SpotReadViewModel(
+            workflow: self,
+            environment: environment
+        )
+        self.project = ProjectSession(
             workflow: self,
             environment: environment
         )

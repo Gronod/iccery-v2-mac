@@ -25,8 +25,13 @@ struct ICCeryApp: App {
                 .preferredColorScheme(.dark)
         }
         .commands {
-            // Single-window app: no File > New window.
-            CommandGroup(replacing: .newItem) {}
+            // Single-window app: the File menu carries the project
+            // commands (issue #149). Replacing `.newItem` keeps
+            // SwiftUI's empty default New from stacking (R19 — the
+            // group is filled, so no second New appears).
+            CommandGroup(replacing: .newItem) {
+                ProjectCommands(workflow: workflow)
+            }
         }
     }
 }
