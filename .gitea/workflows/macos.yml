@@ -30,19 +30,25 @@ jobs:
           fi
           echo "$line"
 
+      # Tag pushes whose name contains "prerelease" skip the test build and both
+      # test legs: they exist to package a build already validated elsewhere.
+      # The job still succeeds quickly so `package`'s `needs:` stays satisfied.
       # Homebrew's xcodegen formula requires Xcode 15.3, which cannot be
       # installed on macOS 12 (#109). The script installs a pinned
       # prebuilt release instead.
       - name: Ensure host tools
+        if: "!(startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, 'prerelease'))"
         run: scripts/ensure-host-tools.sh
 
       - name: Generate Xcode project
+        if: "!(startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, 'prerelease'))"
         run: xcodegen generate --spec project.yml
 
       # Tests only ever run on the runner's own architecture; build
       # just that slice. Packaging (scripts/package-release.sh) still
       # produces the universal Release binary.
       - name: Build for testing (host arch)
+        if: "!(startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, 'prerelease'))"
         run: |
           xcodebuild build-for-testing \
             -scheme ICCery \
@@ -60,6 +66,7 @@ jobs:
       # launch (run 31992) — so sign every embedded copy once the build is
       # done (embed steps run after any build script phase) (#119).
       - name: Sign package product frameworks
+        if: "!(startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, 'prerelease'))"
         run: |
           find "$DERIVED/Build/Products/Debug" -depth -name '*_PackageProduct.framework' -print0 \
             | while IFS= read -r -d '' fw; do
@@ -68,6 +75,7 @@ jobs:
               done
 
       - name: Test unit (ICCeryCoreTests)
+        if: "!(startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, 'prerelease'))"
         run: |
           XCTESTRUN="$(find "$DERIVED" -name 'ICCery*.xctestrun' | head -n 1)"
           if [ -z "$XCTESTRUN" ] || [ ! -f "$XCTESTRUN" ]; then
@@ -90,6 +98,7 @@ jobs:
       # tag packaging can proceed. Real XCTest assertion failures
       # still fail the job.
       - name: Test UI (ICCeryUITests)
+        if: "!(startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, 'prerelease'))"
         run: |
           set -o pipefail
           XCTESTRUN="$(find "$DERIVED" -name 'ICCery*.xctestrun' | head -n 1)"
@@ -154,7 +163,7 @@ jobs:
       # xcresult on failure — upload it so UI failures can be triaged
       # without access to the runner (#126).
       - name: Prepare Node CA bundle (failure path)
-        if: failure()
+        if: "failure() && !(startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, 'prerelease'))"
         run: |
           NODE_CA_FILE="/tmp/macos-ca-bundle.pem"
           security find-certificate -a -p \
@@ -166,7 +175,7 @@ jobs:
           fi
 
       - name: Upload UI test xcresult
-        if: failure()
+        if: "failure() && !(startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, 'prerelease'))"
         uses: actions/upload-artifact@v3
         env:
           NODE_EXTRA_CA_CERTS: /tmp/macos-ca-bundle.pem
