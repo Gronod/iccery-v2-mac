@@ -30,6 +30,11 @@ if [ -z "$TAG" ] || [ "$TAG" = "${GITHUB_REF:-}" ]; then
     exit 1
 fi
 
+case "$TAG" in
+    *prerelease*) PRERELEASE=true ;;
+    *)            PRERELEASE=false ;;
+esac
+
 DMG="${1:-}"
 if [ -z "$DMG" ]; then
     DMG="$(ls -1 ICCery-*.dmg 2>/dev/null | head -n 1 || true)"
@@ -49,12 +54,12 @@ STATUS="$(curl -sS -o "$BODY" -w '%{http_code}' \
     "$API/repos/$REPO/releases/tags/$TAG" || true)"
 
 if [ "$STATUS" = "404" ]; then
-    echo "==> Creating release $TAG"
+    echo "==> Creating release $TAG (prerelease=$PRERELEASE)"
     STATUS="$(curl -sS -o "$BODY" -w '%{http_code}' \
         -H "Authorization: token $TOKEN" \
         -H "Content-Type: application/json" \
         -X POST "$API/repos/$REPO/releases" \
-        -d "{\"tag_name\":\"$TAG\",\"name\":\"$TAG\",\"prerelease\":true,\"target_commitish\":\"${GITHUB_SHA:-}\"}")"
+        -d "{\"tag_name\":\"$TAG\",\"name\":\"$TAG\",\"prerelease\":$PRERELEASE,\"target_commitish\":\"${GITHUB_SHA:-}\"}")"
 fi
 if [ "$STATUS" != "200" ] && [ "$STATUS" != "201" ]; then
     echo "error: could not load/create release $TAG (HTTP $STATUS)" >&2
