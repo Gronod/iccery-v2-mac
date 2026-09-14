@@ -1,0 +1,231 @@
+@startuml ICCery-UI-stage3-5-cal
+title Stages 3–5, Calibrate Printer, Measure transport
+
+!theme plain
+skinparam backgroundColor white
+skinparam defaultFontColor black
+skinparam defaultFontSize 13
+skinparam classBackgroundColor white
+skinparam classFontColor black
+skinparam classBorderColor #222222
+skinparam classAttributeFontColor black
+skinparam rectangleBackgroundColor #F4F4F4
+skinparam rectangleBorderColor #222222
+skinparam rectangleFontColor black
+skinparam arrowColor #222222
+skinparam noteBackgroundColor #FFF6C8
+skinparam noteBorderColor #222222
+skinparam noteFontColor black
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam wrapWidth 240
+skinparam nodesep 24
+skinparam ranksep 28
+rectangle "stage-3  Stage3View.swift / MeasurementWorkflowViewModel" {
+  class "btnDetectInstruments  [Button]" as d3 {
+    disabled: !canDetect  (!isDetecting)
+  }
+  class "chartreadInstrumentSelect  [Picker.menu]" as i3 {
+    Auto + instlist ports
+  }
+  class "xyTableHint  [Caption]" as xyh {
+    shown: selectedInstrument.isXY
+  }
+  class "xyTablePanel  [HStack]" as xyp {
+    shown: isXY
+    xyStepPlace / Align / Scan / Remove
+    highlight = xyStep
+  }
+  class "chartreadPrompt  [Text]" as pr {
+    Text
+  }
+  class "chartreadLastError  [Caption]" as err {
+    shown: chartreadNotice != nil
+  }
+  class "btnStartRead  [Button]" as sr {
+    shown: !isChartreadRunning
+    disabled: !canStartRead
+    canStart: basename && cwd && !running
+  }
+  class "btnCalibrate  [Button]" as cal3 {
+    shown: running && state==calibrating
+  }
+  class "btnTrigger  [Button]" as trg {
+    shown: running && awaitingStrip
+  }
+  class "btnDoneReadEarly  [Button]" as de {
+    shown: awaitingStrip
+  }
+  class "btnAccept  [Button]" as acc {
+    shown: tablePlaceSheet | tableAlign
+           | promptContinue | warning
+    title Continue or Continue (send 'X')
+  }
+  class "btnRetry  [Button]" as rty {
+    shown: state==error
+  }
+  class "btnDoneRead  [Button]" as dn {
+    shown: allStripsRead
+  }
+  class "btnCancel  [Button]" as cnc {
+    shown: isChartreadRunning
+  }
+  class "swatchGrid  [Scroll]" as sw {
+    swatch-{rowId}{loc}
+  }
+  class "readStats  [Text]" as rst {
+    Text
+  }
+  class "chartreadAveragingPanel  [Panel]" as avg {
+    shown: passSnapshots nonempty OR isFinished
+    passCounterBadge, passesList
+  }
+  class "btnMeasureAnotherSheet  [Button]" as mas {
+    disabled: !isFinished || isChartreadRunning
+  }
+  class "btnFinishAndAverage  [Button]" as fa {
+    disabled: !canFinish || isFinishing
+    canFinish: isFinished && passes nonempty
+  }
+}
+
+rectangle "stage-4  Stage4View.swift / ProfileWorkflowViewModel" {
+  class "colprofAlgorithm  [Picker]" as alg {
+    Picker
+  }
+  class "colprofQuality  [Picker]" as q {
+    Picker
+  }
+  class "colprofFwa  [Picker]" as fwa {
+    Picker
+  }
+  class "colprofFwaCustomPath  [TextField]" as fwap {
+    shown: custom spectrum selected
+  }
+  class "btnBrowseFwaSp  [Button]" as fwab {
+    shown with custom path
+  }
+  class "colprofIlluminant  [TextField]" as ill {
+    TextField
+  }
+  class "colprofObserver  [TextField]" as obs {
+    TextField
+  }
+  class "colprofInputViewCond  [TextField]" as ivc {
+    TextField
+  }
+  class "colprofOutputViewCond  [TextField]" as ovc {
+    TextField
+  }
+  class "colprofDescription  [TextField]" as desc {
+    TextField
+  }
+  class "colprofCopyright  [TextField]" as cpr {
+    TextField
+  }
+  class "colprofApplyCalibration  [Toggle]" as ac {
+    Toggle
+  }
+  class "colprofCalibrationFile  [TextField]" as cf {
+    shown: applyCalibration
+  }
+  class "btnBrowseCalibrationFile  [Button]" as cfb {
+    shown: applyCalibration
+  }
+  class "btnCreateProfile  [Button]" as cp {
+    disabled: !canCreateProfile
+    canCreate: basename && cwd && !colprofRunning
+  }
+  class "colprofProgressIndicator  [Progress]" as cpi {
+    shown: isColprofRunning
+  }
+}
+
+rectangle "stage-5  Stage5View.swift" {
+  class "btnVerifyProfile  [Button]" as vf {
+    disabled: !canVerify
+    canVerify: createdProfileURL && !profcheckRunning
+  }
+  class "profcheckProgressIndicator  [Progress]" as ppi {
+    shown: isProfcheckRunning
+  }
+  class "btnViewGamut  [Button]" as vg5 {
+    DUPLICATE id with sidebar
+    disabled: createdGamutURL == nil
+  }
+  class "btnInstallProfile  [Button]" as inst {
+    disabled: createdProfileURL == nil
+    may present collision alert
+  }
+  class "driftPrinterFilter  [Picker]" as df {
+    Picker
+  }
+  class "btnExportHistory  [Button]" as eh {
+    Button
+  }
+  class "btnClearHistory  [Button]" as ch {
+    Button
+  }
+  class "verificationHistoryTable  [Table]" as ht {
+    Table
+  }
+  class "driftChart  [View]" as dc {
+    DriftChartView.swift  not interactive
+  }
+  class "driftAlert / profcheckWarningBanner  [Banner]" as dalt {
+    shown on fail / warning status
+  }
+}
+
+rectangle "Install collision alert" {
+  class "profileOverwriteBtn  [Button]" as io {
+    Button
+  }
+  class "profileRenameBtn  [Button]" as ir {
+    Button
+  }
+  class "profileCancelCollisionBtn  [Button]" as ic {
+    shown: showingInstallCollision
+    && settings.askBeforeOverwriteProfile
+  }
+}
+
+rectangle "stage-cal  CalibrationView.swift  (Stage 0)" {
+  class "Colour Space  [Picker.segmented]" as ccs {
+    RGB | CMYK  (no a11y id)
+  }
+  class "calSteps  [TextField.number]" as cst {
+    TextField.number
+  }
+  class "White patches  [TextField.number]" as cwp {
+    no a11y id
+  }
+  class "calInkExplore  [TextField]" as cin {
+    shown: colourSpace == cmyk
+  }
+  class "calNeutralEmphasis  [Toggle.checkbox]" as cne {
+    Toggle.checkbox
+  }
+  class "btnCalGenerate  [Button]" as cg {
+    disabled: basename.empty || cwd==nil || isGenerating
+  }
+  class "btnCalLayout  [Button]" as cl {
+    same disable as Generate
+  }
+  class "btnCalMeasure  [Button]" as cm {
+    disabled: calibrationTi3URL == nil
+  }
+  class "btnCalCompute  [Button]" as cc {
+    disabled: !canCompute
+    canCompute: .ti3 exists && !isComputing
+  }
+  class "calApplyToggle  [Toggle]" as cat {
+    shown: computedCalURL != nil
+  }
+  class "btnCalReturn  [Button]" as cr {
+    Esc / cancelAction
+    restores original basename
+  }
+}
+@enduml
+

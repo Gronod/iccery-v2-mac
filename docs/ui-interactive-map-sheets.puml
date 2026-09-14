@@ -1,0 +1,274 @@
+@startuml ICCery-UI-sheets
+title Sheets, dialogs, Spot Read, Gamut, Settings
+
+!theme plain
+skinparam backgroundColor white
+skinparam defaultFontColor black
+skinparam defaultFontSize 13
+skinparam classBackgroundColor white
+skinparam classFontColor black
+skinparam classBorderColor #222222
+skinparam classAttributeFontColor black
+skinparam rectangleBackgroundColor #F4F4F4
+skinparam rectangleBorderColor #222222
+skinparam rectangleFontColor black
+skinparam arrowColor #222222
+skinparam noteBackgroundColor #FFF6C8
+skinparam noteBorderColor #222222
+skinparam noteFontColor black
+skinparam shadowing false
+skinparam classAttributeIconSize 0
+skinparam wrapWidth 240
+skinparam nodesep 24
+skinparam ranksep 28
+rectangle "SettingsView.swift  sheet from openSettingsBtn" {
+  class "Argyll dir  [TextField+Browse]" as ad {
+    empty => bundled sidecars
+  }
+  class "Default instrument  [Picker]" as di {
+    None + i1/p3/CM/SS/20/22/41/51
+    seeds Stage 3 + Spot Read
+    does NOT change instrumentSelect
+  }
+  class "Enable i1Pro 2 LEDs  [Toggle]" as led {
+    Toggle
+  }
+  class "settingsDeltaEGood  [TextField.number]" as dg {
+    TextField.number
+  }
+  class "settingsDeltaEWarning  [TextField.number]" as dw {
+    Save refuses unless Warning > Good
+  }
+  class "settingsCalStaleDays  [TextField.number]" as sd {
+    TextField.number
+  }
+  class "Install location  [Picker]" as il {
+    User | System library
+  }
+  class "Ask before overwriting  [Toggle]" as ao {
+    Toggle
+  }
+  class "Open ColorSync after install  [Toggle]" as oc {
+    Toggle
+  }
+  class "Log level  [Picker]" as ll {
+    Picker
+  }
+  class "Open log folder / Copy path / Copy excerpt  [Button x3]" as lg {
+    Button x3
+  }
+  class "Cancel / Save  [Button]" as ss {
+    Save stays on sheet if validation fails
+    frame 560x620
+  }
+}
+
+rectangle "AboutView.swift" {
+  class "aboutDialog  [Sheet]" as ab {
+    aboutVersion, aboutBuildDate
+    closeAboutBtn  Esc
+  }
+}
+
+rectangle "savePresetDialog  PresetDialogs.swift" {
+  class "savePresetName  [TextField]" as spn {
+    TextField
+  }
+  class "savePresetDesc  [TextField]" as spd {
+    TextField
+  }
+  class "btnCloseSavePresetDialog  [Button]" as spc {
+    Button
+  }
+  class "btnConfirmSavePreset  [Button]" as sps {
+    disabled: name trimmed empty
+  }
+}
+
+rectangle "managePresetsDialog" {
+  class "presetRow-{id}  [Row]" as prw {
+    Built-in: no delete
+    else btnExportPreset-{id} btnDeletePreset-{id}
+  }
+  class "btnImportPreset  [Button]" as pim {
+    Button
+  }
+  class "btnExportActivePreset  [Button]" as pea {
+    shown: selected custom preset
+  }
+  class "btnCloseManagePresetsDialog  [Button]" as pcl {
+    Button
+  }
+}
+
+rectangle "saveMediaRecipeDialog  MediaLibraryDialogs.swift" {
+  class "saveMediaName/Notes/Paper/Ink  [TextField x4]" as smf {
+    TextField x4
+  }
+  class "saveMediaPrinter/Preset/ColourSpace/Cal  [read-only]" as smr {
+    read-only
+  }
+  class "saveMediaApplyCal  [Toggle]" as smc {
+    disabled: !calApplyable
+    calApplyable: path exists, not CAL_ stem
+  }
+  class "btnCloseSaveMediaDialog  [Button]" as smx {
+    Button
+  }
+  class "btnConfirmSaveMedia  [Button]" as sms {
+    disabled: name|paper|ink empty
+             OR captureColourSpaceMismatch
+  }
+}
+
+rectangle "manageMediaDialog" {
+  class "mediaLibraryList  [List]" as mll {
+    mediaRow-{id}
+    btnMediaLibraryApply-{id}
+    btnMediaLibraryDelete-{id}
+    double-click row = Apply
+  }
+  class "manageMediaNotice  [Caption]" as mmn {
+    shown: manageApplyNotice != nil
+    in-sheet copy of failed Apply (#170)
+  }
+  class "btnMediaLibraryApply  [Button]" as mla {
+    Apply selected
+    disabled: selection == nil
+  }
+  class "btnMediaLibraryCaptureFromManage  [Button]" as mlc {
+    dismiss then open capture
+  }
+  class "btnCloseManageMediaDialog  [Button]" as mlx {
+    Button
+  }
+  class "Delete alert  [alert]" as mld {
+    Cancel / Delete
+  }
+}
+
+rectangle "spotReadView  SpotReadView.swift  (#148)" {
+  class "spotSidecarMissing  [Text]" as ssm {
+    shown: !sidecarAvailable
+    hides instrument/transport
+  }
+  class "btnSpotDetectInstruments  [Button]" as sdet {
+    disabled: !canDetect  (detecting or running)
+  }
+  class "spotInstrumentSelect  [Picker]" as sis {
+    disabled: isRunning
+  }
+  class "spotDefaultMissing  [Caption]" as sdm {
+    shown: defaultMissing
+  }
+  class "spotSetDefault  [Toggle]" as ssd {
+    Toggle
+  }
+  class "spotXYHint  [Caption]" as sxy {
+    shown: selected is XY table
+  }
+  class "btnSpotStart  [Button]" as sst {
+    shown: !isRunning
+    disabled: !canStart
+    canStart: sidecar && !detecting && !running
+              && !chartreadRunning && cwd
+  }
+  class "btnSpotCalibrate  [Button]" as sca {
+    shown: running && calibrating
+  }
+  class "btnSpotTrigger  [Button]" as str {
+    shown: running && awaitingStrip  (Read)
+  }
+  class "btnSpotStop  [Button]" as ssp {
+    shown: isRunning
+  }
+  class "spotLastSample / Lab / XYZ / DeltaE  [Display]" as sls {
+    spotLabImplausible if L not in 0...100
+    spotDeltaE hidden on first sample
+  }
+  class "spotHistoryTable  [List]" as sht {
+    rows are buttons spotHistoryRow-{uuid}
+    click restores last sample, no trigger
+  }
+  class "btnSpotCopyLab  [Button]" as scp {
+    disabled: displayedSample == nil
+  }
+  class "btnSpotExportCsv  [Button]" as sex {
+    disabled: samples.isEmpty
+  }
+  class "btnCloseSpotRead  [Button]" as scl {
+    Esc; onDismiss = Stop
+  }
+}
+
+rectangle "gamutView  GamutView.swift  (#147)" {
+  class "gamutLayer-srgb  [Toggle.checkbox]" as gls {
+    sRGB always loaded; can hide; cannot remove
+  }
+  class "gamutLayer-profile  [Toggle]" as glp {
+    disabled: no session .gam
+  }
+  class "gamutLayer-compare  [Toggle]" as glc {
+    disabled: no compare layer
+  }
+  class "btnGamutAddCompare  [Menu]" as gac {
+    btnGamutOpenGam / btnGamutOpenProfile
+  }
+  class "btnGamutRemoveCompare  [Button]" as grc {
+    disabled: compare layer nil
+  }
+  class "btnGamutSampleTiff  [Button]" as gst {
+    Button
+  }
+  class "gamutViewerUnavailable  [Caption]" as gun {
+    shown: no Metal / SCNView failed
+    toggles + inspect still enabled
+  }
+  class "btnResetGamutCamera  [Button]" as grs {
+    R when focused
+  }
+  class "gamutLabEntryL/A/B  [TextField x3]" as gle {
+    TextField x3
+  }
+  class "btnGamutInspectLab  [Button]" as gin {
+    disabled: !canInspectLab
+  }
+  class "gamutInspectPanel  [Panel]" as gip {
+    Panel
+  }
+  class "btnCloseGamut  [Button]" as gcl {
+    Esc
+  }
+  class "gamutTiffPreview sheet  [Sheet]" as gtf {
+    showingTiffPreview
+    click pixel; btnCloseGamutTiffPreview
+  }
+}
+
+rectangle "Project alerts / relocate  RootView + ProjectUI" {
+  class "projectNewAlert  [alert]" as pna {
+    btnProjectNewCancel / btnProjectNewConfirm
+  }
+  class "Dirty save alert  [alert]" as pda {
+    btnProjectDirtySave
+    btnProjectDirtyDiscard
+    btnProjectDirtyCancel
+    shown when New/Open/Close and dirty
+  }
+  class "projectRelocateSheet  [Sheet]" as prs {
+    shown: cwd missing on Open
+    btnProjectRelocateCancel
+    btnProjectRelocate  Choose Folder…
+  }
+}
+
+note as nMutex
+  Mutex / exclusive
+  Spot Read disabled while Stage 3 chartread runs
+  Opening Spot Read never kills chartread_{basename}
+  Calibrate uses temporary CAL_ basename; Save Project stays
+  enabled so the refusal banner can fire; chip Save uses canSave
+  Failed media Apply keeps manageMediaDialog open
+  Window noticeText is occluded by that sheet — use manageMediaNotice
+end note
+@enduml
