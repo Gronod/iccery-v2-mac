@@ -1,6 +1,9 @@
 # Interactive UI map
-One GraphViz diagram per section so Gitea Kroki (0.30.1) can render them.
-These are **GraphViz**, not PlantUML: Kroki 0.30.1 ships PlantUML as a GraalVM native image that requires AVX2. This host does not have AVX2, so PlantUML returns 400 / SIGILL. `dot` in the same image does not.
+
+GraphViz diagrams for Gitea Kroki 0.30.1 (PlantUML's Graal image needs AVX2; this host has none).
+
+Colours are set **inside the SVG** (dark fill, light type, opaque background) so Gitea dark mode does not turn nodes into black boxes on a transparent canvas.
+
 Node labels are accessibility identifiers, source files, and enable / hide / disable rules.
 
 ## Shell
@@ -10,15 +13,30 @@ Window, sidebar, stepper, File menu. Source: [`ui-interactive-map-shell.dot`](ui
 ```graphviz
 digraph ICCeryUIShell {
   graph [label="ICCery UI — shell, sidebar, stepper, File menu\nids are accessibility identifiers. Gating: WizardGating.swift",
-         labelloc=t, fontsize=14, fontname="Helvetica"]
-  node [shape=box, style=rounded, fontname="Helvetica", fontsize=9]
-  edge [fontname="Helvetica", fontsize=8]
+    labelloc=t,
+    fontname="Helvetica",
+    fontsize=16,
+    fontcolor="#e6edf3",
+    bgcolor="#0d1117",
+    pad="0.4",
+    nodesep=0.35,
+    ranksep=0.55]
+  node [shape=box, style="filled,rounded", fontname="Helvetica", fontsize=12,
+        fontcolor="#e6edf3", fillcolor="#21262d", color="#8b949e",
+        penwidth=1.2, margin="0.22,0.14"]
+  edge [fontname="Helvetica", fontsize=10, color="#8b949e", fontcolor="#8b949e"]
 
   win [label="WindowGroup ICCery\nICCeryApp.swift\n1280x800, min 1100x700"]
   root [label="RootView.swift\nsheets and alerts live here"]
   win -> root
 
   subgraph cluster_chrome {
+    style="filled,rounded"
+    fillcolor="#161b22"
+    color="#30363d"
+    fontcolor="#79c0ff"
+    fontsize=13
+
     label="Persistent chrome"
     side [label="SidebarView.swift\n270 pt"]
     ban [label="noticeText  NoticeBanner.swift\nshown: wizard.notice != nil\nauto-hide 6s; close has no id"]
@@ -29,6 +47,12 @@ digraph ICCeryUIShell {
   root -> stage
 
   subgraph cluster_header {
+    style="filled,rounded"
+    fillcolor="#161b22"
+    color="#30363d"
+    fontcolor="#79c0ff"
+    fontsize=13
+
     label="Header"
     sSet [label="openSettingsBtn  Button\nalways on → Settings sheet"]
     sAbt [label="openAboutBtn  Button\nalways on → About"]
@@ -39,6 +63,12 @@ digraph ICCeryUIShell {
   side -> sHlp
 
   subgraph cluster_preset {
+    style="filled,rounded"
+    fillcolor="#161b22"
+    color="#30363d"
+    fontcolor="#79c0ff"
+    fontsize=13
+
     label="Presets (#11)"
     pre [label="presetSelect  Picker.menu\nnone + ProfilingPreset.id\napply on change; none is not factory reset"]
     preS [label="btnSavePresetModal  Button\nalways on"]
@@ -49,6 +79,12 @@ digraph ICCeryUIShell {
   side -> preM
 
   subgraph cluster_media {
+    style="filled,rounded"
+    fillcolor="#161b22"
+    color="#30363d"
+    fontcolor="#79c0ff"
+    fontsize=13
+
     label="Media library (#146)"
     med [label="mediaSelect  Picker.menu\nnone + MediaRecipe.id\nnever reuses presetSelect"]
     medSt [label="mediaRecipeStale  Caption\nshown: staleReasons nonempty"]
@@ -61,6 +97,12 @@ digraph ICCeryUIShell {
   side -> medM
 
   subgraph cluster_studio {
+    style="filled,rounded"
+    fillcolor="#161b22"
+    color="#30363d"
+    fontcolor="#79c0ff"
+    fontsize=13
+
     label="Studio (not stepper)"
     calB [label="btnCalibratePrinter  Button\nalways on; Stage 0"]
     gamB [label="btnViewGamut  Button\nSAME id as Stage 5\nalways on; no .gam = sRGB only"]
@@ -71,14 +113,26 @@ digraph ICCeryUIShell {
   side -> spotB
 
   subgraph cluster_step {
+    style="filled,rounded"
+    fillcolor="#161b22"
+    color="#30363d"
+    fontcolor="#79c0ff"
+    fontsize=13
+
     label="Stepper 1-5 (disk is truth)"
     step [label="StepperRow  Button.plain\ndisabled/opacity 0.45 unless isUnlocked\nbackward always; calibrate is not a row"]
-    nGate [shape=note, label="WizardGating.swift\n1 always\n2 .ti1\n3 .ti1 AND .ti2\n4 .ti3 (not .ti2 alone)\n5 .ti3 AND .icc/.icm\nre-probe on window key (#151)"]
+    nGate [shape=note, style=filled, fillcolor="#3d2f00", fontcolor="#f0e6c8", color="#d4a72c", label="WizardGating.swift\n1 always\n2 .ti1\n3 .ti1 AND .ti2\n4 .ti3 (not .ti2 alone)\n5 .ti3 AND .icc/.icm\nre-probe on window key (#151)"]
   }
   side -> step
   step -> nGate [style=dashed]
 
   subgraph cluster_chip {
+    style="filled,rounded"
+    fillcolor="#161b22"
+    color="#30363d"
+    fontcolor="#79c0ff"
+    fontsize=13
+
     label="projectChip  ProjectUI.swift (#149)"
     cn [label="projectChipName\nbound name or No project"]
     cp [label="projectChipPath\nshown if bound"]
@@ -95,6 +149,12 @@ digraph ICCeryUIShell {
   side -> co
 
   subgraph cluster_menu {
+    style="filled,rounded"
+    fillcolor="#161b22"
+    color="#30363d"
+    fontcolor="#79c0ff"
+    fontsize=13
+
     label="File menu  ProjectCommands / ICCeryApp.swift"
     mN [label="menuProjectNew  Cmd-N"]
     mO [label="menuProjectOpen  Cmd-O"]
@@ -127,11 +187,26 @@ Generate Target, Lay Out and Print. Source: [`ui-interactive-map-stage1-2.dot`](
 ```graphviz
 digraph ICCeryUIStage12 {
   graph [label="ICCery UI — Stage 1 Generate Target / Stage 2 Lay Out and Print",
-         labelloc=t, fontsize=14, fontname="Helvetica"]
-  node [shape=box, style=rounded, fontname="Helvetica", fontsize=9]
-  edge [fontname="Helvetica", fontsize=8]
+    labelloc=t,
+    fontname="Helvetica",
+    fontsize=16,
+    fontcolor="#e6edf3",
+    bgcolor="#0d1117",
+    pad="0.4",
+    nodesep=0.35,
+    ranksep=0.55]
+  node [shape=box, style="filled,rounded", fontname="Helvetica", fontsize=12,
+        fontcolor="#e6edf3", fillcolor="#21262d", color="#8b949e",
+        penwidth=1.2, margin="0.22,0.14"]
+  edge [fontname="Helvetica", fontsize=10, color="#8b949e", fontcolor="#8b949e"]
 
   subgraph cluster_s1 {
+    style="filled,rounded"
+    fillcolor="#161b22"
+    color="#30363d"
+    fontcolor="#79c0ff"
+    fontsize=13
+
     label="stage-1  Stage1View.swift"
     csp [label="colourSpace  Picker.segmented\nRGB | CMYK"]
     pcp [label="patchCountPreset  Picker"]
@@ -150,6 +225,12 @@ digraph ICCeryUIStage12 {
   }
 
   subgraph cluster_adv {
+    style="filled,rounded"
+    fillcolor="#161b22"
+    color="#30363d"
+    fontcolor="#79c0ff"
+    fontsize=13
+
     label="Advanced (hidden until disclosure open)"
     ag [label="targenGreySteps  Toggle+TextField\nfield iff toggle on"]
     as1 [label="targenSingleChannelSteps  Toggle+TextField"]
@@ -167,6 +248,12 @@ digraph ICCeryUIStage12 {
   adv -> ag [style=dashed]
 
   subgraph cluster_s2 {
+    style="filled,rounded"
+    fillcolor="#161b22"
+    color="#30363d"
+    fontcolor="#79c0ff"
+    fontsize=13
+
     label="stage-2  Stage2View.swift"
     cmw [label="cmWarningBanner  always visible, not a control"]
     ins [label="instrumentSelect  Picker\nPrintInstrument chart code, NOT USB port"]
@@ -188,6 +275,12 @@ digraph ICCeryUIStage12 {
   }
 
   subgraph cluster_print {
+    style="filled,rounded"
+    fillcolor="#161b22"
+    color="#30363d"
+    fontcolor="#79c0ff"
+    fontsize=13
+
     label="rawPrintPanel"
     ps [label="printerSelect  Picker  CUPS queues"]
     psb [label="printerStatusBadge\nshown: selected printer in list"]
@@ -211,11 +304,26 @@ Measure, Build, Verify, Stage 0. Source: [`ui-interactive-map-stage3-5-cal.dot`]
 ```graphviz
 digraph ICCeryUIStage345Cal {
   graph [label="ICCery UI — Stage 3 Measure / 4 Build / 5 Verify / Stage 0 Calibrate",
-         labelloc=t, fontsize=14, fontname="Helvetica"]
-  node [shape=box, style=rounded, fontname="Helvetica", fontsize=9]
-  edge [fontname="Helvetica", fontsize=8]
+    labelloc=t,
+    fontname="Helvetica",
+    fontsize=16,
+    fontcolor="#e6edf3",
+    bgcolor="#0d1117",
+    pad="0.4",
+    nodesep=0.35,
+    ranksep=0.55]
+  node [shape=box, style="filled,rounded", fontname="Helvetica", fontsize=12,
+        fontcolor="#e6edf3", fillcolor="#21262d", color="#8b949e",
+        penwidth=1.2, margin="0.22,0.14"]
+  edge [fontname="Helvetica", fontsize=10, color="#8b949e", fontcolor="#8b949e"]
 
   subgraph cluster_s3 {
+    style="filled,rounded"
+    fillcolor="#161b22"
+    color="#30363d"
+    fontcolor="#79c0ff"
+    fontsize=13
+
     label="stage-3  Stage3View.swift / MeasurementWorkflowViewModel"
     d3 [label="btnDetectInstruments  Button\ndisabled: isDetecting"]
     i3 [label="chartreadInstrumentSelect  Picker.menu\nAuto + instlist ports"]
@@ -239,6 +347,12 @@ digraph ICCeryUIStage345Cal {
   }
 
   subgraph cluster_s4 {
+    style="filled,rounded"
+    fillcolor="#161b22"
+    color="#30363d"
+    fontcolor="#79c0ff"
+    fontsize=13
+
     label="stage-4  Stage4View.swift / ProfileWorkflowViewModel"
     alg [label="colprofAlgorithm  Picker"]
     q [label="colprofQuality  Picker"]
@@ -259,6 +373,12 @@ digraph ICCeryUIStage345Cal {
   }
 
   subgraph cluster_s5 {
+    style="filled,rounded"
+    fillcolor="#161b22"
+    color="#30363d"
+    fontcolor="#79c0ff"
+    fontsize=13
+
     label="stage-5  Stage5View.swift"
     vf [label="btnVerifyProfile  Button\ndisabled: !canVerify\ncanVerify: createdProfileURL AND !profcheckRunning"]
     ppi [label="profcheckProgressIndicator\nshown: isProfcheckRunning"]
@@ -273,6 +393,12 @@ digraph ICCeryUIStage345Cal {
   }
 
   subgraph cluster_coll {
+    style="filled,rounded"
+    fillcolor="#161b22"
+    color="#30363d"
+    fontcolor="#79c0ff"
+    fontsize=13
+
     label="Install collision alert"
     io [label="profileOverwriteBtn"]
     ir [label="profileRenameBtn"]
@@ -280,6 +406,12 @@ digraph ICCeryUIStage345Cal {
   }
 
   subgraph cluster_cal {
+    style="filled,rounded"
+    fillcolor="#161b22"
+    color="#30363d"
+    fontcolor="#79c0ff"
+    fontsize=13
+
     label="stage-cal  CalibrationView.swift (Stage 0)"
     ccs [label="Colour Space  Picker.segmented\nRGB | CMYK  (no a11y id)"]
     cst [label="calSteps  TextField.number"]
@@ -303,11 +435,26 @@ Settings, Spot Read, Gamut, media, project alerts. Source: [`ui-interactive-map-
 ```graphviz
 digraph ICCeryUISheets {
   graph [label="ICCery UI — sheets, Spot Read, Gamut, Settings, project alerts",
-         labelloc=t, fontsize=14, fontname="Helvetica"]
-  node [shape=box, style=rounded, fontname="Helvetica", fontsize=9]
-  edge [fontname="Helvetica", fontsize=8]
+    labelloc=t,
+    fontname="Helvetica",
+    fontsize=16,
+    fontcolor="#e6edf3",
+    bgcolor="#0d1117",
+    pad="0.4",
+    nodesep=0.35,
+    ranksep=0.55]
+  node [shape=box, style="filled,rounded", fontname="Helvetica", fontsize=12,
+        fontcolor="#e6edf3", fillcolor="#21262d", color="#8b949e",
+        penwidth=1.2, margin="0.22,0.14"]
+  edge [fontname="Helvetica", fontsize=10, color="#8b949e", fontcolor="#8b949e"]
 
   subgraph cluster_set {
+    style="filled,rounded"
+    fillcolor="#161b22"
+    color="#30363d"
+    fontcolor="#79c0ff"
+    fontsize=13
+
     label="SettingsView.swift  (openSettingsBtn)"
     ad [label="Argyll dir  TextField+Browse\nempty => bundled sidecars"]
     di [label="Default instrument  Picker\nNone + i1/p3/CM/SS/20/22/41/51\nseeds Stage 3 + Spot Read\ndoes NOT change instrumentSelect"]
@@ -324,11 +471,23 @@ digraph ICCeryUISheets {
   }
 
   subgraph cluster_about {
+    style="filled,rounded"
+    fillcolor="#161b22"
+    color="#30363d"
+    fontcolor="#79c0ff"
+    fontsize=13
+
     label="AboutView.swift"
     ab [label="aboutDialog\naboutVersion, aboutBuildDate\ncloseAboutBtn  Esc"]
   }
 
   subgraph cluster_sp {
+    style="filled,rounded"
+    fillcolor="#161b22"
+    color="#30363d"
+    fontcolor="#79c0ff"
+    fontsize=13
+
     label="savePresetDialog  PresetDialogs.swift"
     spn [label="savePresetName  TextField"]
     spd [label="savePresetDesc  TextField"]
@@ -337,6 +496,12 @@ digraph ICCeryUISheets {
   }
 
   subgraph cluster_mp {
+    style="filled,rounded"
+    fillcolor="#161b22"
+    color="#30363d"
+    fontcolor="#79c0ff"
+    fontsize=13
+
     label="managePresetsDialog"
     prw [label="presetRow-{id}\nBuilt-in: no delete\nelse btnExportPreset-{id}\nbtnDeletePreset-{id}"]
     pim [label="btnImportPreset"]
@@ -345,6 +510,12 @@ digraph ICCeryUISheets {
   }
 
   subgraph cluster_sm {
+    style="filled,rounded"
+    fillcolor="#161b22"
+    color="#30363d"
+    fontcolor="#79c0ff"
+    fontsize=13
+
     label="saveMediaRecipeDialog  MediaLibraryDialogs.swift"
     smf [label="saveMediaName/Notes/Paper/Ink  TextField x4"]
     smr [label="saveMediaPrinter/Preset/ColourSpace/Cal  read-only"]
@@ -354,6 +525,12 @@ digraph ICCeryUISheets {
   }
 
   subgraph cluster_mm {
+    style="filled,rounded"
+    fillcolor="#161b22"
+    color="#30363d"
+    fontcolor="#79c0ff"
+    fontsize=13
+
     label="manageMediaDialog"
     mll [label="mediaLibraryList\nmediaRow-{id}\nbtnMediaLibraryApply-{id}\nbtnMediaLibraryDelete-{id}\ndouble-click = Apply"]
     mmn [label="manageMediaNotice  Caption\nshown: manageApplyNotice != nil\nin-sheet copy of failed Apply (#170)"]
@@ -364,6 +541,12 @@ digraph ICCeryUISheets {
   }
 
   subgraph cluster_spot {
+    style="filled,rounded"
+    fillcolor="#161b22"
+    color="#30363d"
+    fontcolor="#79c0ff"
+    fontsize=13
+
     label="spotReadView  SpotReadView.swift (#148)"
     ssm [label="spotSidecarMissing\nshown: !sidecarAvailable\nhides instrument/transport"]
     sdet [label="btnSpotDetectInstruments\ndisabled: detecting OR running"]
@@ -383,6 +566,12 @@ digraph ICCeryUISheets {
   }
 
   subgraph cluster_gamut {
+    style="filled,rounded"
+    fillcolor="#161b22"
+    color="#30363d"
+    fontcolor="#79c0ff"
+    fontsize=13
+
     label="gamutView  GamutView.swift (#147)"
     gls [label="gamutLayer-srgb  Toggle\nsRGB always loaded; can hide"]
     glp [label="gamutLayer-profile  Toggle\ndisabled: no session .gam"]
@@ -400,12 +589,18 @@ digraph ICCeryUISheets {
   }
 
   subgraph cluster_proj {
+    style="filled,rounded"
+    fillcolor="#161b22"
+    color="#30363d"
+    fontcolor="#79c0ff"
+    fontsize=13
+
     label="Project alerts  RootView + ProjectUI"
     pna [label="projectNewAlert\nbtnProjectNewCancel / Confirm"]
     pda [label="Dirty save alert\nbtnProjectDirtySave\nbtnProjectDirtyDiscard\nbtnProjectDirtyCancel"]
     prs [label="projectRelocateSheet\nshown: cwd missing on Open\nbtnProjectRelocateCancel\nbtnProjectRelocate"]
   }
 
-  mutex [shape=note, label="Mutex\nSpot Read disabled while Stage 3 chartread runs\nOpening Spot Read never kills chartread_{basename}\nFailed media Apply keeps manage sheet open\nWindow noticeText is occluded — use manageMediaNotice"]
+  mutex [shape=note, style=filled, fillcolor="#3d2f00", fontcolor="#f0e6c8", color="#d4a72c", label="Mutex\nSpot Read disabled while Stage 3 chartread runs\nOpening Spot Read never kills chartread_{basename}\nFailed media Apply keeps manage sheet open\nWindow noticeText is occluded — use manageMediaNotice"]
 }
 ```

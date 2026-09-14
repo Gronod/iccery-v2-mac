@@ -1,10 +1,25 @@
 digraph ICCeryUIStage12 {
   graph [label="ICCery UI — Stage 1 Generate Target / Stage 2 Lay Out and Print",
-         labelloc=t, fontsize=14, fontname="Helvetica"]
-  node [shape=box, style=rounded, fontname="Helvetica", fontsize=9]
-  edge [fontname="Helvetica", fontsize=8]
+    labelloc=t,
+    fontname="Helvetica",
+    fontsize=16,
+    fontcolor="#e6edf3",
+    bgcolor="#0d1117",
+    pad="0.4",
+    nodesep=0.35,
+    ranksep=0.55]
+  node [shape=box, style="filled,rounded", fontname="Helvetica", fontsize=12,
+        fontcolor="#e6edf3", fillcolor="#21262d", color="#8b949e",
+        penwidth=1.2, margin="0.22,0.14"]
+  edge [fontname="Helvetica", fontsize=10, color="#8b949e", fontcolor="#8b949e"]
 
   subgraph cluster_s1 {
+    style="filled,rounded"
+    fillcolor="#161b22"
+    color="#30363d"
+    fontcolor="#79c0ff"
+    fontsize=13
+
     label="stage-1  Stage1View.swift"
     csp [label="colourSpace  Picker.segmented\nRGB | CMYK"]
     pcp [label="patchCountPreset  Picker"]
@@ -23,6 +38,12 @@ digraph ICCeryUIStage12 {
   }
 
   subgraph cluster_adv {
+    style="filled,rounded"
+    fillcolor="#161b22"
+    color="#30363d"
+    fontcolor="#79c0ff"
+    fontsize=13
+
     label="Advanced (hidden until disclosure open)"
     ag [label="targenGreySteps  Toggle+TextField\nfield iff toggle on"]
     as1 [label="targenSingleChannelSteps  Toggle+TextField"]
@@ -40,6 +61,12 @@ digraph ICCeryUIStage12 {
   adv -> ag [style=dashed]
 
   subgraph cluster_s2 {
+    style="filled,rounded"
+    fillcolor="#161b22"
+    color="#30363d"
+    fontcolor="#79c0ff"
+    fontsize=13
+
     label="stage-2  Stage2View.swift"
     cmw [label="cmWarningBanner  always visible, not a control"]
     ins [label="instrumentSelect  Picker\nPrintInstrument chart code, NOT USB port"]
@@ -61,6 +88,12 @@ digraph ICCeryUIStage12 {
   }
 
   subgraph cluster_print {
+    style="filled,rounded"
+    fillcolor="#161b22"
+    color="#30363d"
+    fontcolor="#79c0ff"
+    fontsize=13
+
     label="rawPrintPanel"
     ps [label="printerSelect  Picker  CUPS queues"]
     psb [label="printerStatusBadge\nshown: selected printer in list"]
