@@ -148,7 +148,9 @@ final class Milestone10MediaLibraryUITests: XCTestCase {
         XCTAssertTrue(apply.waitForExistence(timeout: 10))
         apply.click()
 
-        let notice = waitFor("noticeText")
+        // The window banner (`noticeText`) sits behind this sheet on
+        // Monterey (#170). Assert the in-sheet copy instead.
+        let notice = waitFor("manageMediaNotice", timeout: 15)
         let text = (notice.value as? String) ?? notice.label
         XCTAssertTrue(
             text.contains("is not installed"),

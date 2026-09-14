@@ -41,6 +41,9 @@ final class MediaLibraryViewModel: ObservableObject {
     @Published var saveMediaApplyCal = false
     /// Inline caption inside the capture sheet (no a11y id — roster complete).
     @Published var saveMediaError: String?
+    /// Last failed Apply while Manage is open. The window banner sits
+    /// behind the sheet on Monterey, so the dialog shows this too (#170).
+    @Published var manageApplyNotice: String?
 
     /// Pure flow flag — the manage sheet's "Capture current…" asks the
     /// sheet's `onDismiss` to open the capture sheet, avoiding a
@@ -120,32 +123,27 @@ final class MediaLibraryViewModel: ObservableObject {
     /// with warning; the refusal is permanent so re-clicking can't help).
     @discardableResult
     func apply(_ recipe: MediaRecipe) async -> Bool {
+        manageApplyNotice = nil
         guard let r = try? recipe.validated() else {
-            workflow.wizard.showNotice(
-                "Media recipe is invalid — not applied.", kind: .error)
-            return false
+            return failApply("Media recipe is invalid — not applied.", kind: .error)
         }
         guard let preset = environment.presetStore.all()
             .first(where: { $0.id == r.presetID })
         else {
-            workflow.wizard.showNotice(
+            return failApply(
                 "Preset \(r.presetID) no longer exists — recipe not applied.",
                 kind: .error)
-            return false
         }
         guard preset.colourSpace.lowercased() == r.colourSpace.lowercased() else {
-            workflow.wizard.showNotice(
+            return failApply(
                 "Recipe colour space does not match its preset — not applied.",
                 kind: .error)
-            return false
         }
 
         // Existing #82 mapping: presetSelect jumps, Stage 1/2/4 fields.
         workflow.applyPreset(preset)
         // Literal per issue: displayName, not the queue id.
         workflow.wizard.printerName = r.printerDisplayName
-
-        var succeeded = true
 
         // Queue: enumerate fresh via the session's serialized path —
         // listPrinters uses fixed process ids, so an overlapping
@@ -156,16 +154,14 @@ final class MediaLibraryViewModel: ObservableObject {
                 workflow.print.selectedPrinter = r.printerID
                 await workflow.print.reloadSelectedCapabilities()
             } else {
-                workflow.wizard.showNotice(
+                return failApply(
                     "Printer \(r.printerDisplayName) is not installed.",
                     kind: .warning)
-                succeeded = false
             }
         } else {
-            workflow.wizard.showNotice(
+            return failApply(
                 "Could not enumerate printers — queue left unchanged.",
                 kind: .warning)
-            succeeded = false
         }
 
         // Calibration — the recipe is authoritative and runs after
@@ -195,10 +191,8 @@ final class MediaLibraryViewModel: ObservableObject {
             guard FileManager.default.fileExists(atPath: calPath) else {
                 workflow.profile.applyCalibration = false
                 workflow.profile.calibrationFile = calPath
-                workflow.wizard.showNotice(
+                return failApply(
                     "Calibration file is missing: \(calPath)", kind: .error)
-                refreshStaleness()
-                return false
             }
             do {
                 let staleDays = environment.settingsStore.load().calibrationStaleDays
@@ -215,23 +209,26 @@ final class MediaLibraryViewModel: ObservableObject {
                 }
             } catch {
                 workflow.profile.applyCalibration = false
-                workflow.wizard.showNotice(
+                return failApply(
                     "Could not load calibration: \(error.localizedDescription)",
                     kind: .error)
-                refreshStaleness()
-                return false
             }
         } else {
             workflow.profile.applyCalibration = false
             workflow.profile.calibrationFile = calPath
         }
 
-        if succeeded {
-            selectedRecipeID = r.id
-            workflow.wizard.showNotice("Applied \(r.name)")
-        }
+        selectedRecipeID = r.id
+        workflow.wizard.showNotice("Applied \(r.name)")
         refreshStaleness()
-        return succeeded
+        return true
+    }
+
+    private func failApply(_ text: String, kind: Notice.Kind) -> Bool {
+        manageApplyNotice = text
+        workflow.wizard.showNotice(text, kind: kind)
+        refreshStaleness()
+        return false
     }
 
     // MARK: - Capture
