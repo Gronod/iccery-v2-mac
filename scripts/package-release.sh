@@ -103,25 +103,26 @@ EOF
     scripts/verify-sidecar-signatures.sh "$APP"
 fi
 
-echo "==> Installing / locating dmgbuild"
-# Monterey CI Python is 3.9. dmgbuild 1.6.6+ declares Requires-Python
-# >=3.10, so pip only offers 1.6.5 on this runner. Install the newest
-# wheel this interpreter accepts; do not fail the job for 1.6.7.
+echo "==> Locating dmgbuild"
+# The package CI job already ran INSTALL_DMGBUILD=1 ensure-host-tools.sh,
+# which created build/.venv-dmgbuild and prepended it to PATH. Local
+# runs bootstrap the same venv if dmgbuild is missing.
 VENV="$ROOT/build/.venv-dmgbuild"
-if [ ! -d "$VENV/bin" ]; then
-    python3 -m venv "$VENV"
-fi
-"$VENV/bin/pip" install --upgrade pip
-"$VENV/bin/pip" install --upgrade dmgbuild
-PATH="$VENV/bin:$PATH"
-export PATH
 if ! command -v dmgbuild >/dev/null 2>&1; then
-    echo "error: dmgbuild not available after venv install" >&2
+    if [ ! -x "$VENV/bin/dmgbuild" ]; then
+        INSTALL_DMGBUILD=1 "$ROOT/scripts/ensure-host-tools.sh" --dmgbuild
+    fi
+    PATH="$VENV/bin:$PATH"
+    export PATH
+fi
+if ! command -v dmgbuild >/dev/null 2>&1; then
+    echo "error: dmgbuild not on PATH; run INSTALL_DMGBUILD=1 scripts/ensure-host-tools.sh" >&2
     exit 1
 fi
-DMGBUILD_VER="$("$VENV/bin/python" -c 'from importlib.metadata import version; print(version("dmgbuild"))')"
-echo "dmgbuild $DMGBUILD_VER"
-"$VENV/bin/python" -c 'import sys; print("venv python", sys.version)'
+echo "dmgbuild $(command -v dmgbuild)"
+if [ -x "$VENV/bin/python" ]; then
+    "$VENV/bin/python" -c 'from importlib.metadata import version; print("dmgbuild", version("dmgbuild"))'
+fi
 
 PNG1X="$ROOT/Resources/dmg-background.png"
 PNG2X="$ROOT/Resources/dmg-background@2x.png"

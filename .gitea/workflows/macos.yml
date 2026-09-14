@@ -35,7 +35,8 @@ jobs:
       # The job still succeeds quickly so `package`'s `needs:` stays satisfied.
       # Homebrew's xcodegen formula requires Xcode 15.3, which cannot be
       # installed on macOS 12 (#109). The script installs a pinned
-      # prebuilt release instead.
+      # prebuilt release instead. dmgbuild is not installed here — the
+      # test job does not package (#95).
       - name: Ensure host tools
         if: "!(startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, 'prerelease'))"
         run: scripts/ensure-host-tools.sh
@@ -193,8 +194,10 @@ jobs:
 
       # scripts/package-release.sh runs `xcodegen generate` and dmgbuild;
       # see build-and-test for why brew is not used on macOS 12 (#109).
+      # INSTALL_DMGBUILD isolates dmgbuild in build/.venv-dmgbuild so
+      # the test job never pip-installs it (#95).
       - name: Ensure host tools
-        run: scripts/ensure-host-tools.sh
+        run: INSTALL_DMGBUILD=1 scripts/ensure-host-tools.sh
 
       - name: Package release
         run: scripts/package-release.sh
