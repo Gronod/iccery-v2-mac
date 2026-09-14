@@ -1,0 +1,163 @@
+@startuml ICCery-UI-stage1-2
+title Stages 1–2 — Generate Target / Lay Out and Print
+skinparam classAttributeIconSize 0
+hide circle
+hide empty methods
+
+package "stage-1  Stage1View.swift" {
+  class "colourSpace" as csp <<Picker.segmented>> {
+    RGB | CMYK
+  }
+  class "patchCountPreset" as pcp <<Picker>> {
+    PatchCountPreset.allCases
+  }
+  class "patchCountCustom" as pcc <<TextField.number>> {
+    shown: patchPreset == .custom
+  }
+  class "whitePatches" as wp <<Stepper>> {
+    0...50
+  }
+  class "blackPatches" as bp <<Stepper>> {
+    0...50
+  }
+  class "targetBasename" as tb <<TextField>>
+  class "btnBrowse" as bb <<Button>> {
+    save panel; sets basename
+  }
+  class "btnSelectWorkDir" as wd <<Button>>
+  class "btnOpenExisting" as oe <<Button>> {
+    .ti1 or .ti2 (+ matching .ti1)
+  }
+  class "btn-import-dataset" as imp <<Button>> {
+    .ti3 / .txt / .cgats / .csv
+    unlocks stage 4
+  }
+  class "selectedPathDisplay" as spd <<Text>>
+  class "targenAdvancedDetails" as adv <<DisclosureGroup>> {
+    UI tests pre-expand
+  }
+  class "btnGenerate" as gen <<Button>> {
+    disabled: !canGenerate || targenRunning
+    canGenerate: valid basename AND directory
+    label Generating… while running
+  }
+  class "targenLogContainer / targenLog" as tlog <<DisclosureGroup>> {
+    ProcessLogView.swift
+  }
+}
+
+package "Advanced (hidden until disclosure open)" {
+  class "targenGreySteps" as ag <<Toggle+TextField>> {
+    field shown iff toggle on
+  }
+  class "targenSingleChannelSteps" as as1 <<Toggle+TextField>>
+  class "targenNeutralSteps" as an <<Toggle+TextField>>
+  class "targenNeutralConcentration" as anc <<Toggle+Slider>> {
+    0...1  shown iff on
+  }
+  class "targenAdaptation" as aa <<Toggle+Slider>> {
+    0...1
+  }
+  class "targenPrecondProfile" as ap <<TextField>>
+  class "btnBrowsePrecondProfile" as apb <<Button>>
+  class "targenHighQuality" as ahq <<Toggle>> {
+    OFPS -G
+  }
+  class "targenAlgorithm" as aal <<Picker>>
+  class "targenInkLimitGroup" as ail <<Toggle+TextField>> {
+    shown: colourSpace == cmyk
+  }
+  class "targenDarkEmphasis" as ad <<Toggle+Slider>> {
+    0...3
+  }
+  class "targenDevicePower" as adp <<Toggle+Slider>> {
+    0...3
+  }
+}
+adv --> ag
+
+package "stage-2  Stage2View.swift" {
+  class "cmWarningBanner" as cmw <<Banner>> {
+    always visible on stage 2
+    not a control
+  }
+  class "instrumentSelect" as ins <<Picker>> {
+    PrintInstrument — chart code, NOT USB port
+  }
+  class "pageSizeSelect" as pgs <<Picker>>
+  class "customPageSizeRow" as cps <<HStack>> {
+    shown: pageSize == .custom
+    customPageW / customPageH  mm
+  }
+  class "bitDepth" as bit <<Picker>> {
+    8-bit | 16-bit TIFF
+    (no a11y id on picker)
+  }
+  class "tiffDpi" as dpi <<Stepper>> {
+    72...600
+  }
+  class "printtargLayoutOrder" as lo <<Picker>>
+  class "printtargCustomSeedGroup" as seed <<HStack>> {
+    shown: layoutOrder == .customSeed
+    id printtargCustomSeed
+  }
+  class "btnToggleLabelEdit" as tle <<Button>> {
+    toggles labelIsCustom
+    title: Edit label… / Use automatic label
+  }
+  class "targetMetadataPrinter" as mp <<TextField>>
+  class "targetMetadataInkSet" as mi <<TextField>>
+  class "targetMetadataDriverPaper" as md <<TextField>>
+  class "targetMetadataActualPaper" as ma <<TextField>>
+  class "targetLabelPreview" as lpv <<TextField|Text>> {
+    TextField if labelIsCustom else Text(automatic)
+  }
+  class "btnCreateLayout" as lay <<Button>> {
+    disabled: printtargRunning || basename.empty
+  }
+  class "printtargLogContainer" as plog <<DisclosureGroup>>
+  class "tiffGallery" as gal <<Grid>> {
+    shown: printtargResult != nil
+    galleryInfo, galleryGrid
+    galleryPage-{index}
+    btnPrintPage-{index}
+    Print disabled: isPrinting || selectedPrinter.empty
+  }
+}
+
+package "rawPrintPanel" {
+  class "printerSelect" as ps <<Picker>> {
+    CUPS queues
+  }
+  class "printerStatusBadge" as psb <<Caption>> {
+    shown: selected printer in list
+  }
+  class "btnRefreshPrinters" as prf <<Button>>
+  class "btnPrinterProperties" as ppr <<Button>> {
+    disabled: selectedPrinter.empty
+    bound NSPrintPanel
+  }
+  class "printerTraySelect" as ptr <<Picker>> {
+    shown: trays nonempty
+  }
+  class "printerMediaTypeSelect" as pmt <<Picker>> {
+    shown: mediaTypes nonempty
+    also mediaTypeGroup
+  }
+  class "btnOrientPortrait" as por <<Button>>
+  class "btnOrientLandscape" as lan <<Button>>
+  class "btnPrintAll" as pal <<Button>> {
+    disabled: isPrinting
+             || printtargResult==nil
+             || selectedPrinter.empty
+  }
+  class "btnAdvanceToStage3" as a3 <<Button>> {
+    disabled: printtargResult==nil
+             || !isUnlocked(.measure)
+  }
+  class "printNotificationText" as pnt <<Caption>> {
+    shown: print.printNotice != nil
+  }
+}
+@enduml
+
