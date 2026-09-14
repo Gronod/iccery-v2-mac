@@ -106,9 +106,19 @@ fi
 
 mkdir -p "$DEST"
 cp -R "$BIN_DIR"/. "$DEST"/
+# Copy License.txt from archive root (same level as bin/) to Vendor/Argyll/ root
+VENDOR_ROOT="$ROOT/Vendor/Argyll"
+for license_src in "$EXTRACT"/Argyll_V*/License.txt "$EXTRACT"/License.txt; do
+    if [ -f "$license_src" ]; then
+        cp "$license_src" "$VENDOR_ROOT/License.txt"
+        break
+    fi
+done
 find "$DEST" -type f -exec chmod 0755 {} +
 # Downloads carry com.apple.quarantine; the app cannot spawn quarantined tools.
 xattr -dr com.apple.quarantine "$DEST" 2>/dev/null || true
+# Also remove quarantine from Vendor/Argyll root if License.txt was copied
+xattr -dr com.apple.quarantine "$VENDOR_ROOT" 2>/dev/null || true
 
 # Ad-hoc sign every Mach-O (#165: unsigned arm64 → "Killed: 9"), then
 # verify — an unsigned sidecar fails the script. The tree may nest

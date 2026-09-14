@@ -85,4 +85,139 @@ final class AboutHelpUITests: XCTestCase {
                        "Toggling global help must not reflow the sidebar.")
         XCTAssertTrue(app.descendants(matching: .any)["openSettingsBtn"].exists)
     }
+
+    func testAboutDialogShowsViewLicensesButton() throws {
+        launchApp()
+
+        let openAbout = app.buttons["openAboutBtn"]
+        XCTAssertTrue(openAbout.waitForExistence(timeout: 10))
+        openAbout.click()
+
+        _ = waitFor("aboutVersion", timeout: 10)
+
+        let viewLicensesBtn = waitFor("viewLicensesBtn", timeout: 10)
+        XCTAssertTrue(viewLicensesBtn.exists)
+        viewLicensesBtn.click()
+
+        // License window should open as a sheet
+        _ = waitFor("licenseWindow", timeout: 10)
+        XCTAssertTrue(element("licenseWindow").exists)
+
+        // Close license window
+        let closeLicenseBtn = waitFor("closeLicenseBtn", timeout: 5)
+        closeLicenseBtn.click()
+
+        // License window should be dismissed
+        XCTAssertFalse(element("licenseWindow").exists)
+
+        // Close about dialog
+        let closeAboutBtn = waitFor("closeAboutBtn", timeout: 5)
+        closeAboutBtn.click()
+        XCTAssertFalse(element("aboutDialog").exists)
+    }
+
+    func testLicenseWindowShowsICCeryLicense() throws {
+        launchApp()
+
+        let openAbout = app.buttons["openAboutBtn"]
+        XCTAssertTrue(openAbout.waitForExistence(timeout: 10))
+        openAbout.click()
+
+        let viewLicensesBtn = waitFor("viewLicensesBtn", timeout: 10)
+        viewLicensesBtn.click()
+
+        _ = waitFor("licenseWindow", timeout: 10)
+
+        // Verify ICCery license section exists
+        let icceryLicenseSection = waitFor("icceryLicenseSectionHeader", timeout: 5)
+        XCTAssertTrue(icceryLicenseSection.exists)
+
+        // Verify ICCery license content contains key phrases
+        let icceryLicenseContent = element("icceryLicenseSectionContent")
+        XCTAssertTrue(icceryLicenseContent.waitForExistence(timeout: 5))
+        let licenseText = icceryLicenseContent.value as? String ?? ""
+        XCTAssertTrue(licenseText.contains("Copyright (c) 2026 Gordon Bolton"))
+        XCTAssertTrue(licenseText.contains("All Rights Reserved"))
+        XCTAssertTrue(licenseText.contains("AGPLv3"))
+
+        // Close license window
+        let closeLicenseBtn = waitFor("closeLicenseBtn", timeout: 5)
+        closeLicenseBtn.click()
+
+        let closeAboutBtn = waitFor("closeAboutBtn", timeout: 5)
+        closeAboutBtn.click()
+    }
+
+    func testLicenseWindowShowsArgyllLicense() throws {
+        launchApp()
+
+        let openAbout = app.buttons["openAboutBtn"]
+        XCTAssertTrue(openAbout.waitForExistence(timeout: 10))
+        openAbout.click()
+
+        let viewLicensesBtn = waitFor("viewLicensesBtn", timeout: 10)
+        viewLicensesBtn.click()
+
+        _ = waitFor("licenseWindow", timeout: 10)
+
+        // Verify ArgyllCMS license section exists
+        let argyllLicenseSection = waitFor("argyllLicenseSectionHeader", timeout: 5)
+        XCTAssertTrue(argyllLicenseSection.exists)
+
+        // Verify Argyll license content exists (may be fallback if License.txt not bundled)
+        let argyllLicenseContent = element("argyllLicenseSectionContent")
+        XCTAssertTrue(argyllLicenseContent.waitForExistence(timeout: 5))
+        let licenseText = argyllLicenseContent.value as? String ?? ""
+        // Should contain either the actual AGPLv3 license or the fallback notice
+        XCTAssertTrue(licenseText.contains("AGPLv3") || licenseText.contains("GNU Affero General Public License") || licenseText.contains("fetch-argyll"))
+
+        // Close license window
+        let closeLicenseBtn = waitFor("closeLicenseBtn", timeout: 5)
+        closeLicenseBtn.click()
+
+        let closeAboutBtn = waitFor("closeAboutBtn", timeout: 5)
+        closeAboutBtn.click()
+    }
+
+    func testLicenseWindowShowsAttributionLinks() throws {
+        launchApp()
+
+        let openAbout = app.buttons["openAboutBtn"]
+        XCTAssertTrue(openAbout.waitForExistence(timeout: 10))
+        openAbout.click()
+
+        let viewLicensesBtn = waitFor("viewLicensesBtn", timeout: 10)
+        viewLicensesBtn.click()
+
+        _ = waitFor("licenseWindow", timeout: 10)
+
+        // Verify attribution section exists
+        let attributionHeader = waitFor("attributionHeader", timeout: 5)
+        XCTAssertTrue(attributionHeader.exists)
+
+        // Verify upstream link
+        let upstreamLink = element("argyllUpstreamLink")
+        XCTAssertTrue(upstreamLink.waitForExistence(timeout: 5))
+        let upstreamLabel = upstreamLink.label
+        XCTAssertTrue(upstreamLabel.contains("Graeme Gill") || upstreamLabel.contains("argyllcms.com"))
+
+        // Verify fork link
+        let forkLink = element("argyllForkLink")
+        XCTAssertTrue(forkLink.waitForExistence(timeout: 5))
+        let forkLabel = forkLink.label
+        XCTAssertTrue(forkLabel.contains("Gronod") || forkLabel.contains("git.i3omb.com"))
+
+        // Verify AGPL isolation note
+        let isolationNote = element("agplIsolationNote")
+        XCTAssertTrue(isolationNote.waitForExistence(timeout: 5))
+        let noteText = isolationNote.value as? String ?? ""
+        XCTAssertTrue(noteText.contains("isolated subprocesses") || noteText.contains("AGPLv3 isolation"))
+
+        // Close license window
+        let closeLicenseBtn = waitFor("closeLicenseBtn", timeout: 5)
+        closeLicenseBtn.click()
+
+        let closeAboutBtn = waitFor("closeAboutBtn", timeout: 5)
+        closeAboutBtn.click()
+    }
 }

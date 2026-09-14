@@ -6,6 +6,8 @@ import ICCeryCore
 struct AboutView: View {
     let onClose: () -> Void
 
+    @State private var showingLicenses = false
+
     private let info = ArtefactFiles.appInfo()
 
     var body: some View {
@@ -54,6 +56,12 @@ struct AboutView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
 
+            Button("View Licenses") {
+                showingLicenses = true
+            }
+            .controlSize(.large)
+            .accessibilityIdentifier("viewLicensesBtn")
+
             Button("Close") {
                 onClose()
             }
@@ -66,5 +74,8 @@ struct AboutView: View {
         .background(Theme.panel)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("aboutDialog")
+        .sheet(isPresented: $showingLicenses) {
+            LicenseWindowView()
+        }
     }
 }
