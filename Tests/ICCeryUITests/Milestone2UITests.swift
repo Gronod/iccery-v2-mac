@@ -36,6 +36,7 @@ final class Milestone2UITests: XCTestCase {
             "ICCERY_UI_TESTING": "1",
             "ICCERY_TEST_ROOT": testRoot.path,
             "ICCERY_ARGYLL_BINARY_DIR": binDir.path,
+            "ICCERY_CUPS_BIN_DIR": binDir.path,
             "ICCERY_TEST_SAVE_TARGET":
                 workDir.appendingPathComponent("mytarget.ti1").path,
             "ICCERY_TEST_WORKDIR": workDir.path,
@@ -218,11 +219,12 @@ final class Milestone2UITests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(
             atPath: workDir.appendingPathComponent("mytarget.ti2").path))
 
-        // Print panel is live from M3; a default printer is selected
-        // so both the all-pages and per-page print buttons are enabled.
+        // Print panel is live from M3. GitHub macos-14 has no system
+        // queues, so mock CUPS (`ICCERY_CUPS_BIN_DIR`) must enumerate
+        // before Print All / per-page enable (run 34867767434).
         XCTAssertTrue(element("rawPrintPanel").exists)
-        XCTAssertTrue(app.buttons["btnPrintAll"].isEnabled)
-        XCTAssertTrue(app.buttons["btnPrintPage-0"].isEnabled)
+        _ = waitUntilEnabled("btnPrintAll", timeout: 15)
+        _ = waitUntilEnabled("btnPrintPage-0", timeout: 15)
         XCTAssertTrue(app.buttons["btnAdvanceToStage3"].isEnabled)
     }
 
