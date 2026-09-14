@@ -1,216 +1,83 @@
 @startuml ICCery-UI-stage1-2
-title Stages 1–2 — Generate Target / Lay Out and Print
-
+title Stages 1-2  Generate Target / Lay Out and Print
 !theme plain
 skinparam backgroundColor white
 skinparam defaultFontColor black
 skinparam defaultFontSize 13
-skinparam classBackgroundColor white
-skinparam classFontColor black
-skinparam classBorderColor #222222
-skinparam classAttributeFontColor black
-skinparam rectangleBackgroundColor #F4F4F4
-skinparam rectangleBorderColor #222222
-skinparam rectangleFontColor black
+skinparam mapBackgroundColor white
+skinparam mapBorderColor #222222
+skinparam mapFontColor black
 skinparam arrowColor #222222
-skinparam noteBackgroundColor #FFF6C8
-skinparam noteBorderColor #222222
-skinparam noteFontColor black
 skinparam shadowing false
-skinparam classAttributeIconSize 0
-skinparam wrapWidth 240
-skinparam nodesep 24
-skinparam ranksep 28
-rectangle "stage-1  Stage1View.swift" {
-  class "colourSpace  [Picker.segmented]" as csp {
-    RGB | CMYK
-  }
-  class "patchCountPreset  [Picker]" as pcp {
-    PatchCountPreset.allCases
-  }
-  class "patchCountCustom  [TextField.number]" as pcc {
-    shown: patchPreset == .custom
-  }
-  class "whitePatches  [Stepper]" as wp {
-    0...50
-  }
-  class "blackPatches  [Stepper]" as bp {
-    0...50
-  }
-  class "targetBasename  [TextField]" as tb {
-    TextField
-  }
-  class "btnBrowse  [Button]" as bb {
-    save panel; sets basename
-  }
-  class "btnSelectWorkDir  [Button]" as wd {
-    Button
-  }
-  class "btnOpenExisting  [Button]" as oe {
-    .ti1 or .ti2 (+ matching .ti1)
-  }
-  class "btn-import-dataset  [Button]" as imp {
-    .ti3 / .txt / .cgats / .csv
-    unlocks stage 4
-  }
-  class "selectedPathDisplay  [Text]" as spd {
-    Text
-  }
-  class "targenAdvancedDetails  [DisclosureGroup]" as adv {
-    UI tests pre-expand
-  }
-  class "btnGenerate  [Button]" as gen {
-    disabled: !canGenerate || targenRunning
-    canGenerate: valid basename AND directory
-    label Generating… while running
-  }
-  class "targenLogContainer / targenLog  [DisclosureGroup]" as tlog {
-    ProcessLogView.swift
-  }
+hide circle
+top to bottom direction
+
+map "stage-1  Stage1View.swift" as s1 {
+  colourSpace => Picker.segmented : RGB or CMYK
+  patchCountPreset => Picker
+  patchCountCustom => TextField : shown if preset is custom
+  whitePatches => Stepper 0-50
+  blackPatches => Stepper 0-50
+  targetBasename => TextField
+  btnBrowse => Button
+  btnSelectWorkDir => Button
+  btnOpenExisting => Button : .ti1 or .ti2
+  btn-import-dataset => Button : unlocks stage 4
+  selectedPathDisplay => Text
+  targenAdvancedDetails => DisclosureGroup : UI tests pre-expand
+  btnGenerate => Button : needs basename AND directory
+  targenLog => ProcessLogView
 }
 
-rectangle "Advanced (hidden until disclosure open)" {
-  class "targenGreySteps  [Toggle+TextField]" as ag {
-    field shown iff toggle on
-  }
-  class "targenSingleChannelSteps  [Toggle+TextField]" as as1 {
-    Toggle+TextField
-  }
-  class "targenNeutralSteps  [Toggle+TextField]" as an {
-    Toggle+TextField
-  }
-  class "targenNeutralConcentration  [Toggle+Slider]" as anc {
-    0...1  shown iff on
-  }
-  class "targenAdaptation  [Toggle+Slider]" as aa {
-    0...1
-  }
-  class "targenPrecondProfile  [TextField]" as ap {
-    TextField
-  }
-  class "btnBrowsePrecondProfile  [Button]" as apb {
-    Button
-  }
-  class "targenHighQuality  [Toggle]" as ahq {
-    OFPS -G
-  }
-  class "targenAlgorithm  [Picker]" as aal {
-    Picker
-  }
-  class "targenInkLimitGroup  [Toggle+TextField]" as ail {
-    shown: colourSpace == cmyk
-  }
-  class "targenDarkEmphasis  [Toggle+Slider]" as ad {
-    0...3
-  }
-  class "targenDevicePower  [Toggle+Slider]" as adp {
-    0...3
-  }
-}
-adv --> ag
-
-rectangle "stage-2  Stage2View.swift" {
-  class "cmWarningBanner  [Banner]" as cmw {
-    always visible on stage 2
-    not a control
-  }
-  class "instrumentSelect  [Picker]" as ins {
-    PrintInstrument — chart code, NOT USB port
-  }
-  class "pageSizeSelect  [Picker]" as pgs {
-    Picker
-  }
-  class "customPageSizeRow  [HStack]" as cps {
-    shown: pageSize == .custom
-    customPageW / customPageH  mm
-  }
-  class "bitDepth  [Picker]" as bit {
-    8-bit | 16-bit TIFF
-    (no a11y id on picker)
-  }
-  class "tiffDpi  [Stepper]" as dpi {
-    72...600
-  }
-  class "printtargLayoutOrder  [Picker]" as lo {
-    Picker
-  }
-  class "printtargCustomSeedGroup  [HStack]" as seed {
-    shown: layoutOrder == .customSeed
-    id printtargCustomSeed
-  }
-  class "btnToggleLabelEdit  [Button]" as tle {
-    toggles labelIsCustom
-    title: Edit label… / Use automatic label
-  }
-  class "targetMetadataPrinter  [TextField]" as mp {
-    TextField
-  }
-  class "targetMetadataInkSet  [TextField]" as mi {
-    TextField
-  }
-  class "targetMetadataDriverPaper  [TextField]" as md {
-    TextField
-  }
-  class "targetMetadataActualPaper  [TextField]" as ma {
-    TextField
-  }
-  class "targetLabelPreview  [TextField|Text]" as lpv {
-    TextField if labelIsCustom else Text(automatic)
-  }
-  class "btnCreateLayout  [Button]" as lay {
-    disabled: printtargRunning || basename.empty
-  }
-  class "printtargLogContainer  [DisclosureGroup]" as plog {
-    DisclosureGroup
-  }
-  class "tiffGallery  [Grid]" as gal {
-    shown: printtargResult != nil
-    galleryInfo, galleryGrid
-    galleryPage-{index}
-    btnPrintPage-{index}
-    Print disabled: isPrinting || selectedPrinter.empty
-  }
+map "Stage 1 Advanced (inside disclosure)" as adv {
+  targenGreySteps => Toggle+field : field iff on
+  targenSingleChannelSteps => Toggle+field
+  targenNeutralSteps => Toggle+field
+  targenNeutralConcentration => Toggle+Slider 0-1
+  targenAdaptation => Toggle+Slider 0-1
+  targenPrecondProfile => TextField
+  btnBrowsePrecondProfile => Button
+  targenHighQuality => Toggle
+  targenAlgorithm => Picker
+  targenInkLimitGroup => Toggle+field : CMYK only
+  targenDarkEmphasis => Toggle+Slider 0-3
+  targenDevicePower => Toggle+Slider 0-3
 }
 
-rectangle "rawPrintPanel" {
-  class "printerSelect  [Picker]" as ps {
-    CUPS queues
-  }
-  class "printerStatusBadge  [Caption]" as psb {
-    shown: selected printer in list
-  }
-  class "btnRefreshPrinters  [Button]" as prf {
-    Button
-  }
-  class "btnPrinterProperties  [Button]" as ppr {
-    disabled: selectedPrinter.empty
-    bound NSPrintPanel
-  }
-  class "printerTraySelect  [Picker]" as ptr {
-    shown: trays nonempty
-  }
-  class "printerMediaTypeSelect  [Picker]" as pmt {
-    shown: mediaTypes nonempty
-    also mediaTypeGroup
-  }
-  class "btnOrientPortrait  [Button]" as por {
-    Button
-  }
-  class "btnOrientLandscape  [Button]" as lan {
-    Button
-  }
-  class "btnPrintAll  [Button]" as pal {
-    disabled: isPrinting
-             || printtargResult==nil
-             || selectedPrinter.empty
-  }
-  class "btnAdvanceToStage3  [Button]" as a3 {
-    disabled: printtargResult==nil
-             || !isUnlocked(.measure)
-  }
-  class "printNotificationText  [Caption]" as pnt {
-    shown: print.printNotice != nil
-  }
+map "stage-2  Stage2View.swift" as s2 {
+  cmWarningBanner => Banner : always on stage 2
+  instrumentSelect => Picker : chart code, not USB port
+  pageSizeSelect => Picker
+  customPageW / customPageH => TextField : pageSize custom
+  tiffDpi => Stepper 72-600
+  printtargLayoutOrder => Picker
+  printtargCustomSeed => TextField : custom seed order
+  btnToggleLabelEdit => Button
+  targetMetadataPrinter => TextField
+  targetMetadataInkSet => TextField
+  targetMetadataDriverPaper => TextField
+  targetMetadataActualPaper => TextField
+  targetLabelPreview => TextField or Text
+  btnCreateLayout => Button : disabled if no basename
+  tiffGallery => Grid : after printtarg
+  btnPrintPage-N => Button : disabled if no printer
 }
+
+map "rawPrintPanel" as prn {
+  printerSelect => Picker CUPS
+  printerStatusBadge => Caption
+  btnRefreshPrinters => Button
+  btnPrinterProperties => Button : disabled if no printer
+  printerTraySelect => Picker : if trays exist
+  printerMediaTypeSelect => Picker : if media types exist
+  btnOrientPortrait => Button
+  btnOrientLandscape => Button
+  btnPrintAll => Button : needs layout AND printer
+  btnAdvanceToStage3 => Button : needs .ti2 unlock
+  printNotificationText => Caption : if printNotice set
+}
+
+s1 -[hidden]down- adv
+adv -[hidden]down- s2
+s2 -[hidden]down- prn
 @enduml
-

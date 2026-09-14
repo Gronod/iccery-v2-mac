@@ -1,232 +1,81 @@
 @startuml ICCery-UI-shell
-title ICCery v2 — interactive UI map (develop)\nobject names, files, enable / hide rules
-caption Accessibility ids in quotes. Disk gating: WizardGating.swift. No App Sandbox.
-
+title Shell, sidebar, stepper, File menu
 !theme plain
 skinparam backgroundColor white
 skinparam defaultFontColor black
 skinparam defaultFontSize 13
-skinparam classBackgroundColor white
-skinparam classFontColor black
-skinparam classBorderColor #222222
-skinparam classAttributeFontColor black
-skinparam rectangleBackgroundColor #F4F4F4
-skinparam rectangleBorderColor #222222
-skinparam rectangleFontColor black
+skinparam mapBackgroundColor white
+skinparam mapBorderColor #222222
+skinparam mapFontColor black
 skinparam arrowColor #222222
-skinparam noteBackgroundColor #FFF6C8
-skinparam noteBorderColor #222222
-skinparam noteFontColor black
 skinparam shadowing false
-skinparam classAttributeIconSize 0
-skinparam wrapWidth 240
-skinparam nodesep 24
-skinparam ranksep 28
-class "WindowGroup ICCery  [ICCeryApp.swift]" as win {
-  1280x800, min 1100x700
-  File menu: ProjectCommands
-}
-class "RootView  [RootView.swift]" as root {
-  sidebar 270pt + stage column
-  sheets / alerts hosted here
+hide circle
+top to bottom direction
+
+map "Window" as win {
+  WindowGroup => ICCeryApp.swift : 1280x800 min 1100x700
+  RootView => RootView.swift : hosts every sheet
+  noticeText => NoticeBanner : shown if wizard.notice set; auto-hide 6s
 }
 
-win --> root
-
-rectangle "Persistent chrome" {
-  class "SidebarView  [SidebarView.swift]" as side {
-    SidebarView.swift
-  }
-  class "NoticeBanner  [NoticeBanner.swift]" as ban {
-    id noticeText
-    shown: wizard.notice != nil
-    auto-hide 6s unless nil
-    close: xmark (no a11y id)
-  }
-  class "WizardStageContent  [RootView.swift]" as stage {
-    switch wizard.stage
-  }
+map "Sidebar header" as hdr {
+  openSettingsBtn => Button : always / Settings sheet
+  openAboutBtn => Button : always / About
+  btnToggleAllHelp => Button : toggles yellow help dots
 }
 
-root --> side
-root --> ban
-root --> stage
-
-rectangle "Sidebar header" {
-  class "openSettingsBtn  [Button]" as sSet {
-    gearshape
-    always enabled
-    presents SettingsView sheet
-  }
-  class "openAboutBtn  [Button]" as sAbt {
-    info.circle
-    always enabled
-    presents AboutView
-  }
-  class "btnToggleAllHelp  [Button]" as sHlp {
-    questionmark.circle
-    toggles showingAllHelp
-    HelpOverlayView: yellow dots when on
-  }
-}
-side --> sSet
-side --> sAbt
-side --> sHlp
-
-rectangle "Presets (#11)" {
-  class "presetSelect  [Picker.menu]" as pre {
-    tags: none + ProfilingPreset.id
-    set applies preset immediately
-    "No preset" does not factory-reset
-  }
-  class "btnSavePresetModal  [Button]" as preS {
-    always enabled
-    showingSavePreset = true
-  }
-  class "btnOpenPresetsDialog  [Button]" as preM {
-    always enabled
-    showingManagePresets = true
-  }
-}
-side --> pre
-side --> preS
-side --> preM
-
-rectangle "Media library (#146)" {
-  class "mediaSelect  [Picker.menu]" as med {
-    tags: none + MediaRecipe.id
-    never reuses presetSelect
-    failed apply snaps back to none
-  }
-  class "mediaRecipeStale  [Caption]" as medSt {
-    shown: staleReasons[selected] nonempty
-    "Printer not installed" or "Calibration stale"
-  }
-  class "btnMediaLibraryCapture  [Button]" as medC {
-    disabled: print.selectedPrinter.isEmpty
-    needs Stage 2 queue
-  }
-  class "btnMediaLibraryManage  [Button]" as medM {
-    always enabled
-  }
-}
-side --> med
-side --> medSt
-side --> medC
-side --> medM
-
-rectangle "Studio (not stepper)" {
-  class "btnCalibratePrinter  [Button]" as calB {
-    always enabled
-    wizard.enterCalibration()
-    Stage 0, not numbered
-  }
-  class "btnViewGamut  [Button]" as gamB {
-    Sidebar copy — same id as Stage 5
-    always enabled
-    no .gam => sRGB only
-  }
-  class "btnSpotRead  [Button]" as spotB {
-    disabled: workingDirectory==nil
-             OR measurement.isChartreadRunning
-  }
-}
-side --> calB
-side --> gamB
-side --> spotB
-
-rectangle "Stepper 1–5  (disk is truth)" {
-  class "StepperRow stage N  [Button.plain]" as step {
-    WizardStage.stepperStages
-    disabled / opacity 0.45 unless isUnlocked
-    go(to:) allowed backward always
-    calibrate is NOT a stepper row
-  }
-  note as nGate
-    WizardGating.swift / WizardViewModel.isUnlocked
-    1 generate: always
-    2 layOutPrint: .ti1
-    3 measure: .ti1 AND .ti2
-    4 buildProfile: .ti3 (not .ti2 alone)
-    5 verifyInstall: .ti3 AND .icc/.icm
-    Re-probed on window key (#151)
-  end note
-}
-side --> step
-step .. nGate
-
-rectangle "Project chip (#149)  ProjectUI.swift" {
-  class "projectChip  [Container]" as chip {
-    Container
-  }
-  class "projectChipName  [Text]" as cn {
-    bound name or "No project"
-  }
-  class "projectChipPath  [Text]" as cp {
-    shown if bound; last path component
-  }
-  class "projectChipStale  [Caption]" as cs {
-    shown: diskBehindNotes
-  }
-  class "btnProjectReveal  [Button]" as cr {
-    shown if bound
-  }
-  class "btnProjectSave  [Button]" as csv {
-    shown if bound
-    disabled: !canSave
-    canSave: isBound && basename && cwd
-    CAL_ basename still enabled (refusal banner)
-  }
-  class "btnProjectOpen  [Button]" as co {
-    shown if NOT bound
-  }
-}
-side --> chip
-chip --> cn
-chip --> cp
-chip --> cs
-chip --> cr
-chip --> csv
-chip --> co
-
-rectangle "File menu  ProjectCommands / ICCeryApp.swift" {
-  class "menuProjectNew  [Button]" as mN {
-    ⌘N  requestNew()
-  }
-  class "menuProjectOpen  [Button]" as mO {
-    ⌘O
-  }
-  class "menuProjectRecents  [Menu]" as mR {
-    disabled: recents.isEmpty
-    items: projectRecent-{bookmarkHash}
-    menuProjectRecentsClear
-  }
-  class "menuProjectSave  [Button]" as mS {
-    ⌘S  disabled: !canSave
-  }
-  class "menuProjectSaveAs  [Button]" as mSa {
-    ⇧⌘S  disabled: !canSaveAs
-    canSaveAs: basename && cwd (no bind required)
-  }
-  class "menuProjectReport  [Button]" as mRp {
-    disabled: !canReport
-  }
-  class "menuProjectClose  [Button]" as mCl {
-    disabled: !isBound
-  }
+map "Presets" as pre {
+  presetSelect => Picker.menu : none + preset id; none is not factory reset
+  btnSavePresetModal => Button : always
+  btnOpenPresetsDialog => Button : always
 }
 
-class "stage-1 / Stage1View.swift" as st1
-stage --> st1
-class "stage-2 / Stage2View.swift" as st2
-stage --> st2
-class "stage-3 / Stage3View.swift" as st3
-stage --> st3
-class "stage-4 / Stage4View.swift" as st4
-stage --> st4
-class "stage-5 / Stage5View.swift" as st5
-stage --> st5
-class "stage-cal / CalibrationView.swift" as st0
-stage --> st0
+map "Media library" as med {
+  mediaSelect => Picker.menu : never reuses presetSelect
+  mediaRecipeStale => Caption : shown if staleReasons nonempty
+  btnMediaLibraryCapture => Button : disabled if no Stage 2 printer
+  btnMediaLibraryManage => Button : always
+}
+
+map "Studio (not stepper)" as stu {
+  btnCalibratePrinter => Button : always; Stage 0
+  btnViewGamut => Button : sidebar always on; same id as Stage 5
+  btnSpotRead => Button : disabled if no cwd or chartread running
+}
+
+map "Stepper 1-5  disk is truth" as stp {
+  Stage1 Generate => always
+  Stage2 Lay out => .ti1
+  Stage3 Measure => .ti1 AND .ti2
+  Stage4 Build => .ti3 (not .ti2 alone)
+  Stage5 Verify => .ti3 AND .icc/.icm
+  Calibrate => not a stepper row; always available
+}
+
+map "Project chip" as chip {
+  projectChipName => Text : bound name or No project
+  projectChipPath => Text : shown if bound
+  projectChipStale => Caption : diskBehindNotes
+  btnProjectReveal => Button : shown if bound
+  btnProjectSave => Button : canSave = bound + basename + cwd
+  btnProjectOpen => Button : shown if not bound
+}
+
+map "File menu" as menu {
+  menuProjectNew => Button Cmd-N
+  menuProjectOpen => Button Cmd-O
+  menuProjectRecents => Menu : disabled if recents empty
+  menuProjectSave => Button Cmd-S : !canSave
+  menuProjectSaveAs => Button Shift-Cmd-S : basename + cwd
+  menuProjectReport => Button : !canReport
+  menuProjectClose => Button : !isBound
+}
+
+win -[hidden]down- hdr
+hdr -[hidden]down- pre
+pre -[hidden]down- med
+med -[hidden]down- stu
+stu -[hidden]down- stp
+stp -[hidden]down- chip
+chip -[hidden]down- menu
 @enduml
-
