@@ -103,19 +103,39 @@ EOF
     scripts/verify-sidecar-signatures.sh "$APP"
 fi
 
-echo "==> Installing / locating dmgbuild"
+echo "==> Locating dmgbuild"
+# The package CI job already ran INSTALL_DMGBUILD=1 ensure-host-tools.sh,
+# which created build/.venv-dmgbuild and prepended it to PATH. Local
+# runs bootstrap the same venv if dmgbuild is missing.
+VENV="$ROOT/build/.venv-dmgbuild"
 if ! command -v dmgbuild >/dev/null 2>&1; then
-    VENV="$ROOT/build/.venv-dmgbuild"
-    if [ ! -d "$VENV/bin" ]; then
-        python3 -m venv "$VENV"
-        "$VENV/bin/pip" install --upgrade pip
-        "$VENV/bin/pip" install dmgbuild
+    if [ ! -x "$VENV/bin/dmgbuild" ]; then
+        INSTALL_DMGBUILD=1 "$ROOT/scripts/ensure-host-tools.sh" --dmgbuild
     fi
     PATH="$VENV/bin:$PATH"
     export PATH
 fi
 if ! command -v dmgbuild >/dev/null 2>&1; then
-    echo "error: dmgbuild not available. Try 'python3 -m venv .venv && pip install dmgbuild'" >&2
+    echo "error: dmgbuild not on PATH; run INSTALL_DMGBUILD=1 scripts/ensure-host-tools.sh" >&2
+    exit 1
+fi
+echo "dmgbuild $(command -v dmgbuild)"
+if [ -x "$VENV/bin/python" ]; then
+    "$VENV/bin/python" -c 'from importlib.metadata import version; print("dmgbuild", version("dmgbuild"))'
+fi
+
+PNG1X="$ROOT/Resources/dmg-background.png"
+PNG2X="$ROOT/Resources/dmg-background@2x.png"
+if [ ! -f "$PNG1X" ] || [ ! -f "$PNG2X" ]; then
+    echo "error: missing $PNG1X or $PNG2X" >&2
+    exit 1
+fi
+mkdir -p "$ROOT/build"
+DMG_BACKGROUND="$ROOT/build/dmg-background.tiff"
+echo "==> Building HiDPI DMG background TIFF"
+tiffutil -cathidpicheck "$PNG1X" "$PNG2X" -out "$DMG_BACKGROUND"
+if [ ! -f "$DMG_BACKGROUND" ]; then
+    echo "error: tiffutil did not write $DMG_BACKGROUND" >&2
     exit 1
 fi
 
@@ -128,6 +148,7 @@ VOLUME_NAME="ICCery ${VERSION}"
 DMG_APP="$APP" \
 DMG_FILENAME="$DMG" \
 DMG_VOLUME_NAME="$VOLUME_NAME" \
+DMG_BACKGROUND="$DMG_BACKGROUND" \
 dmgbuild -s scripts/dmgbuild-settings.py "$VOLUME_NAME" "$DMG"
 
 echo "DMG: $PWD/$DMG"

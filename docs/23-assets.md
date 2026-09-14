@@ -25,7 +25,7 @@ Cone-only mark for window/taskbar. Raster set:
 
 | File | Use |
 |------|-----|
-| `icons/dmg-background.png` (+ `@2x`, `.svg`) | macOS DMG window (ice cream / wordmark scene). Headless `dmgbuild` after #189 |
+| `Resources/dmg-background.png` (+ `@2x`; source `brand/dmg-background.svg`) | macOS DMG window. `scripts/package-release.sh` builds a HiDPI TIFF and passes it to `dmgbuild==1.6.7` from `build/.venv-dmgbuild` (created by `INSTALL_DMGBUILD=1 scripts/ensure-host-tools.sh`). Monterey Python 3.9 needs `PIP_IGNORE_REQUIRES_PYTHON=1` or pip will keep 1.6.5. Missing art is a hard fail (#95, #189). |
 | `icons/wix-banner.bmp`, `wix-dialog.bmp` | MSI |
 | `icons/nsis-header.bmp`, `nsis-sidebar.bmp` | NSIS |
 

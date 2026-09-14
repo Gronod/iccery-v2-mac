@@ -21,6 +21,8 @@ targets:
           - ICCery.entitlements
           - ICCery.Debug.entitlements
           - Argyll
+          - dmg-background.png
+          - dmg-background@2x.png
       - path: Resources/Argyll
         type: folder
     dependencies:
