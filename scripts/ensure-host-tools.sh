@@ -4,7 +4,7 @@
 # Bootstrap host tools needed by CI on the macOS 12 runner:
 #   - xcodegen: pinned prebuilt release from GitHub (Homebrew's current
 #     formula requires Xcode 15.3, which cannot be installed on macOS 12).
-#   - dmgbuild: via pip3 (used by scripts/package-release.sh).
+#   - dmgbuild >= 1.6.7: via pip (bookmark-based DMG background, #95).
 #
 # Safe to run repeatedly: existing tools are left alone.
 
@@ -13,8 +13,8 @@ set -eu
 XCODEGEN_VERSION="2.38.0"
 INSTALL_ROOT="${XCODEGEN_HOME:-$HOME/.local/xcodegen/$XCODEGEN_VERSION}"
 
-echo "==> Ensuring dmgbuild"
-python3 -c "import dmgbuild" 2>/dev/null || pip3 install dmgbuild
+echo "==> Ensuring dmgbuild >= 1.6.7"
+python3 -m pip install --upgrade 'dmgbuild>=1.6.7'
 
 if command -v xcodegen >/dev/null 2>&1; then
     echo "==> xcodegen already on PATH: $(xcodegen --version)"

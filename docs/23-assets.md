@@ -25,7 +25,7 @@ Cone-only mark for window/taskbar. Raster set:
 
 | File | Use |
 |------|-----|
-| `icons/dmg-background.png` (+ `@2x`, `.svg`) | macOS DMG window (ice cream / wordmark scene). Headless `dmgbuild` after #189 |
+| `Resources/dmg-background.png` (+ `@2x`; source `brand/dmg-background.svg`) | macOS DMG window. `scripts/package-release.sh` builds a HiDPI TIFF and passes it to `dmgbuild` >= 1.6.7 (#95, #189). Missing art is a hard fail. |
 | `icons/wix-banner.bmp`, `wix-dialog.bmp` | MSI |
 | `icons/nsis-header.bmp`, `nsis-sidebar.bmp` | NSIS |
 

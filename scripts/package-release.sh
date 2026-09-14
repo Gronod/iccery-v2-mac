@@ -103,19 +103,51 @@ EOF
     scripts/verify-sidecar-signatures.sh "$APP"
 fi
 
-echo "==> Installing / locating dmgbuild"
-if ! command -v dmgbuild >/dev/null 2>&1; then
-    VENV="$ROOT/build/.venv-dmgbuild"
-    if [ ! -d "$VENV/bin" ]; then
-        python3 -m venv "$VENV"
-        "$VENV/bin/pip" install --upgrade pip
-        "$VENV/bin/pip" install dmgbuild
-    fi
-    PATH="$VENV/bin:$PATH"
-    export PATH
+echo "==> Installing / locating dmgbuild >= 1.6.7"
+# 1.6.5 writes a classic Alias Manager blob that Sonoma Finder does
+# not resolve after UDZO (#95). Always upgrade — a leftover venv on
+# the runner may still hold 1.6.5.
+VENV="$ROOT/build/.venv-dmgbuild"
+if [ ! -d "$VENV/bin" ]; then
+    python3 -m venv "$VENV"
 fi
+"$VENV/bin/pip" install --upgrade pip
+"$VENV/bin/pip" install --upgrade 'dmgbuild>=1.6.7'
+PATH="$VENV/bin:$PATH"
+export PATH
 if ! command -v dmgbuild >/dev/null 2>&1; then
-    echo "error: dmgbuild not available. Try 'python3 -m venv .venv && pip install dmgbuild'" >&2
+    echo "error: dmgbuild not available after venv install" >&2
+    exit 1
+fi
+DMGBUILD_VER="$("$VENV/bin/python" -c 'from importlib.metadata import version; print(version("dmgbuild"))')"
+echo "dmgbuild $DMGBUILD_VER"
+"$VENV/bin/python" -c '
+from importlib.metadata import version
+parts = []
+for p in version("dmgbuild").split("."):
+    try:
+        parts.append(int(p))
+    except ValueError:
+        parts.append(0)
+parts += [0, 0, 0]
+raise SystemExit(0 if tuple(parts[:3]) >= (1, 6, 7) else 1)
+' || {
+    echo "error: dmgbuild $DMGBUILD_VER is older than 1.6.7" >&2
+    exit 1
+}
+
+PNG1X="$ROOT/Resources/dmg-background.png"
+PNG2X="$ROOT/Resources/dmg-background@2x.png"
+if [ ! -f "$PNG1X" ] || [ ! -f "$PNG2X" ]; then
+    echo "error: missing $PNG1X or $PNG2X" >&2
+    exit 1
+fi
+mkdir -p "$ROOT/build"
+DMG_BACKGROUND="$ROOT/build/dmg-background.tiff"
+echo "==> Building HiDPI DMG background TIFF"
+tiffutil -cathidpicheck "$PNG1X" "$PNG2X" -out "$DMG_BACKGROUND"
+if [ ! -f "$DMG_BACKGROUND" ]; then
+    echo "error: tiffutil did not write $DMG_BACKGROUND" >&2
     exit 1
 fi
 
@@ -128,6 +160,7 @@ VOLUME_NAME="ICCery ${VERSION}"
 DMG_APP="$APP" \
 DMG_FILENAME="$DMG" \
 DMG_VOLUME_NAME="$VOLUME_NAME" \
+DMG_BACKGROUND="$DMG_BACKGROUND" \
 dmgbuild -s scripts/dmgbuild-settings.py "$VOLUME_NAME" "$DMG"
 
 echo "DMG: $PWD/$DMG"

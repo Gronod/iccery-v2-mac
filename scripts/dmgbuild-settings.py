@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 # scripts/dmgbuild-settings.py
 #
-# dmgbuild settings for ICCery. Set DMG_APP, DMG_FILENAME and DMG_VOLUME_NAME
-# in the environment, or accept the defaults. Background art can be supplied
-# later by placing a PNG at Resources/dmg-background.png and setting
-# DMG_BACKGROUND.
+# dmgbuild settings for ICCery. scripts/package-release.sh exports
+# DMG_APP, DMG_FILENAME, DMG_VOLUME_NAME, and DMG_BACKGROUND (a
+# HiDPI TIFF). A missing background is a hard error — a grey
+# Finder window is not an acceptable release artefact (#95).
 
 import os
 import sys
@@ -23,15 +23,21 @@ if not app_path or not app_path.endswith('.app') or not os.path.isdir(app_path):
 
 files = [app_path]
 
-# Background art is optional. If the referenced PNG does not exist, fall back
-# to a plain window. See docs/23-assets.md for the DMG background spec.
-background = os.environ.get('DMG_BACKGROUND', 'Resources/dmg-background.png')
-if background and not os.path.exists(background):
-    background = None
+# Finder on Sonoma+ ignores the legacy Alias Manager blob that
+# dmgbuild 1.6.5 wrote for a PNG. Pass a flattened HiDPI TIFF and
+# require dmgbuild >= 1.6.7 (bookmark-based background). See #95.
+background = os.environ.get('DMG_BACKGROUND', '')
+if not background or not os.path.isfile(background):
+    sys.stderr.write(
+        'error: DMG_BACKGROUND must point at an existing image '
+        '(got %r)\n' % background)
+    sys.exit(1)
 
 icon = None
 
 # Window size is enough for the app icon and the Applications alias.
+# Bitmap is slightly larger than this rect so title-bar chrome on
+# 14+ does not crop the wordmark.
 window_rect = ((100, 100), (660, 400))
 
 # Use icon view without extra chrome.
