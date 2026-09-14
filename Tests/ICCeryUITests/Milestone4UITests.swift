@@ -154,20 +154,47 @@ final class Milestone4UITests: XCTestCase {
 
     /// Runs the mock handheld chartread session to completion
     /// (start → calibrate → strip A → strip B → Done & Save).
+    ///
+    /// `isEnabled` can be true in AX while the SwiftUI action is still
+    /// a no-op (runs 35251, 35443). Re-click until the session is
+    /// actually running (`btnCancel` is shown whenever
+    /// `isChartreadRunning`), then wait for Calibrate.
     private func driveOnePass(startButton: String) {
         let start = app.buttons[startButton]
-        XCTAssertTrue(start.waitForExistence(timeout: 10))
-        let deadline = Date().addingTimeInterval(10)
-        while Date() < deadline, !start.isEnabled {
+        XCTAssertTrue(start.waitForExistence(timeout: 10), startButton)
+        let enabledBy = Date().addingTimeInterval(10)
+        while Date() < enabledBy, !start.isEnabled {
             RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         }
-        XCTAssertTrue(start.isEnabled)
-        start.click()
+        XCTAssertTrue(start.isEnabled, "\(startButton) never enabled")
+
+        let sessionBy = Date().addingTimeInterval(25)
+        while Date() < sessionBy, !chartreadSessionRunning {
+            if start.exists, start.isEnabled {
+                start.click()
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+        }
+        XCTAssertTrue(
+            chartreadSessionRunning,
+            "\(startButton) click never started chartread; "
+                + "notice=\(element("noticeText").value as? String ?? "") "
+                + "start.exists=\(start.exists)"
+        )
+
         _ = waitFor("btnCalibrate", timeout: 25)
         app.buttons["btnCalibrate"].click()
         driveStripsUntilDone()
         XCTAssertTrue(element("btnDoneRead").exists)
         app.buttons["btnDoneRead"].firstMatch.click()
+    }
+
+    /// `btnCancel` is in the tree for the whole chartread session;
+    /// Calibrate/Trigger only appear after the first classified prompt.
+    private var chartreadSessionRunning: Bool {
+        element("btnCancel").exists
+            || element("btnCalibrate").exists
+            || element("btnTrigger").exists
     }
 
     /// Clicks Trigger for each remaining strip until `btnDoneRead`
