@@ -56,10 +56,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// docs/21 §Shell: 1280×800 content, min 1100×700, centred.
+    /// GitHub-hosted Macs (and any display smaller than 1280×800) must
+    /// not get a window that hangs off-screen — XCTest then reports
+    /// sidebar controls at negative x as not hittable (run 34864198118).
     private func configureMainWindow(_ window: NSWindow) {
-        window.setContentSize(NSSize(width: 1280, height: 800))
-        window.contentMinSize = NSSize(width: 1100, height: 700)
+        let desired = NSSize(width: 1280, height: 800)
+        let minimum = NSSize(width: 1100, height: 700)
+        let visible = (window.screen ?? NSScreen.main)?.visibleFrame
+            ?? NSRect(origin: .zero, size: desired)
+
+        window.contentMinSize = NSSize(
+            width: min(minimum.width, visible.width),
+            height: min(minimum.height, visible.height)
+        )
+        window.setContentSize(NSSize(
+            width: min(desired.width, visible.width),
+            height: min(desired.height, max(minimum.height, visible.height - 40))
+        ))
         window.center()
+
+        var frame = window.frame
+        if frame.width > visible.width {
+            frame.size.width = visible.width
+        }
+        if frame.height > visible.height {
+            frame.size.height = visible.height
+        }
+        frame.origin.x = min(
+            max(frame.origin.x, visible.minX),
+            visible.maxX - frame.width
+        )
+        frame.origin.y = min(
+            max(frame.origin.y, visible.minY),
+            visible.maxY - frame.height
+        )
+        window.setFrame(frame, display: true)
     }
 
     /// Dock-click reopen: let the WindowGroup re-show or recreate the
