@@ -12,6 +12,7 @@
 # Requires-Python >= 3.10. The wheels are py3-none-any and run on the
 # runner's 3.9; PIP_IGNORE_REQUIRES_PYTHON is required or pip will only
 # offer 1.6.5 and keep a cached venv on that version (#95).
+# pip itself is capped at <26.1: 26.1+ needs Python 3.10.
 #
 # Safe to run repeatedly: existing tools are left alone unless the
 # dmgbuild pin is not met.
@@ -34,14 +35,22 @@ done
 if [ "$INSTALL_DMGBUILD" = "1" ]; then
     echo "==> Ensuring dmgbuild==$DMGBUILD_PIN in $VENV"
     mkdir -p "$ROOT/build"
+    # pip 26.1+ requires Python 3.10 (dataclass slots). A leftover
+    # `pip install --upgrade pip` on this 3.9 venv installed 26.2.1 and
+    # the next pip invocation crashed. Recreate if pip is already dead.
+    if [ -x "$VENV/bin/python" ] \
+        && ! "$VENV/bin/python" -m pip --version >/dev/null 2>&1; then
+        echo "==> venv pip is broken; recreating $VENV"
+        rm -rf "$VENV"
+    fi
     if [ ! -x "$VENV/bin/python" ]; then
         python3 -m venv "$VENV"
     fi
     # Without this, pip on Python 3.9 hides 1.6.6+ and leaves 1.6.5.
     PIP_IGNORE_REQUIRES_PYTHON=1
     export PIP_IGNORE_REQUIRES_PYTHON
-    "$VENV/bin/pip" install --upgrade pip
-    "$VENV/bin/pip" install --upgrade --force-reinstall \
+    "$VENV/bin/python" -m pip install --upgrade 'pip>=24.3,<26.1'
+    "$VENV/bin/python" -m pip install --upgrade --force-reinstall \
         "dmgbuild==$DMGBUILD_PIN" \
         'ds_store>=1.3.3' \
         'mac_alias>=2.2.3'
