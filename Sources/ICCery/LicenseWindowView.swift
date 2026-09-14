@@ -50,7 +50,25 @@ See: https://git.i3omb.com/gronod/argyllcms/releases
     }
 
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            // Title bar
+            HStack {
+                Text("Licenses & Attribution")
+                    .font(.headline)
+                    .foregroundStyle(Theme.text)
+                Spacer()
+                Button("Close") {
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+                .accessibilityIdentifier("closeLicenseBtn")
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
+            .background(Theme.panel.opacity(0.9))
+
+            Divider()
+
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     // Section 1: ICCery License
@@ -105,16 +123,6 @@ See: https://git.i3omb.com/gronod/argyllcms/releases
             }
             .frame(minWidth: 600, minHeight: 500)
             .background(Theme.panel)
-            .navigationTitle("Licenses & Attribution")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") {
-                        dismiss()
-                    }
-                    .keyboardShortcut(.cancelAction)
-                    .accessibilityIdentifier("closeLicenseBtn")
-                }
-            }
         }
         .accessibilityIdentifier("licenseWindow")
     }
