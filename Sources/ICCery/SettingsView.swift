@@ -69,28 +69,18 @@ struct SettingsView: View {
                 }
 
                 Section("Verification") {
-                    HStack {
-                        Text("Good ΔE ≤")
-                        TextField(
-                            "2.0",
-                            value: $model.settings.deltaEGoodMax,
-                            format: .number
-                        )
-                        .frame(width: 60)
-                    }
-                    .accessibilityElement(children: .contain)
+                    TextField(
+                        "Good ΔE ≤",
+                        value: $model.settings.deltaEGoodMax,
+                        format: .number
+                    )
                     .accessibilityIdentifier("settingsDeltaEGood")
 
-                    HStack {
-                        Text("Warning ΔE ≤")
-                        TextField(
-                            "5.0",
-                            value: $model.settings.deltaEWarningMax,
-                            format: .number
-                        )
-                        .frame(width: 60)
-                    }
-                    .accessibilityElement(children: .contain)
+                    TextField(
+                        "Warning ΔE ≤",
+                        value: $model.settings.deltaEWarningMax,
+                        format: .number
+                    )
                     .accessibilityIdentifier("settingsDeltaEWarning")
 
                     Text("Swatch and verify status use these as the green / amber cutoffs. Fail is anything above Warning.")
@@ -105,16 +95,12 @@ struct SettingsView: View {
                 }
 
                 Section("Calibration") {
-                    HStack {
-                        Text("Stale after")
-                        TextField(
-                            "30",
-                            value: $model.settings.calibrationStaleDays,
-                            format: .number
-                        )
-                        .frame(width: 60)
-                        Text("days")
-                    }
+                    TextField(
+                        "Stale after (days)",
+                        value: $model.settings.calibrationStaleDays,
+                        format: .number
+                    )
+                    .accessibilityIdentifier("settingsCalStaleDays")
                 }
 
                 Section("Profile install") {
