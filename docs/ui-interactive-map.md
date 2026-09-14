@@ -1,606 +1,473 @@
 # Interactive UI map
 
-GraphViz diagrams for Gitea Kroki 0.30.1 (PlantUML's Graal image needs AVX2; this host has none).
+Accessibility **ids**, source files, and enable / hide / disable rules for ICCery v2 (`develop`).
 
-Colours are set **inside the SVG** (dark fill, light type, opaque background) so Gitea dark mode does not turn nodes into black boxes on a transparent canvas.
+Gitea Kroki 0.30.1 cannot run PlantUML on this host (Graal native image needs AVX2). Overview graphs below are small GraphViz `dot` diagrams with an **opaque white canvas and black type** so they stay readable in dark mode. Detail is in the tables — those are the useful map.
 
-Node labels are accessibility identifiers, source files, and enable / hide / disable rules.
+---
 
 ## Shell
 
-Window, sidebar, stepper, File menu. Source: [`ui-interactive-map-shell.dot`](ui-interactive-map-shell.dot)
-
 ```graphviz
 digraph ICCeryUIShell {
-  graph [label="ICCery UI — shell, sidebar, stepper, File menu\nids are accessibility identifiers. Gating: WizardGating.swift",
-    labelloc=t,
-    fontname="Helvetica",
-    fontsize=16,
-    fontcolor="#e6edf3",
-    bgcolor="#0d1117",
-    pad="0.4",
-    nodesep=0.35,
-    ranksep=0.55]
-  node [shape=box, style="filled,rounded", fontname="Helvetica", fontsize=12,
-        fontcolor="#e6edf3", fillcolor="#21262d", color="#8b949e",
-        penwidth=1.2, margin="0.22,0.14"]
-  edge [fontname="Helvetica", fontsize=10, color="#8b949e", fontcolor="#8b949e"]
-
-  win [label="WindowGroup ICCery\nICCeryApp.swift\n1280x800, min 1100x700"]
-  root [label="RootView.swift\nsheets and alerts live here"]
-  win -> root
-
-  subgraph cluster_chrome {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="Persistent chrome"
-    side [label="SidebarView.swift\n270 pt"]
-    ban [label="noticeText  NoticeBanner.swift\nshown: wizard.notice != nil\nauto-hide 6s; close has no id"]
-    stage [label="WizardStageContent\nswitch wizard.stage"]
-  }
-  root -> side
-  root -> ban
-  root -> stage
-
-  subgraph cluster_header {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="Header"
-    sSet [label="openSettingsBtn  Button\nalways on → Settings sheet"]
-    sAbt [label="openAboutBtn  Button\nalways on → About"]
-    sHlp [label="btnToggleAllHelp  Button\ntoggles showingAllHelp overlays"]
-  }
-  side -> sSet
-  side -> sAbt
-  side -> sHlp
-
-  subgraph cluster_preset {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="Presets (#11)"
-    pre [label="presetSelect  Picker.menu\nnone + ProfilingPreset.id\napply on change; none is not factory reset"]
-    preS [label="btnSavePresetModal  Button\nalways on"]
-    preM [label="btnOpenPresetsDialog  Button\nalways on"]
-  }
-  side -> pre
-  side -> preS
-  side -> preM
-
-  subgraph cluster_media {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="Media library (#146)"
-    med [label="mediaSelect  Picker.menu\nnone + MediaRecipe.id\nnever reuses presetSelect"]
-    medSt [label="mediaRecipeStale  Caption\nshown: staleReasons nonempty"]
-    medC [label="btnMediaLibraryCapture  Button\ndisabled: selectedPrinter empty"]
-    medM [label="btnMediaLibraryManage  Button\nalways on"]
-  }
-  side -> med
-  side -> medSt
-  side -> medC
-  side -> medM
-
-  subgraph cluster_studio {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="Studio (not stepper)"
-    calB [label="btnCalibratePrinter  Button\nalways on; Stage 0"]
-    gamB [label="btnViewGamut  Button\nSAME id as Stage 5\nalways on; no .gam = sRGB only"]
-    spotB [label="btnSpotRead  Button\ndisabled: no cwd OR chartread running"]
-  }
-  side -> calB
-  side -> gamB
-  side -> spotB
-
-  subgraph cluster_step {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="Stepper 1-5 (disk is truth)"
-    step [label="StepperRow  Button.plain\ndisabled/opacity 0.45 unless isUnlocked\nbackward always; calibrate is not a row"]
-    nGate [shape=note, style=filled, fillcolor="#3d2f00", fontcolor="#f0e6c8", color="#d4a72c", label="WizardGating.swift\n1 always\n2 .ti1\n3 .ti1 AND .ti2\n4 .ti3 (not .ti2 alone)\n5 .ti3 AND .icc/.icm\nre-probe on window key (#151)"]
-  }
-  side -> step
-  step -> nGate [style=dashed]
-
-  subgraph cluster_chip {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="projectChip  ProjectUI.swift (#149)"
-    cn [label="projectChipName\nbound name or No project"]
-    cp [label="projectChipPath\nshown if bound"]
-    cs [label="projectChipStale\nshown: diskBehindNotes"]
-    cr [label="btnProjectReveal\nshown if bound"]
-    csv [label="btnProjectSave\nshown if bound\ndisabled: !canSave\ncanSave: bound + basename + cwd\nCAL_ still enabled (refusal banner)"]
-    co [label="btnProjectOpen\nshown if NOT bound"]
-  }
-  side -> cn
-  side -> cp
-  side -> cs
-  side -> cr
-  side -> csv
-  side -> co
-
-  subgraph cluster_menu {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="File menu  ProjectCommands / ICCeryApp.swift"
-    mN [label="menuProjectNew  Cmd-N"]
-    mO [label="menuProjectOpen  Cmd-O"]
-    mR [label="menuProjectRecents  Menu\ndisabled: recents empty\nprojectRecent-{hash}\nmenuProjectRecentsClear"]
-    mS [label="menuProjectSave  Cmd-S\ndisabled: !canSave"]
-    mSa [label="menuProjectSaveAs  Shift-Cmd-S\ndisabled: !canSaveAs\ncanSaveAs: basename + cwd"]
-    mRp [label="menuProjectReport\ndisabled: !canReport"]
-    mCl [label="menuProjectClose\ndisabled: !isBound"]
-  }
-
-  st1 [label="stage-1  Stage1View.swift"]
-  st2 [label="stage-2  Stage2View.swift"]
-  st3 [label="stage-3  Stage3View.swift"]
-  st4 [label="stage-4  Stage4View.swift"]
-  st5 [label="stage-5  Stage5View.swift"]
-  st0 [label="stage-cal  CalibrationView.swift"]
-  stage -> st1
-  stage -> st2
-  stage -> st3
-  stage -> st4
-  stage -> st5
-  stage -> st0
+  bgcolor=white
+  fontcolor=black
+  pad=0.4
+  rankdir=TB
+  nodesep=0.4
+  ranksep=0.5
+  node [shape=box, style=filled, fillcolor=white, color=black, fontcolor=black, fontsize=14]
+  edge [color=black]
+  Window [label="WindowGroup  ICCeryApp.swift"]
+  Root [label="RootView.swift  sheets and alerts"]
+  Sidebar [label="SidebarView.swift  270pt"]
+  Banner [label="noticeText  NoticeBanner"]
+  Stage [label="WizardStageContent"]
+  Window -> Root
+  Root -> Sidebar
+  Root -> Banner
+  Root -> Stage
+  Sidebar -> Presets
+  Sidebar -> Media
+  Sidebar -> Studio
+  Sidebar -> Stepper
+  Sidebar -> ProjectChip
+  Stage -> S1 [label="stage-1"]
+  Stage -> S2 [label="stage-2"]
+  Stage -> S3 [label="stage-3"]
+  Stage -> S4 [label="stage-4"]
+  Stage -> S5 [label="stage-5"]
+  Stage -> Cal [label="stage-cal"]
 }
 ```
+
+Window is `ICCeryApp.swift` (1280×800, min 1100×700). Almost every sheet is presented from `RootView.swift`, not the 270 pt sidebar.
+
+`noticeText` (`NoticeBanner.swift`): shown when `wizard.notice != nil`. Auto-hides after 6s unless `autoHideAfter` is nil. Close (xmark) has no accessibility id. Behind a modal sheet it is not in the AX tree — Manage Media uses `manageMediaNotice` instead (#170).
+
+### Sidebar header — `SidebarView.swift`
+
+| Id | Type | Shown | Disabled when |
+| --- | --- | --- | --- |
+| `openSettingsBtn` | Button (gear) | always | never |
+| `openAboutBtn` | Button (info) | always | never |
+| `btnToggleAllHelp` | Button | always | never — toggles yellow help dots |
+
+### Presets — `SidebarView.swift` / `PresetDialogs.swift`
+
+| Id | Type | Shown | Disabled when |
+| --- | --- | --- | --- |
+| `presetSelect` | Picker.menu | always | never. `none` does **not** factory-reset |
+| `btnSavePresetModal` | Button | always | never |
+| `btnOpenPresetsDialog` | Button | always | never |
+
+### Media library — `SidebarView.swift` / `MediaLibraryDialogs.swift`
+
+| Id | Type | Shown | Disabled when |
+| --- | --- | --- | --- |
+| `mediaSelect` | Picker.menu | always | never. Failed Apply snaps back to `none` |
+| `mediaRecipeStale` | Caption | `staleReasons[selected]` nonempty | — |
+| `btnMediaLibraryCapture` | Button | always | `print.selectedPrinter` empty (needs Stage 2 queue) |
+| `btnMediaLibraryManage` | Button | always | never |
+
+### Studio (not the stepper)
+
+| Id | Type | Shown | Disabled when |
+| --- | --- | --- | --- |
+| `btnCalibratePrinter` | Button | always | never. Enters Stage 0 (`stage-cal`) |
+| `btnViewGamut` | Button | always | **never on the sidebar**. Same id as Stage 5, where it **is** disabled if there is no `.gam` |
+| `btnSpotRead` | Button | always | no working folder **or** Stage 3 `chartread` is running |
+
+### Stepper 1–5 — `SidebarView.swift` / `WizardGating.swift`
+
+Each row is a `Button.plain`. Calibrate is **not** a stepper row.
+
+| Stage | Unlocked when |
+| --- | --- |
+| 1 Generate (`stage-1`) | always |
+| 2 Lay out (`stage-2`) | `.ti1` exists |
+| 3 Measure (`stage-3`) | `.ti1` **and** `.ti2` |
+| 4 Build (`stage-4`) | `.ti3` (a `.ti2` alone is not enough) |
+| 5 Verify (`stage-5`) | `.ti3` **and** `.icc`/`.icm` |
+
+Disabled / opacity 0.45 unless `isUnlocked`. Backward is always allowed. Re-probed when the window becomes key (#151).
+
+### Project chip — `ProjectUI.swift`
+
+| Id | Type | Shown | Disabled when |
+| --- | --- | --- | --- |
+| `projectChip` | container | always | — |
+| `projectChipName` | Text | always (`No project` if unbound) | — |
+| `projectChipPath` | Text | bound | — |
+| `projectChipStale` | Caption | `diskBehindNotes` | — |
+| `btnProjectReveal` | Button | bound | never |
+| `btnProjectSave` | Button | bound | `!canSave` (needs bind + basename + cwd). `CAL_` basename stays enabled so the refusal banner can fire |
+| `btnProjectOpen` | Button | **not** bound | never |
+
+### File menu — `ProjectCommands` in `ICCeryApp.swift`
+
+Menu ids are `menuProject*`, not `btnProject*`.
+
+| Id | Type | Disabled when |
+| --- | --- | --- |
+| `menuProjectNew` | Button Cmd-N | never |
+| `menuProjectOpen` | Button Cmd-O | never |
+| `menuProjectRecents` | Menu | recents empty. Items: `projectRecent-{bookmarkHash}`, `menuProjectRecentsClear` |
+| `menuProjectSave` | Button Cmd-S | `!canSave` |
+| `menuProjectSaveAs` | Button Shift-Cmd-S | `!canSaveAs` (basename + cwd; bind not required) |
+| `menuProjectReport` | Button | `!canReport` |
+| `menuProjectClose` | Button | `!isBound` |
+
+---
 
 ## Stages 1–2
 
-Generate Target, Lay Out and Print. Source: [`ui-interactive-map-stage1-2.dot`](ui-interactive-map-stage1-2.dot)
-
 ```graphviz
 digraph ICCeryUIStage12 {
-  graph [label="ICCery UI — Stage 1 Generate Target / Stage 2 Lay Out and Print",
-    labelloc=t,
-    fontname="Helvetica",
-    fontsize=16,
-    fontcolor="#e6edf3",
-    bgcolor="#0d1117",
-    pad="0.4",
-    nodesep=0.35,
-    ranksep=0.55]
-  node [shape=box, style="filled,rounded", fontname="Helvetica", fontsize=12,
-        fontcolor="#e6edf3", fillcolor="#21262d", color="#8b949e",
-        penwidth=1.2, margin="0.22,0.14"]
-  edge [fontname="Helvetica", fontsize=10, color="#8b949e", fontcolor="#8b949e"]
-
-  subgraph cluster_s1 {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="stage-1  Stage1View.swift"
-    csp [label="colourSpace  Picker.segmented\nRGB | CMYK"]
-    pcp [label="patchCountPreset  Picker"]
-    pcc [label="patchCountCustom  TextField.number\nshown: patchPreset == custom"]
-    wp [label="whitePatches  Stepper  0..50"]
-    bp [label="blackPatches  Stepper  0..50"]
-    tb [label="targetBasename  TextField"]
-    bb [label="btnBrowse  Button"]
-    wd [label="btnSelectWorkDir  Button"]
-    oe [label="btnOpenExisting  Button\n.ti1 or .ti2 (+ matching .ti1)"]
-    imp [label="btn-import-dataset  Button\n.ti3 / txt / cgats / csv\nunlocks stage 4"]
-    spd [label="selectedPathDisplay  Text"]
-    adv [label="targenAdvancedDetails  DisclosureGroup\nUI tests pre-expand"]
-    gen [label="btnGenerate  Button\ndisabled: !canGenerate OR targenRunning\ncanGenerate: valid basename AND directory"]
-    tlog [label="targenLogContainer / targenLog\nProcessLogView.swift"]
-  }
-
-  subgraph cluster_adv {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="Advanced (hidden until disclosure open)"
-    ag [label="targenGreySteps  Toggle+TextField\nfield iff toggle on"]
-    as1 [label="targenSingleChannelSteps  Toggle+TextField"]
-    an [label="targenNeutralSteps  Toggle+TextField"]
-    anc [label="targenNeutralConcentration  Toggle+Slider 0..1"]
-    aa [label="targenAdaptation  Toggle+Slider 0..1"]
-    ap [label="targenPrecondProfile  TextField"]
-    apb [label="btnBrowsePrecondProfile  Button"]
-    ahq [label="targenHighQuality  Toggle  OFPS -G"]
-    aal [label="targenAlgorithm  Picker"]
-    ail [label="targenInkLimitGroup  Toggle+TextField\nshown: colourSpace == cmyk"]
-    ad [label="targenDarkEmphasis  Toggle+Slider 0..3"]
-    adp [label="targenDevicePower  Toggle+Slider 0..3"]
-  }
-  adv -> ag [style=dashed]
-
-  subgraph cluster_s2 {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="stage-2  Stage2View.swift"
-    cmw [label="cmWarningBanner  always visible, not a control"]
-    ins [label="instrumentSelect  Picker\nPrintInstrument chart code, NOT USB port"]
-    pgs [label="pageSizeSelect  Picker"]
-    cps [label="customPageSizeRow\nshown: pageSize == custom\ncustomPageW / customPageH mm"]
-    bit [label="bitDepth  Picker  8-bit | 16-bit\n(no a11y id on picker)"]
-    dpi [label="tiffDpi  Stepper  72..600"]
-    lo [label="printtargLayoutOrder  Picker"]
-    seed [label="printtargCustomSeedGroup\nshown: layoutOrder == customSeed\nid printtargCustomSeed"]
-    tle [label="btnToggleLabelEdit  Button\nEdit label / Use automatic"]
-    mp [label="targetMetadataPrinter  TextField"]
-    mi [label="targetMetadataInkSet  TextField"]
-    md [label="targetMetadataDriverPaper  TextField"]
-    ma [label="targetMetadataActualPaper  TextField"]
-    lpv [label="targetLabelPreview  TextField or Text\nTextField iff labelIsCustom"]
-    lay [label="btnCreateLayout  Button\ndisabled: printtargRunning OR basename empty"]
-    plog [label="printtargLogContainer  DisclosureGroup"]
-    gal [label="tiffGallery  shown: printtargResult != nil\ngalleryInfo, galleryGrid\ngalleryPage-{index}\nbtnPrintPage-{index}\nPrint disabled: isPrinting OR no printer"]
-  }
-
-  subgraph cluster_print {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="rawPrintPanel"
-    ps [label="printerSelect  Picker  CUPS queues"]
-    psb [label="printerStatusBadge\nshown: selected printer in list"]
-    prf [label="btnRefreshPrinters  Button"]
-    ppr [label="btnPrinterProperties  Button\ndisabled: selectedPrinter empty"]
-    ptr [label="printerTraySelect  Picker\nshown: trays nonempty"]
-    pmt [label="printerMediaTypeSelect  Picker\nshown: mediaTypes nonempty"]
-    por [label="btnOrientPortrait  Button"]
-    lan [label="btnOrientLandscape  Button"]
-    pal [label="btnPrintAll  Button\ndisabled: isPrinting OR no result OR no printer"]
-    a3 [label="btnAdvanceToStage3  Button\ndisabled: no result OR !isUnlocked(measure)"]
-    pnt [label="printNotificationText\nshown: printNotice != nil"]
-  }
+  bgcolor=white
+  fontcolor=black
+  pad=0.4
+  rankdir=TB
+  nodesep=0.4
+  ranksep=0.5
+  node [shape=box, style=filled, fillcolor=white, color=black, fontcolor=black, fontsize=14]
+  edge [color=black]
+  S1 [label="stage-1  Stage1View.swift"]
+  S1 -> colourSpace
+  S1 -> Patches
+  S1 -> TargetFile
+  S1 -> Advanced
+  S1 -> btnGenerate
+  S1 -> targenLog
+  S2 [label="stage-2  Stage2View.swift"]
+  S2 -> Layout
+  S2 -> Label
+  S2 -> btnCreateLayout
+  S2 -> tiffGallery
+  S2 -> rawPrintPanel
 }
 ```
 
-## Stages 3–5 + Calibrate
+### Stage 1 — `Stage1View.swift` / `TargetWorkflowViewModel.swift`
 
-Measure, Build, Verify, Stage 0. Source: [`ui-interactive-map-stage3-5-cal.dot`](ui-interactive-map-stage3-5-cal.dot)
+| Id | Type | Shown | Disabled when |
+| --- | --- | --- | --- |
+| `colourSpace` | Picker.segmented | always | never. RGB \| CMYK |
+| `patchCountPreset` | Picker | always | never |
+| `patchCountCustom` | TextField.number | `patchPreset == .custom` | — |
+| `whitePatches` | Stepper 0…50 | always | never |
+| `blackPatches` | Stepper 0…50 | always | never |
+| `targetBasename` | TextField | always | never |
+| `btnBrowse` | Button | always | never |
+| `btnSelectWorkDir` | Button | always | never |
+| `btnOpenExisting` | Button | always | never. `.ti1` or `.ti2` (+ matching `.ti1`) |
+| `btn-import-dataset` | Button | always | never. `.ti3` / txt / cgats / csv; unlocks stage 4 |
+| `selectedPathDisplay` | Text | always | — |
+| `targenAdvancedDetails` | DisclosureGroup | always | UI tests pre-expand it |
+| `targenGreySteps` | Toggle + TextField | inside Advanced | field only if toggle on |
+| `targenSingleChannelSteps` | Toggle + TextField | inside Advanced | field only if toggle on |
+| `targenNeutralSteps` | Toggle + TextField | inside Advanced | field only if toggle on |
+| `targenNeutralConcentration` | Toggle + Slider 0…1 | inside Advanced | slider only if toggle on |
+| `targenAdaptation` | Toggle + Slider 0…1 | inside Advanced | slider only if toggle on |
+| `targenPrecondProfile` | TextField | inside Advanced | — |
+| `btnBrowsePrecondProfile` | Button | inside Advanced | — |
+| `targenHighQuality` | Toggle | inside Advanced | — |
+| `targenAlgorithm` | Picker | inside Advanced | — |
+| `targenInkLimitGroup` | Toggle + TextField | Advanced **and** colour space is CMYK | field only if toggle on |
+| `targenDarkEmphasis` | Toggle + Slider 0…3 | inside Advanced | slider only if toggle on |
+| `targenDevicePower` | Toggle + Slider 0…3 | inside Advanced | slider only if toggle on |
+| `btnGenerate` | Button | always | `!canGenerate` or `targenRunning`. `canGenerate` = valid basename **and** directory |
+| `targenLogContainer` / `targenLog` | DisclosureGroup | always | `ProcessLogView.swift` |
+
+Those four sliders are the **only** sliders in the app.
+
+### Stage 2 — `Stage2View.swift` / `PrintSessionViewModel.swift`
+
+| Id | Type | Shown | Disabled when |
+| --- | --- | --- | --- |
+| `cmWarningBanner` | Banner | always on stage 2 | not a control |
+| `instrumentSelect` | Picker | always | never. Chart **code**, not a USB port |
+| `pageSizeSelect` | Picker | always | never |
+| `customPageSizeRow` (`customPageW` / `customPageH`) | TextField.number | `pageSize == .custom` | — |
+| Bit depth picker | Picker | always | no a11y id |
+| `tiffDpi` | Stepper 72…600 | always | never |
+| `printtargLayoutOrder` | Picker | always | never |
+| `printtargCustomSeedGroup` / `printtargCustomSeed` | TextField | `layoutOrder == .customSeed` | — |
+| `btnToggleLabelEdit` | Button | always | never. Title swaps Edit / Use automatic |
+| `targetMetadataPrinter` | TextField | always | never |
+| `targetMetadataInkSet` | TextField | always | never |
+| `targetMetadataDriverPaper` | TextField | always | never |
+| `targetMetadataActualPaper` | TextField | always | never |
+| `targetLabelPreview` | TextField or Text | always | TextField only if `labelIsCustom` |
+| `btnCreateLayout` | Button | always | `printtargRunning` or basename empty |
+| `printtargLogContainer` | DisclosureGroup | always | — |
+| `tiffGallery` | Grid | `printtargResult != nil` | children: `galleryInfo`, `galleryGrid`, `galleryPage-{n}` |
+| `btnPrintPage-{n}` | Button | that gallery cell | `isPrinting` or no selected printer |
+
+#### `rawPrintPanel`
+
+| Id | Type | Shown | Disabled when |
+| --- | --- | --- | --- |
+| `printerSelect` | Picker | always | never |
+| `printerStatusBadge` | Caption | selected printer is in the list | — |
+| `btnRefreshPrinters` | Button | always | never |
+| `btnPrinterProperties` | Button | always | `selectedPrinter` empty |
+| `printerTraySelect` | Picker | trays nonempty | — |
+| `printerMediaTypeSelect` | Picker | media types nonempty | — |
+| `btnOrientPortrait` | Button | always | never |
+| `btnOrientLandscape` | Button | always | never |
+| `btnPrintAll` | Button | always | printing, or no layout, or no printer |
+| `btnAdvanceToStage3` | Button | always | no layout or `!isUnlocked(.measure)` |
+| `printNotificationText` | Caption | `printNotice != nil` | — |
+
+---
+
+## Stages 3–5 and Calibrate
 
 ```graphviz
-digraph ICCeryUIStage345Cal {
-  graph [label="ICCery UI — Stage 3 Measure / 4 Build / 5 Verify / Stage 0 Calibrate",
-    labelloc=t,
-    fontname="Helvetica",
-    fontsize=16,
-    fontcolor="#e6edf3",
-    bgcolor="#0d1117",
-    pad="0.4",
-    nodesep=0.35,
-    ranksep=0.55]
-  node [shape=box, style="filled,rounded", fontname="Helvetica", fontsize=12,
-        fontcolor="#e6edf3", fillcolor="#21262d", color="#8b949e",
-        penwidth=1.2, margin="0.22,0.14"]
-  edge [fontname="Helvetica", fontsize=10, color="#8b949e", fontcolor="#8b949e"]
-
-  subgraph cluster_s3 {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="stage-3  Stage3View.swift / MeasurementWorkflowViewModel"
-    d3 [label="btnDetectInstruments  Button\ndisabled: isDetecting"]
-    i3 [label="chartreadInstrumentSelect  Picker.menu\nAuto + instlist ports"]
-    xyh [label="xyTableHint  Caption\nshown: selected is XY"]
-    xyp [label="xyTablePanel  shown: isXY\nxyStepPlace Align Scan Remove"]
-    pr [label="chartreadPrompt  Text"]
-    err [label="chartreadLastError  Caption\nshown: chartreadNotice != nil"]
-    sr [label="btnStartRead  Button\nshown: !running\ndisabled: !canStartRead\ncanStart: basename AND cwd AND !running"]
-    cal3 [label="btnCalibrate  Button\nshown: running AND calibrating"]
-    trg [label="btnTrigger  Button\nshown: running AND awaitingStrip"]
-    de [label="btnDoneReadEarly  Button\nshown: awaitingStrip"]
-    acc [label="btnAccept  Button\nshown: place | align | continue | warning"]
-    rty [label="btnRetry  Button\nshown: state == error"]
-    dn [label="btnDoneRead  Button\nshown: allStripsRead"]
-    cnc [label="btnCancel  Button\nshown: isChartreadRunning"]
-    sw [label="swatchGrid  swatch-{rowId}{loc}"]
-    rst [label="readStats  Text"]
-    avg [label="chartreadAveragingPanel\nshown: passes nonempty OR isFinished"]
-    mas [label="btnMeasureAnotherSheet  Button\ndisabled: !isFinished OR running"]
-    fa [label="btnFinishAndAverage  Button\ndisabled: !canFinish OR isFinishing\ncanFinish: isFinished AND passes nonempty"]
-  }
-
-  subgraph cluster_s4 {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="stage-4  Stage4View.swift / ProfileWorkflowViewModel"
-    alg [label="colprofAlgorithm  Picker"]
-    q [label="colprofQuality  Picker"]
-    fwa [label="colprofFwa  Picker"]
-    fwap [label="colprofFwaCustomPath  TextField\nshown: custom spectrum"]
-    fwab [label="btnBrowseFwaSp  Button\nshown with custom path"]
-    ill [label="colprofIlluminant  TextField"]
-    obs [label="colprofObserver  TextField"]
-    ivc [label="colprofInputViewCond  TextField"]
-    ovc [label="colprofOutputViewCond  TextField"]
-    desc [label="colprofDescription  TextField"]
-    cpr [label="colprofCopyright  TextField"]
-    ac [label="colprofApplyCalibration  Toggle"]
-    cf [label="colprofCalibrationFile  TextField\nshown: applyCalibration"]
-    cfb [label="btnBrowseCalibrationFile  Button\nshown: applyCalibration"]
-    cp [label="btnCreateProfile  Button\ndisabled: !canCreateProfile\ncanCreate: basename AND cwd AND !colprofRunning"]
-    cpi [label="colprofProgressIndicator\nshown: isColprofRunning"]
-  }
-
-  subgraph cluster_s5 {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="stage-5  Stage5View.swift"
-    vf [label="btnVerifyProfile  Button\ndisabled: !canVerify\ncanVerify: createdProfileURL AND !profcheckRunning"]
-    ppi [label="profcheckProgressIndicator\nshown: isProfcheckRunning"]
-    vg5 [label="btnViewGamut  Button\nDUPLICATE id with sidebar\ndisabled: createdGamutURL == nil"]
-    inst [label="btnInstallProfile  Button\ndisabled: createdProfileURL == nil"]
-    df [label="driftPrinterFilter  Picker"]
-    eh [label="btnExportHistory  Button"]
-    ch [label="btnClearHistory  Button"]
-    ht [label="verificationHistoryTable"]
-    dc [label="driftChart  DriftChartView.swift\nnot interactive"]
-    dalt [label="driftAlert / profcheckWarningBanner\nshown on fail / warning"]
-  }
-
-  subgraph cluster_coll {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="Install collision alert"
-    io [label="profileOverwriteBtn"]
-    ir [label="profileRenameBtn"]
-    ic [label="profileCancelCollisionBtn\nshown: showingInstallCollision\nAND askBeforeOverwriteProfile"]
-  }
-
-  subgraph cluster_cal {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="stage-cal  CalibrationView.swift (Stage 0)"
-    ccs [label="Colour Space  Picker.segmented\nRGB | CMYK  (no a11y id)"]
-    cst [label="calSteps  TextField.number"]
-    cwp [label="White patches  TextField.number\n(no a11y id)"]
-    cin [label="calInkExplore  TextField\nshown: colourSpace == cmyk"]
-    cne [label="calNeutralEmphasis  Toggle.checkbox"]
-    cg [label="btnCalGenerate  Button\ndisabled: empty basename OR no cwd OR isGenerating"]
-    cl [label="btnCalLayout  Button\nsame disable as Generate"]
-    cm [label="btnCalMeasure  Button\ndisabled: calibrationTi3URL == nil"]
-    cc [label="btnCalCompute  Button\ndisabled: !canCompute\ncanCompute: .ti3 exists AND !isComputing"]
-    cat [label="calApplyToggle  Toggle\nshown: computedCalURL != nil"]
-    cr [label="btnCalReturn  Button  Esc\nrestores original basename"]
-  }
+digraph ICCeryUIStage345 {
+  bgcolor=white
+  fontcolor=black
+  pad=0.4
+  rankdir=TB
+  nodesep=0.4
+  ranksep=0.5
+  node [shape=box, style=filled, fillcolor=white, color=black, fontcolor=black, fontsize=14]
+  edge [color=black]
+  S3 [label="stage-3  Stage3View.swift"]
+  S3 -> Instrument
+  S3 -> Transport
+  S3 -> swatchGrid
+  S3 -> Averaging
+  S4 [label="stage-4  Stage4View.swift"]
+  S4 -> colprof
+  S4 -> btnCreateProfile
+  S5 [label="stage-5  Stage5View.swift"]
+  S5 -> btnVerifyProfile
+  S5 -> btnViewGamut
+  S5 -> btnInstallProfile
+  S5 -> History
+  Cal [label="stage-cal  CalibrationView.swift"]
+  Cal -> Wedge
+  Cal -> Workflow
+  Cal -> btnCalReturn
 }
 ```
+
+### Stage 3 — `Stage3View.swift` / `MeasurementWorkflowViewModel.swift`
+
+Transport buttons **replace each other** from `chartreadState`. Stage 3 ids must not be reused on Spot Read.
+
+| Id | Type | Shown | Disabled when |
+| --- | --- | --- | --- |
+| `btnDetectInstruments` | Button | always | `isDetecting` |
+| `chartreadInstrumentSelect` | Picker.menu | always | never |
+| `xyTableHint` | Caption | selected instrument is XY | — |
+| `xyTablePanel` | Place/Align/Scan/Remove | is XY | highlight = `xyStep` |
+| `chartreadPrompt` | Text | always | — |
+| `chartreadLastError` | Caption | `chartreadNotice != nil` | — |
+| `btnStartRead` | Button | **not** running | `!canStartRead` (needs basename, cwd, not running) |
+| `btnCalibrate` | Button | running **and** calibrating | — |
+| `btnTrigger` | Button | running **and** awaitingStrip | — |
+| `btnDoneReadEarly` | Button | awaitingStrip | — |
+| `btnAccept` | Button | place / align / continue / warning | title may be `Continue (send 'X')` |
+| `btnRetry` | Button | state == error | — |
+| `btnDoneRead` | Button | allStripsRead | — |
+| `btnCancel` | Button | `isChartreadRunning` | — |
+| `swatchGrid` | Scroll | always | cells `swatch-{rowId}{loc}` |
+| `readStats` | Text | always | — |
+| `chartreadAveragingPanel` | Panel | passes nonempty **or** `isFinished` | — |
+| `btnMeasureAnotherSheet` | Button | averaging panel | `!isFinished` or still running |
+| `btnFinishAndAverage` | Button | averaging panel | `!canFinish` or `isFinishing`. `canFinish` = finished **and** at least one pass |
+
+### Stage 4 — `Stage4View.swift` / `ProfileWorkflowViewModel.swift`
+
+| Id | Type | Shown | Disabled when |
+| --- | --- | --- | --- |
+| `colprofAlgorithm` | Picker | always | never |
+| `colprofQuality` | Picker | always | never |
+| `colprofFwa` | Picker | always | never |
+| `colprofFwaCustomPath` | TextField | custom spectrum selected | — |
+| `btnBrowseFwaSp` | Button | with custom path | — |
+| `colprofIlluminant` | TextField | always | never |
+| `colprofObserver` | TextField | always | never |
+| `colprofInputViewCond` | TextField | always | never |
+| `colprofOutputViewCond` | TextField | always | never |
+| `colprofDescription` | TextField | always | never |
+| `colprofCopyright` | TextField | always | never |
+| `colprofApplyCalibration` | Toggle | always | never |
+| `colprofCalibrationFile` | TextField | `applyCalibration` | — |
+| `btnBrowseCalibrationFile` | Button | `applyCalibration` | — |
+| `btnCreateProfile` | Button | always | `!canCreateProfile` (basename, cwd, not running) |
+| `colprofProgressIndicator` | Progress | `isColprofRunning` | — |
+
+### Stage 5 — `Stage5View.swift`
+
+| Id | Type | Shown | Disabled when |
+| --- | --- | --- | --- |
+| `btnVerifyProfile` | Button | always | `!canVerify` (no profile or profcheck running) |
+| `profcheckProgressIndicator` | Progress | `isProfcheckRunning` | — |
+| `btnViewGamut` | Button | always | `createdGamutURL == nil` — **same id as sidebar** |
+| `btnInstallProfile` | Button | always | `createdProfileURL == nil` |
+| `driftPrinterFilter` | Picker | always | never |
+| `btnExportHistory` | Button | always | never |
+| `btnClearHistory` | Button | always | never |
+| `verificationHistoryTable` | Table | always | — |
+| `driftChart` | View | always | not interactive (`DriftChartView.swift`) |
+| `driftAlert` / `profcheckWarningBanner` | Banner | fail / warning status | — |
+| `profileOverwriteBtn` | Alert button | install collision **and** ask-before-overwrite | — |
+| `profileRenameBtn` | Alert button | same | — |
+| `profileCancelCollisionBtn` | Alert button | same | — |
+
+### Stage 0 — `CalibrationView.swift` (`stage-cal`)
+
+| Id | Type | Shown | Disabled when |
+| --- | --- | --- | --- |
+| Colour space | Picker.segmented | always | no a11y id. RGB \| CMYK |
+| `calSteps` | TextField.number | always | never |
+| White patches | TextField.number | always | no a11y id |
+| `calInkExplore` | TextField | colour space is CMYK | — |
+| `calNeutralEmphasis` | Toggle.checkbox | always | never |
+| `btnCalGenerate` | Button | always | empty basename, no cwd, or `isGenerating` |
+| `btnCalLayout` | Button | always | same as Generate |
+| `btnCalMeasure` | Button | always | `calibrationTi3URL == nil` |
+| `btnCalCompute` | Button | always | `!canCompute` (no `.ti3` or computing) |
+| `calApplyToggle` | Toggle | `computedCalURL != nil` | — |
+| `btnCalReturn` | Button Esc | always | never. Restores the original basename |
+
+---
 
 ## Sheets
 
-Settings, Spot Read, Gamut, media, project alerts. Source: [`ui-interactive-map-sheets.dot`](ui-interactive-map-sheets.dot)
-
 ```graphviz
 digraph ICCeryUISheets {
-  graph [label="ICCery UI — sheets, Spot Read, Gamut, Settings, project alerts",
-    labelloc=t,
-    fontname="Helvetica",
-    fontsize=16,
-    fontcolor="#e6edf3",
-    bgcolor="#0d1117",
-    pad="0.4",
-    nodesep=0.35,
-    ranksep=0.55]
-  node [shape=box, style="filled,rounded", fontname="Helvetica", fontsize=12,
-        fontcolor="#e6edf3", fillcolor="#21262d", color="#8b949e",
-        penwidth=1.2, margin="0.22,0.14"]
-  edge [fontname="Helvetica", fontsize=10, color="#8b949e", fontcolor="#8b949e"]
-
-  subgraph cluster_set {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="SettingsView.swift  (openSettingsBtn)"
-    ad [label="Argyll dir  TextField+Browse\nempty => bundled sidecars"]
-    di [label="Default instrument  Picker\nNone + i1/p3/CM/SS/20/22/41/51\nseeds Stage 3 + Spot Read\ndoes NOT change instrumentSelect"]
-    led [label="Enable i1Pro 2 LEDs  Toggle"]
-    dg [label="settingsDeltaEGood  TextField"]
-    dw [label="settingsDeltaEWarning  TextField\nSave refuses unless Warning > Good"]
-    sd [label="settingsCalStaleDays  TextField"]
-    il [label="Install location  Picker\nUser | System library"]
-    ao [label="Ask before overwriting  Toggle"]
-    oc [label="Open ColorSync after install  Toggle"]
-    ll [label="Log level  Picker"]
-    lg [label="Open log folder / Copy path / Copy excerpt"]
-    ss [label="Cancel / Save\nSave stays if validation fails\nframe 560x620"]
-  }
-
-  subgraph cluster_about {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="AboutView.swift"
-    ab [label="aboutDialog\naboutVersion, aboutBuildDate\ncloseAboutBtn  Esc"]
-  }
-
-  subgraph cluster_sp {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="savePresetDialog  PresetDialogs.swift"
-    spn [label="savePresetName  TextField"]
-    spd [label="savePresetDesc  TextField"]
-    spc [label="btnCloseSavePresetDialog"]
-    sps [label="btnConfirmSavePreset\ndisabled: name trimmed empty"]
-  }
-
-  subgraph cluster_mp {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="managePresetsDialog"
-    prw [label="presetRow-{id}\nBuilt-in: no delete\nelse btnExportPreset-{id}\nbtnDeletePreset-{id}"]
-    pim [label="btnImportPreset"]
-    pea [label="btnExportActivePreset\nshown: selected custom preset"]
-    pcl [label="btnCloseManagePresetsDialog"]
-  }
-
-  subgraph cluster_sm {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="saveMediaRecipeDialog  MediaLibraryDialogs.swift"
-    smf [label="saveMediaName/Notes/Paper/Ink  TextField x4"]
-    smr [label="saveMediaPrinter/Preset/ColourSpace/Cal  read-only"]
-    smc [label="saveMediaApplyCal  Toggle\ndisabled: !calApplyable\ncalApplyable: path exists, not CAL_"]
-    smx [label="btnCloseSaveMediaDialog"]
-    sms [label="btnConfirmSaveMedia\ndisabled: name|paper|ink empty\nOR colour-space mismatch"]
-  }
-
-  subgraph cluster_mm {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="manageMediaDialog"
-    mll [label="mediaLibraryList\nmediaRow-{id}\nbtnMediaLibraryApply-{id}\nbtnMediaLibraryDelete-{id}\ndouble-click = Apply"]
-    mmn [label="manageMediaNotice  Caption\nshown: manageApplyNotice != nil\nin-sheet copy of failed Apply (#170)"]
-    mla [label="btnMediaLibraryApply\ndisabled: selection == nil"]
-    mlc [label="btnMediaLibraryCaptureFromManage\ndismiss then open capture"]
-    mlx [label="btnCloseManageMediaDialog"]
-    mld [label="Delete alert  Cancel / Delete"]
-  }
-
-  subgraph cluster_spot {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="spotReadView  SpotReadView.swift (#148)"
-    ssm [label="spotSidecarMissing\nshown: !sidecarAvailable\nhides instrument/transport"]
-    sdet [label="btnSpotDetectInstruments\ndisabled: detecting OR running"]
-    sis [label="spotInstrumentSelect  Picker\ndisabled: isRunning"]
-    sdm [label="spotDefaultMissing\nshown: defaultMissing"]
-    ssd [label="spotSetDefault  Toggle"]
-    sxy [label="spotXYHint  shown: selected is XY"]
-    sst [label="btnSpotStart\nshown: !isRunning\ndisabled: !canStart\ncanStart: sidecar, !detecting, !running,\n!chartreadRunning, cwd"]
-    sca [label="btnSpotCalibrate\nshown: running AND calibrating"]
-    str [label="btnSpotTrigger  Read\nshown: running AND awaitingStrip"]
-    ssp [label="btnSpotStop  shown: isRunning"]
-    sls [label="spotLastSample / Lab / XYZ / DeltaE\nspotLabImplausible if L not 0..100\nspotDeltaE hidden on first sample"]
-    sht [label="spotHistoryTable\nrows: spotHistoryRow-{uuid}\nclick restores sample, no trigger"]
-    scp [label="btnSpotCopyLab\ndisabled: displayedSample == nil"]
-    sex [label="btnSpotExportCsv\ndisabled: samples empty"]
-    scl [label="btnCloseSpotRead  Esc; onDismiss = Stop"]
-  }
-
-  subgraph cluster_gamut {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="gamutView  GamutView.swift (#147)"
-    gls [label="gamutLayer-srgb  Toggle\nsRGB always loaded; can hide"]
-    glp [label="gamutLayer-profile  Toggle\ndisabled: no session .gam"]
-    glc [label="gamutLayer-compare  Toggle\ndisabled: no compare layer"]
-    gac [label="btnGamutAddCompare  Menu\nbtnGamutOpenGam / btnGamutOpenProfile"]
-    grc [label="btnGamutRemoveCompare\ndisabled: compare layer nil"]
-    gst [label="btnGamutSampleTiff"]
-    gun [label="gamutViewerUnavailable\nshown: no Metal\ntoggles + inspect still enabled"]
-    grs [label="btnResetGamutCamera  R"]
-    gle [label="gamutLabEntryL/A/B  TextField x3"]
-    gin [label="btnGamutInspectLab\ndisabled: !canInspectLab"]
-    gip [label="gamutInspectPanel"]
-    gcl [label="btnCloseGamut  Esc"]
-    gtf [label="gamutTiffPreview sheet\nshowingTiffPreview\nbtnCloseGamutTiffPreview"]
-  }
-
-  subgraph cluster_proj {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="Project alerts  RootView + ProjectUI"
-    pna [label="projectNewAlert\nbtnProjectNewCancel / Confirm"]
-    pda [label="Dirty save alert\nbtnProjectDirtySave\nbtnProjectDirtyDiscard\nbtnProjectDirtyCancel"]
-    prs [label="projectRelocateSheet\nshown: cwd missing on Open\nbtnProjectRelocateCancel\nbtnProjectRelocate"]
-  }
-
-  mutex [shape=note, style=filled, fillcolor="#3d2f00", fontcolor="#f0e6c8", color="#d4a72c", label="Mutex\nSpot Read disabled while Stage 3 chartread runs\nOpening Spot Read never kills chartread_{basename}\nFailed media Apply keeps manage sheet open\nWindow noticeText is occluded — use manageMediaNotice"]
+  bgcolor=white
+  fontcolor=black
+  pad=0.4
+  rankdir=TB
+  nodesep=0.4
+  ranksep=0.5
+  node [shape=box, style=filled, fillcolor=white, color=black, fontcolor=black, fontsize=14]
+  edge [color=black]
+  Root [label="RootView.swift hosts every sheet"]
+  Root -> Settings
+  Root -> About
+  Root -> savePresetDialog
+  Root -> managePresetsDialog
+  Root -> saveMediaRecipeDialog
+  Root -> manageMediaDialog
+  Root -> spotReadView
+  Root -> gamutView
+  Root -> ProjectAlerts
 }
 ```
+
+### Settings — `SettingsView.swift` (560×620)
+
+| Control | Type | Notes |
+| --- | --- | --- |
+| Argyll dir + Browse | TextField | empty ⇒ bundled sidecars |
+| Default instrument | Picker | None + i1 / p3 / CM / SS / 20 / 22 / 41 / 51. Seeds Stage 3 and Spot Read. Does **not** change Stage 2 `instrumentSelect` |
+| Enable i1Pro 2 LEDs | Toggle | — |
+| `settingsDeltaEGood` | TextField | green cutoff |
+| `settingsDeltaEWarning` | TextField | amber cutoff. Save refuses unless Warning > Good |
+| `settingsCalStaleDays` | TextField | — |
+| Install location | Picker | User \| System library |
+| Ask before overwriting | Toggle | — |
+| Open ColorSync after install | Toggle | — |
+| Log level | Picker | — |
+| Open log folder / Copy path / Copy excerpt | Buttons | — |
+| Cancel / Save | Buttons | Save stays on the sheet if validation fails |
+
+### About — `AboutView.swift`
+
+`aboutDialog`, `aboutVersion`, `aboutBuildDate`, `closeAboutBtn` (Esc).
+
+### Save / manage presets — `PresetDialogs.swift`
+
+| Id | Type | Shown | Disabled when |
+| --- | --- | --- | --- |
+| `savePresetName` | TextField | save sheet | — |
+| `savePresetDesc` | TextField | save sheet | — |
+| `btnCloseSavePresetDialog` | Button | save sheet | — |
+| `btnConfirmSavePreset` | Button | save sheet | name trimmed empty |
+| `presetRow-{id}` | Row | manage list | Built-in: no delete. Else `btnExportPreset-{id}`, `btnDeletePreset-{id}` |
+| `btnImportPreset` | Button | manage | — |
+| `btnExportActivePreset` | Button | selected preset is custom | — |
+| `btnCloseManagePresetsDialog` | Button | manage | — |
+
+### Save / manage media — `MediaLibraryDialogs.swift`
+
+| Id | Type | Shown | Disabled when |
+| --- | --- | --- | --- |
+| `saveMediaName` / `Notes` / `Paper` / `Ink` | TextField | save sheet | — |
+| `saveMediaPrinter` / `Preset` / `ColourSpace` / `Cal` | read-only | save sheet | — |
+| `saveMediaApplyCal` | Toggle | save sheet | `!calApplyable` (path missing or `CAL_` stem) |
+| `btnCloseSaveMediaDialog` | Button | save sheet | — |
+| `btnConfirmSaveMedia` | Button | save sheet | name, paper or ink empty, **or** colour-space mismatch |
+| `mediaLibraryList` | List | manage | rows `mediaRow-{id}`; `btnMediaLibraryApply-{id}`; `btnMediaLibraryDelete-{id}`; double-click = Apply |
+| `manageMediaNotice` | Caption | `manageApplyNotice != nil` | in-sheet copy of a failed Apply (#170) |
+| `btnMediaLibraryApply` | Button | manage | `selection == nil` |
+| `btnMediaLibraryCaptureFromManage` | Button | manage | dismiss then open capture |
+| `btnCloseManageMediaDialog` | Button | manage | — |
+| Delete alert | Alert | pending delete | Cancel / Delete |
+
+Failed Apply **keeps** the manage sheet open. The window banner is occluded — use `manageMediaNotice`.
+
+### Spot Read — `SpotReadView.swift` (`spotReadView`)
+
+Enabled from the sidebar only with a working folder and no live Stage 3 `chartread`. Opening this sheet never kills `chartread_{basename}`. Close / dismiss = Stop.
+
+| Id | Type | Shown | Disabled when |
+| --- | --- | --- | --- |
+| `spotSidecarMissing` | Text | sidecar missing | hides instrument + transport |
+| `btnSpotDetectInstruments` | Button | sidecar present | detecting or running |
+| `spotInstrumentSelect` | Picker | sidecar present | `isRunning` |
+| `spotDefaultMissing` | Caption | saved default not plugged in | — |
+| `spotSetDefault` | Toggle | sidecar present | — |
+| `spotXYHint` | Caption | selected is XY | XY tables belong on Stage 3 |
+| `btnSpotStart` | Button | not running | `!canStart` (sidecar, cwd, not detecting/running/chartread) |
+| `btnSpotCalibrate` | Button | running and calibrating | — |
+| `btnSpotTrigger` | Button | running and awaitingStrip | labelled Read |
+| `btnSpotStop` | Button | `isRunning` | — |
+| `spotLastSample` / `spotLabL/A/B` / `spotXYZ` / `spotDeltaE` | Display | last sample exists | `spotDeltaE` hidden on the first sample. `spotLabImplausible` if L not in 0…100 |
+| `spotHistoryTable` | List | samples nonempty | rows `spotHistoryRow-{uuid}` — click restores, does not trigger |
+| `btnSpotCopyLab` | Button | always | no displayed sample |
+| `btnSpotExportCsv` | Button | always | history empty |
+| `btnCloseSpotRead` | Button Esc | always | never |
+
+### Gamut — `GamutView.swift` (`gamutView`)
+
+| Id | Type | Shown | Disabled when |
+| --- | --- | --- | --- |
+| `gamutLayer-srgb` | Toggle.checkbox | always | never. Can hide, cannot remove |
+| `gamutLayer-profile` | Toggle | always | no session `.gam` |
+| `gamutLayer-compare` | Toggle | always | no compare layer |
+| `btnGamutAddCompare` | Menu | always | `btnGamutOpenGam` / `btnGamutOpenProfile` |
+| `btnGamutRemoveCompare` | Button | always | no compare layer |
+| `btnGamutSampleTiff` | Button | always | never |
+| `gamutViewerUnavailable` | Caption | no Metal | toggles + inspect still work |
+| `btnResetGamutCamera` | Button | always | R when focused |
+| `gamutLabEntryL/A/B` | TextField | always | — |
+| `btnGamutInspectLab` | Button | always | `!canInspectLab` |
+| `gamutInspectPanel` | Panel | inspect result | — |
+| `btnCloseGamut` | Button Esc | always | never |
+| `gamutTiffPreview` | Sheet | `showingTiffPreview` | `btnCloseGamutTiffPreview` |
+
+### Project alerts — `RootView.swift` / `ProjectUI.swift`
+
+| Id | Type | Shown |
+| --- | --- | --- |
+| `projectNewAlert` | Alert | New Project. `btnProjectNewCancel` / `btnProjectNewConfirm` |
+| Dirty save | Alert | New/Open/Close while dirty. `btnProjectDirtySave` / `btnProjectDirtyDiscard` / `btnProjectDirtyCancel` |
+| `projectRelocateSheet` | Sheet | Open when `cwd` is missing. `btnProjectRelocateCancel` / `btnProjectRelocate` |
+
+---
+
+## Mutexes
+
+- Spot Read is disabled while Stage 3 `chartread` is running.
+- Opening Spot Read does not kill `chartread_{basename}`.
+- Calibrate uses a temporary `CAL_` basename; Save Project stays enabled so the refusal banner can fire.
+- Failed media Apply keeps `manageMediaDialog` open.
+- Duplicate id: `btnViewGamut` (sidebar always on; Stage 5 off without a `.gam`).

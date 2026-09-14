@@ -1,167 +1,33 @@
 digraph ICCeryUIShell {
-  graph [label="ICCery UI — shell, sidebar, stepper, File menu\nids are accessibility identifiers. Gating: WizardGating.swift",
-    labelloc=t,
-    fontname="Helvetica",
-    fontsize=16,
-    fontcolor="#e6edf3",
-    bgcolor="#0d1117",
-    pad="0.4",
-    nodesep=0.35,
-    ranksep=0.55]
-  node [shape=box, style="filled,rounded", fontname="Helvetica", fontsize=12,
-        fontcolor="#e6edf3", fillcolor="#21262d", color="#8b949e",
-        penwidth=1.2, margin="0.22,0.14"]
-  edge [fontname="Helvetica", fontsize=10, color="#8b949e", fontcolor="#8b949e"]
+  bgcolor=white
+  fontcolor=black
+  pad=0.4
+  rankdir=TB
+  nodesep=0.4
+  ranksep=0.5
+  node [shape=box, style=filled, fillcolor=white, color=black, fontcolor=black, fontsize=14]
+  edge [color=black]
 
-  win [label="WindowGroup ICCery\nICCeryApp.swift\n1280x800, min 1100x700"]
-  root [label="RootView.swift\nsheets and alerts live here"]
-  win -> root
+  Window [label="WindowGroup  ICCeryApp.swift"]
+  Root [label="RootView.swift\nsheets and alerts"]
+  Sidebar [label="SidebarView.swift  270pt"]
+  Banner [label="noticeText  NoticeBanner"]
+  Stage [label="WizardStageContent"]
 
-  subgraph cluster_chrome {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
+  Window -> Root
+  Root -> Sidebar
+  Root -> Banner
+  Root -> Stage
 
-    label="Persistent chrome"
-    side [label="SidebarView.swift\n270 pt"]
-    ban [label="noticeText  NoticeBanner.swift\nshown: wizard.notice != nil\nauto-hide 6s; close has no id"]
-    stage [label="WizardStageContent\nswitch wizard.stage"]
-  }
-  root -> side
-  root -> ban
-  root -> stage
-
-  subgraph cluster_header {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="Header"
-    sSet [label="openSettingsBtn  Button\nalways on → Settings sheet"]
-    sAbt [label="openAboutBtn  Button\nalways on → About"]
-    sHlp [label="btnToggleAllHelp  Button\ntoggles showingAllHelp overlays"]
-  }
-  side -> sSet
-  side -> sAbt
-  side -> sHlp
-
-  subgraph cluster_preset {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="Presets (#11)"
-    pre [label="presetSelect  Picker.menu\nnone + ProfilingPreset.id\napply on change; none is not factory reset"]
-    preS [label="btnSavePresetModal  Button\nalways on"]
-    preM [label="btnOpenPresetsDialog  Button\nalways on"]
-  }
-  side -> pre
-  side -> preS
-  side -> preM
-
-  subgraph cluster_media {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="Media library (#146)"
-    med [label="mediaSelect  Picker.menu\nnone + MediaRecipe.id\nnever reuses presetSelect"]
-    medSt [label="mediaRecipeStale  Caption\nshown: staleReasons nonempty"]
-    medC [label="btnMediaLibraryCapture  Button\ndisabled: selectedPrinter empty"]
-    medM [label="btnMediaLibraryManage  Button\nalways on"]
-  }
-  side -> med
-  side -> medSt
-  side -> medC
-  side -> medM
-
-  subgraph cluster_studio {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="Studio (not stepper)"
-    calB [label="btnCalibratePrinter  Button\nalways on; Stage 0"]
-    gamB [label="btnViewGamut  Button\nSAME id as Stage 5\nalways on; no .gam = sRGB only"]
-    spotB [label="btnSpotRead  Button\ndisabled: no cwd OR chartread running"]
-  }
-  side -> calB
-  side -> gamB
-  side -> spotB
-
-  subgraph cluster_step {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="Stepper 1-5 (disk is truth)"
-    step [label="StepperRow  Button.plain\ndisabled/opacity 0.45 unless isUnlocked\nbackward always; calibrate is not a row"]
-    nGate [shape=note, style=filled, fillcolor="#3d2f00", fontcolor="#f0e6c8", color="#d4a72c", label="WizardGating.swift\n1 always\n2 .ti1\n3 .ti1 AND .ti2\n4 .ti3 (not .ti2 alone)\n5 .ti3 AND .icc/.icm\nre-probe on window key (#151)"]
-  }
-  side -> step
-  step -> nGate [style=dashed]
-
-  subgraph cluster_chip {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="projectChip  ProjectUI.swift (#149)"
-    cn [label="projectChipName\nbound name or No project"]
-    cp [label="projectChipPath\nshown if bound"]
-    cs [label="projectChipStale\nshown: diskBehindNotes"]
-    cr [label="btnProjectReveal\nshown if bound"]
-    csv [label="btnProjectSave\nshown if bound\ndisabled: !canSave\ncanSave: bound + basename + cwd\nCAL_ still enabled (refusal banner)"]
-    co [label="btnProjectOpen\nshown if NOT bound"]
-  }
-  side -> cn
-  side -> cp
-  side -> cs
-  side -> cr
-  side -> csv
-  side -> co
-
-  subgraph cluster_menu {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="File menu  ProjectCommands / ICCeryApp.swift"
-    mN [label="menuProjectNew  Cmd-N"]
-    mO [label="menuProjectOpen  Cmd-O"]
-    mR [label="menuProjectRecents  Menu\ndisabled: recents empty\nprojectRecent-{hash}\nmenuProjectRecentsClear"]
-    mS [label="menuProjectSave  Cmd-S\ndisabled: !canSave"]
-    mSa [label="menuProjectSaveAs  Shift-Cmd-S\ndisabled: !canSaveAs\ncanSaveAs: basename + cwd"]
-    mRp [label="menuProjectReport\ndisabled: !canReport"]
-    mCl [label="menuProjectClose\ndisabled: !isBound"]
-  }
-
-  st1 [label="stage-1  Stage1View.swift"]
-  st2 [label="stage-2  Stage2View.swift"]
-  st3 [label="stage-3  Stage3View.swift"]
-  st4 [label="stage-4  Stage4View.swift"]
-  st5 [label="stage-5  Stage5View.swift"]
-  st0 [label="stage-cal  CalibrationView.swift"]
-  stage -> st1
-  stage -> st2
-  stage -> st3
-  stage -> st4
-  stage -> st5
-  stage -> st0
+  Sidebar -> Presets
+  Sidebar -> Media
+  Sidebar -> Studio
+  Sidebar -> Stepper
+  Sidebar -> ProjectChip
+  Stage -> S1 [label="stage-1"]
+  Stage -> S2 [label="stage-2"]
+  Stage -> S3 [label="stage-3"]
+  Stage -> S4 [label="stage-4"]
+  Stage -> S5 [label="stage-5"]
+  Stage -> Cal [label="stage-cal"]
 }

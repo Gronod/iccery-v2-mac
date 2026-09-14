@@ -1,124 +1,31 @@
-digraph ICCeryUIStage345Cal {
-  graph [label="ICCery UI — Stage 3 Measure / 4 Build / 5 Verify / Stage 0 Calibrate",
-    labelloc=t,
-    fontname="Helvetica",
-    fontsize=16,
-    fontcolor="#e6edf3",
-    bgcolor="#0d1117",
-    pad="0.4",
-    nodesep=0.35,
-    ranksep=0.55]
-  node [shape=box, style="filled,rounded", fontname="Helvetica", fontsize=12,
-        fontcolor="#e6edf3", fillcolor="#21262d", color="#8b949e",
-        penwidth=1.2, margin="0.22,0.14"]
-  edge [fontname="Helvetica", fontsize=10, color="#8b949e", fontcolor="#8b949e"]
+digraph ICCeryUIStage345 {
+  bgcolor=white
+  fontcolor=black
+  pad=0.4
+  rankdir=TB
+  nodesep=0.4
+  ranksep=0.5
+  node [shape=box, style=filled, fillcolor=white, color=black, fontcolor=black, fontsize=14]
+  edge [color=black]
 
-  subgraph cluster_s3 {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
+  S3 [label="stage-3  Stage3View.swift"]
+  S3 -> Instrument
+  S3 -> Transport
+  S3 -> swatchGrid
+  S3 -> Averaging
 
-    label="stage-3  Stage3View.swift / MeasurementWorkflowViewModel"
-    d3 [label="btnDetectInstruments  Button\ndisabled: isDetecting"]
-    i3 [label="chartreadInstrumentSelect  Picker.menu\nAuto + instlist ports"]
-    xyh [label="xyTableHint  Caption\nshown: selected is XY"]
-    xyp [label="xyTablePanel  shown: isXY\nxyStepPlace Align Scan Remove"]
-    pr [label="chartreadPrompt  Text"]
-    err [label="chartreadLastError  Caption\nshown: chartreadNotice != nil"]
-    sr [label="btnStartRead  Button\nshown: !running\ndisabled: !canStartRead\ncanStart: basename AND cwd AND !running"]
-    cal3 [label="btnCalibrate  Button\nshown: running AND calibrating"]
-    trg [label="btnTrigger  Button\nshown: running AND awaitingStrip"]
-    de [label="btnDoneReadEarly  Button\nshown: awaitingStrip"]
-    acc [label="btnAccept  Button\nshown: place | align | continue | warning"]
-    rty [label="btnRetry  Button\nshown: state == error"]
-    dn [label="btnDoneRead  Button\nshown: allStripsRead"]
-    cnc [label="btnCancel  Button\nshown: isChartreadRunning"]
-    sw [label="swatchGrid  swatch-{rowId}{loc}"]
-    rst [label="readStats  Text"]
-    avg [label="chartreadAveragingPanel\nshown: passes nonempty OR isFinished"]
-    mas [label="btnMeasureAnotherSheet  Button\ndisabled: !isFinished OR running"]
-    fa [label="btnFinishAndAverage  Button\ndisabled: !canFinish OR isFinishing\ncanFinish: isFinished AND passes nonempty"]
-  }
+  S4 [label="stage-4  Stage4View.swift"]
+  S4 -> colprof
+  S4 -> btnCreateProfile
 
-  subgraph cluster_s4 {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
+  S5 [label="stage-5  Stage5View.swift"]
+  S5 -> btnVerifyProfile
+  S5 -> btnViewGamut
+  S5 -> btnInstallProfile
+  S5 -> History
 
-    label="stage-4  Stage4View.swift / ProfileWorkflowViewModel"
-    alg [label="colprofAlgorithm  Picker"]
-    q [label="colprofQuality  Picker"]
-    fwa [label="colprofFwa  Picker"]
-    fwap [label="colprofFwaCustomPath  TextField\nshown: custom spectrum"]
-    fwab [label="btnBrowseFwaSp  Button\nshown with custom path"]
-    ill [label="colprofIlluminant  TextField"]
-    obs [label="colprofObserver  TextField"]
-    ivc [label="colprofInputViewCond  TextField"]
-    ovc [label="colprofOutputViewCond  TextField"]
-    desc [label="colprofDescription  TextField"]
-    cpr [label="colprofCopyright  TextField"]
-    ac [label="colprofApplyCalibration  Toggle"]
-    cf [label="colprofCalibrationFile  TextField\nshown: applyCalibration"]
-    cfb [label="btnBrowseCalibrationFile  Button\nshown: applyCalibration"]
-    cp [label="btnCreateProfile  Button\ndisabled: !canCreateProfile\ncanCreate: basename AND cwd AND !colprofRunning"]
-    cpi [label="colprofProgressIndicator\nshown: isColprofRunning"]
-  }
-
-  subgraph cluster_s5 {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="stage-5  Stage5View.swift"
-    vf [label="btnVerifyProfile  Button\ndisabled: !canVerify\ncanVerify: createdProfileURL AND !profcheckRunning"]
-    ppi [label="profcheckProgressIndicator\nshown: isProfcheckRunning"]
-    vg5 [label="btnViewGamut  Button\nDUPLICATE id with sidebar\ndisabled: createdGamutURL == nil"]
-    inst [label="btnInstallProfile  Button\ndisabled: createdProfileURL == nil"]
-    df [label="driftPrinterFilter  Picker"]
-    eh [label="btnExportHistory  Button"]
-    ch [label="btnClearHistory  Button"]
-    ht [label="verificationHistoryTable"]
-    dc [label="driftChart  DriftChartView.swift\nnot interactive"]
-    dalt [label="driftAlert / profcheckWarningBanner\nshown on fail / warning"]
-  }
-
-  subgraph cluster_coll {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="Install collision alert"
-    io [label="profileOverwriteBtn"]
-    ir [label="profileRenameBtn"]
-    ic [label="profileCancelCollisionBtn\nshown: showingInstallCollision\nAND askBeforeOverwriteProfile"]
-  }
-
-  subgraph cluster_cal {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="stage-cal  CalibrationView.swift (Stage 0)"
-    ccs [label="Colour Space  Picker.segmented\nRGB | CMYK  (no a11y id)"]
-    cst [label="calSteps  TextField.number"]
-    cwp [label="White patches  TextField.number\n(no a11y id)"]
-    cin [label="calInkExplore  TextField\nshown: colourSpace == cmyk"]
-    cne [label="calNeutralEmphasis  Toggle.checkbox"]
-    cg [label="btnCalGenerate  Button\ndisabled: empty basename OR no cwd OR isGenerating"]
-    cl [label="btnCalLayout  Button\nsame disable as Generate"]
-    cm [label="btnCalMeasure  Button\ndisabled: calibrationTi3URL == nil"]
-    cc [label="btnCalCompute  Button\ndisabled: !canCompute\ncanCompute: .ti3 exists AND !isComputing"]
-    cat [label="calApplyToggle  Toggle\nshown: computedCalURL != nil"]
-    cr [label="btnCalReturn  Button  Esc\nrestores original basename"]
-  }
+  Cal [label="stage-cal  CalibrationView.swift"]
+  Cal -> Wedge
+  Cal -> Workflow
+  Cal -> btnCalReturn
 }

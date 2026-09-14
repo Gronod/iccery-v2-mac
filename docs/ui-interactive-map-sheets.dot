@@ -1,170 +1,21 @@
 digraph ICCeryUISheets {
-  graph [label="ICCery UI — sheets, Spot Read, Gamut, Settings, project alerts",
-    labelloc=t,
-    fontname="Helvetica",
-    fontsize=16,
-    fontcolor="#e6edf3",
-    bgcolor="#0d1117",
-    pad="0.4",
-    nodesep=0.35,
-    ranksep=0.55]
-  node [shape=box, style="filled,rounded", fontname="Helvetica", fontsize=12,
-        fontcolor="#e6edf3", fillcolor="#21262d", color="#8b949e",
-        penwidth=1.2, margin="0.22,0.14"]
-  edge [fontname="Helvetica", fontsize=10, color="#8b949e", fontcolor="#8b949e"]
+  bgcolor=white
+  fontcolor=black
+  pad=0.4
+  rankdir=TB
+  nodesep=0.4
+  ranksep=0.5
+  node [shape=box, style=filled, fillcolor=white, color=black, fontcolor=black, fontsize=14]
+  edge [color=black]
 
-  subgraph cluster_set {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="SettingsView.swift  (openSettingsBtn)"
-    ad [label="Argyll dir  TextField+Browse\nempty => bundled sidecars"]
-    di [label="Default instrument  Picker\nNone + i1/p3/CM/SS/20/22/41/51\nseeds Stage 3 + Spot Read\ndoes NOT change instrumentSelect"]
-    led [label="Enable i1Pro 2 LEDs  Toggle"]
-    dg [label="settingsDeltaEGood  TextField"]
-    dw [label="settingsDeltaEWarning  TextField\nSave refuses unless Warning > Good"]
-    sd [label="settingsCalStaleDays  TextField"]
-    il [label="Install location  Picker\nUser | System library"]
-    ao [label="Ask before overwriting  Toggle"]
-    oc [label="Open ColorSync after install  Toggle"]
-    ll [label="Log level  Picker"]
-    lg [label="Open log folder / Copy path / Copy excerpt"]
-    ss [label="Cancel / Save\nSave stays if validation fails\nframe 560x620"]
-  }
-
-  subgraph cluster_about {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="AboutView.swift"
-    ab [label="aboutDialog\naboutVersion, aboutBuildDate\ncloseAboutBtn  Esc"]
-  }
-
-  subgraph cluster_sp {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="savePresetDialog  PresetDialogs.swift"
-    spn [label="savePresetName  TextField"]
-    spd [label="savePresetDesc  TextField"]
-    spc [label="btnCloseSavePresetDialog"]
-    sps [label="btnConfirmSavePreset\ndisabled: name trimmed empty"]
-  }
-
-  subgraph cluster_mp {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="managePresetsDialog"
-    prw [label="presetRow-{id}\nBuilt-in: no delete\nelse btnExportPreset-{id}\nbtnDeletePreset-{id}"]
-    pim [label="btnImportPreset"]
-    pea [label="btnExportActivePreset\nshown: selected custom preset"]
-    pcl [label="btnCloseManagePresetsDialog"]
-  }
-
-  subgraph cluster_sm {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="saveMediaRecipeDialog  MediaLibraryDialogs.swift"
-    smf [label="saveMediaName/Notes/Paper/Ink  TextField x4"]
-    smr [label="saveMediaPrinter/Preset/ColourSpace/Cal  read-only"]
-    smc [label="saveMediaApplyCal  Toggle\ndisabled: !calApplyable\ncalApplyable: path exists, not CAL_"]
-    smx [label="btnCloseSaveMediaDialog"]
-    sms [label="btnConfirmSaveMedia\ndisabled: name|paper|ink empty\nOR colour-space mismatch"]
-  }
-
-  subgraph cluster_mm {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="manageMediaDialog"
-    mll [label="mediaLibraryList\nmediaRow-{id}\nbtnMediaLibraryApply-{id}\nbtnMediaLibraryDelete-{id}\ndouble-click = Apply"]
-    mmn [label="manageMediaNotice  Caption\nshown: manageApplyNotice != nil\nin-sheet copy of failed Apply (#170)"]
-    mla [label="btnMediaLibraryApply\ndisabled: selection == nil"]
-    mlc [label="btnMediaLibraryCaptureFromManage\ndismiss then open capture"]
-    mlx [label="btnCloseManageMediaDialog"]
-    mld [label="Delete alert  Cancel / Delete"]
-  }
-
-  subgraph cluster_spot {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="spotReadView  SpotReadView.swift (#148)"
-    ssm [label="spotSidecarMissing\nshown: !sidecarAvailable\nhides instrument/transport"]
-    sdet [label="btnSpotDetectInstruments\ndisabled: detecting OR running"]
-    sis [label="spotInstrumentSelect  Picker\ndisabled: isRunning"]
-    sdm [label="spotDefaultMissing\nshown: defaultMissing"]
-    ssd [label="spotSetDefault  Toggle"]
-    sxy [label="spotXYHint  shown: selected is XY"]
-    sst [label="btnSpotStart\nshown: !isRunning\ndisabled: !canStart\ncanStart: sidecar, !detecting, !running,\n!chartreadRunning, cwd"]
-    sca [label="btnSpotCalibrate\nshown: running AND calibrating"]
-    str [label="btnSpotTrigger  Read\nshown: running AND awaitingStrip"]
-    ssp [label="btnSpotStop  shown: isRunning"]
-    sls [label="spotLastSample / Lab / XYZ / DeltaE\nspotLabImplausible if L not 0..100\nspotDeltaE hidden on first sample"]
-    sht [label="spotHistoryTable\nrows: spotHistoryRow-{uuid}\nclick restores sample, no trigger"]
-    scp [label="btnSpotCopyLab\ndisabled: displayedSample == nil"]
-    sex [label="btnSpotExportCsv\ndisabled: samples empty"]
-    scl [label="btnCloseSpotRead  Esc; onDismiss = Stop"]
-  }
-
-  subgraph cluster_gamut {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="gamutView  GamutView.swift (#147)"
-    gls [label="gamutLayer-srgb  Toggle\nsRGB always loaded; can hide"]
-    glp [label="gamutLayer-profile  Toggle\ndisabled: no session .gam"]
-    glc [label="gamutLayer-compare  Toggle\ndisabled: no compare layer"]
-    gac [label="btnGamutAddCompare  Menu\nbtnGamutOpenGam / btnGamutOpenProfile"]
-    grc [label="btnGamutRemoveCompare\ndisabled: compare layer nil"]
-    gst [label="btnGamutSampleTiff"]
-    gun [label="gamutViewerUnavailable\nshown: no Metal\ntoggles + inspect still enabled"]
-    grs [label="btnResetGamutCamera  R"]
-    gle [label="gamutLabEntryL/A/B  TextField x3"]
-    gin [label="btnGamutInspectLab\ndisabled: !canInspectLab"]
-    gip [label="gamutInspectPanel"]
-    gcl [label="btnCloseGamut  Esc"]
-    gtf [label="gamutTiffPreview sheet\nshowingTiffPreview\nbtnCloseGamutTiffPreview"]
-  }
-
-  subgraph cluster_proj {
-    style="filled,rounded"
-    fillcolor="#161b22"
-    color="#30363d"
-    fontcolor="#79c0ff"
-    fontsize=13
-
-    label="Project alerts  RootView + ProjectUI"
-    pna [label="projectNewAlert\nbtnProjectNewCancel / Confirm"]
-    pda [label="Dirty save alert\nbtnProjectDirtySave\nbtnProjectDirtyDiscard\nbtnProjectDirtyCancel"]
-    prs [label="projectRelocateSheet\nshown: cwd missing on Open\nbtnProjectRelocateCancel\nbtnProjectRelocate"]
-  }
-
-  mutex [shape=note, style=filled, fillcolor="#3d2f00", fontcolor="#f0e6c8", color="#d4a72c", label="Mutex\nSpot Read disabled while Stage 3 chartread runs\nOpening Spot Read never kills chartread_{basename}\nFailed media Apply keeps manage sheet open\nWindow noticeText is occluded — use manageMediaNotice"]
+  Root [label="RootView.swift hosts every sheet"]
+  Root -> Settings
+  Root -> About
+  Root -> savePresetDialog
+  Root -> managePresetsDialog
+  Root -> saveMediaRecipeDialog
+  Root -> manageMediaDialog
+  Root -> spotReadView
+  Root -> gamutView
+  Root -> ProjectAlerts
 }
