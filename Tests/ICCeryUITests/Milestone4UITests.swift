@@ -98,23 +98,9 @@ final class Milestone4UITests: XCTestCase {
         app.buttons["btnDetectInstruments"].click()
         _ = waitFor("chartreadInstrumentSelect", timeout: 20)
 
-        // Keep Auto (port 1) and start the session.
-        XCTAssertTrue(app.buttons["btnStartRead"].waitForExistence(timeout: 5))
-        app.buttons["btnStartRead"].click()
-
-        // Calibrate.
-        let calibrate = element("btnCalibrate")
-        if !calibrate.waitForExistence(timeout: 25) {
-            let error = element("chartreadLastError").label
-            let value = element("chartreadLastError").value as? String ?? "<nil>"
-            XCTFail("No calibrate button. lastError.label='\(error)' value='\(value)'")
-        }
-        app.buttons["btnCalibrate"].click()
-
-        // Trigger each strip until all are read → Done & Save appears.
-        driveStripsUntilDone()
-        XCTAssertTrue(element("btnDoneRead").exists)
-        app.buttons["btnDoneRead"].firstMatch.click()
+        // Wait until Start is enabled before clicking. Existence-only
+        // clicks are no-ops on the disabled control (runs 35251, 35293).
+        driveOnePass(startButton: "btnStartRead")
 
         // Averaging panel appears with one pass snapshot.
         _ = waitFor("chartreadAveragingPanel", timeout: 20)
