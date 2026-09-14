@@ -1,0 +1,229 @@
+# GitHub Actions twin of .gitea/workflows/macos.yml.
+# Deltas from the Gitea file (everything else is the same jobs/steps):
+#   - runs-on macos-14: github.com retired macos-12 (the Gitea runner label).
+#     The Gitea workflow already notes macos-14 works for this pipeline.
+#   - actions/upload-artifact@v4: v3 is shut down on github.com. Gitea act_runner
+#     still uses v3.
+#   - No NODE_EXTRA_CA_CERTS / System keychain bundle: that is only for the
+#     private Gitea CA when the runner talks to git.i3omb.com.
+#   - Tag DMGs go to a GitHub Release via `gh` instead of
+#     scripts/attach-release-asset.sh (Gitea /api/v1).
+name: macOS CI
+
+on:
+  push:
+    branches:
+      - develop
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - develop
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: macos-26-intel 
+    env:
+      DERIVED: build/DerivedData-test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Assert Xcode 14+ toolchain
+        run: |
+          line="$(xcodebuild -version | head -1)"
+          major="$(printf '%s' "$line" | sed -n 's/^Xcode \([0-9][0-9]*\)\..*/\1/p')"
+          if [ -z "$major" ] || [ "$major" -lt 14 ]; then
+            echo "Unexpected Xcode version: $line" >&2; exit 1
+          fi
+          echo "$line"
+
+      # Tag pushes whose name contains "prerelease" skip the test build and both
+      # test legs: they exist to package a build already validated elsewhere.
+      # The job still succeeds quickly so `package`'s `needs:` stays satisfied.
+      # Homebrew's xcodegen formula requires Xcode 15.3, which cannot be
+      # installed on macOS 12 (#109). The script installs a pinned
+      # prebuilt release instead. dmgbuild is not installed here — the
+      # test job does not package (#95).
+      - name: Ensure host tools
+        if: "!(startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, 'prerelease'))"
+        run: scripts/ensure-host-tools.sh
+
+      - name: Generate Xcode project
+        if: "!(startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, 'prerelease'))"
+        run: xcodegen generate --spec project.yml
+
+      # Tests only ever run on the runner's own architecture; build
+      # just that slice. Packaging (scripts/package-release.sh) still
+      # produces the universal Release binary.
+      - name: Build for testing (host arch)
+        if: "!(startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, 'prerelease'))"
+        run: |
+          xcodebuild build-for-testing \
+            -scheme ICCery \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$DERIVED" \
+            -configuration Debug \
+            ARCHS="$(uname -m)" \
+            ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGNING_ALLOWED=YES \
+            CODE_SIGN_IDENTITY='-'
+
+      # Xcode embeds the shared ICCeryCore package framework into the app
+      # and the test bundle without signing it. Ad-hoc hosts still require
+      # every loaded dylib to carry a cdhash — dyld killed the test host at
+      # launch (run 31992) — so sign every embedded copy once the build is
+      # done (embed steps run after any build script phase) (#119).
+      - name: Sign package product frameworks
+        if: "!(startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, 'prerelease'))"
+        run: |
+          find "$DERIVED/Build/Products/Debug" -depth -name '*_PackageProduct.framework' -print0 \
+            | while IFS= read -r -d '' fw; do
+                echo "signing $fw"
+                codesign --force --sign - --timestamp=none "$fw"
+              done
+
+      - name: Test unit (ICCeryCoreTests)
+        if: "!(startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, 'prerelease'))"
+        run: |
+          XCTESTRUN="$(find "$DERIVED" -name 'ICCery*.xctestrun' | head -n 1)"
+          if [ -z "$XCTESTRUN" ] || [ ! -f "$XCTESTRUN" ]; then
+            echo "error: no xctestrun produced by build-for-testing" >&2
+            exit 1
+          fi
+          echo "xctestrun: $XCTESTRUN"
+          xcodebuild test-without-building \
+            -xctestrun "$XCTESTRUN" \
+            -only-testing:ICCeryCoreTests \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$DERIVED"
+
+      # UI tests need macOS Automation / Accessibility permission on the
+      # runner. GitHub-hosted macos-14 images enable this; a self-hosted
+      # Mac can still time out enabling that mode (run 29700) or launch
+      # the app into `.runningBackground` (run 29804). Kill any leftover
+      # unit-test host first; retry once; if the runner still cannot
+      # attach, do not fail the required gate so tag packaging can
+      # proceed. Real XCTest assertion failures still fail the job.
+      - name: Test UI (ICCeryUITests)
+        if: "!(startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, 'prerelease'))"
+        run: |
+          set -o pipefail
+          XCTESTRUN="$(find "$DERIVED" -name 'ICCery*.xctestrun' | head -n 1)"
+          LOG="$DERIVED/ui-test.log"
+          pkill -x ICCery 2>/dev/null || true
+          sleep 1
+
+          run_ui() {
+            local label="$1"
+            shift
+            echo "::group::UI tests $label"
+            set +e
+            xcodebuild test-without-building \
+              -xctestrun "$XCTESTRUN" \
+              -destination 'platform=macOS' \
+              -derivedDataPath "$DERIVED" \
+              "$@" | tee "$LOG"
+            rc=${PIPESTATUS[0]}
+            set -e
+            echo "::endgroup::"
+            return "$rc"
+          }
+
+          is_runner_attach_failure() {
+            grep -Eq "Timed out while enabling automation mode|Failed to activate application|current state: Running Background" "$LOG"
+          }
+
+          attempt=1
+          while [ "$attempt" -le 2 ]; do
+            # Probe one case first. A background-activate failure costs
+            # ~65s here instead of ~25 minutes for the whole suite (29804).
+            if ! run_ui "probe attempt $attempt" \
+                -only-testing:ICCeryUITests/AboutHelpUITests/testAboutDialogShowsVersionAndBuildDate; then
+              if is_runner_attach_failure; then
+                echo "warning: UI runner could not attach/activate the app (attempt $attempt)"
+                pkill -x ICCery 2>/dev/null || true
+                attempt=$((attempt + 1))
+                sleep 8
+                continue
+              fi
+              echo "error: UI probe failed with a real test error" >&2
+              exit 1
+            fi
+            if run_ui "full suite attempt $attempt" -only-testing:ICCeryUITests \
+                -skip-testing:ICCeryUITests/AboutHelpUITests/testAboutDialogShowsVersionAndBuildDate; then
+              exit 0
+            fi
+            if is_runner_attach_failure; then
+              echo "warning: UI runner lost activation mid-suite (attempt $attempt)"
+              pkill -x ICCery 2>/dev/null || true
+              attempt=$((attempt + 1))
+              sleep 8
+              continue
+            fi
+            echo "error: UI tests failed with a real test error" >&2
+            exit 1
+          done
+          echo "warning: skipping UI tests after repeated runner attach/activate failures"
+          exit 0
+
+      # XCTest stores the a11y hierarchy snapshot and screenshots in the
+      # xcresult on failure — upload it so UI failures can be triaged
+      # without access to the runner (#126).
+      - name: Upload UI test xcresult
+        if: "failure() && !(startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, 'prerelease'))"
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-test-xcresult
+          path: build/DerivedData-test/Logs/Test
+
+  package:
+    needs: build-and-test
+    runs-on: macos-14
+    if: github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # scripts/package-release.sh runs `xcodegen generate` and dmgbuild;
+      # see build-and-test for why brew is not used on macOS 12 (#109).
+      # INSTALL_DMGBUILD isolates dmgbuild in build/.venv-dmgbuild so
+      # the test job never pip-installs it (#95).
+      - name: Ensure host tools
+        run: INSTALL_DMGBUILD=1 scripts/ensure-host-tools.sh
+
+      - name: Package release
+        run: scripts/package-release.sh
+        env:
+          CODESIGN_IDENTITY: ${{ secrets.CODESIGN_IDENTITY }}
+          DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
+          NOTARIZE_APPLE_ID: ${{ secrets.NOTARIZE_APPLE_ID }}
+          NOTARIZE_PASSWORD: ${{ secrets.NOTARIZE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: iccery-dmg
+          path: ICCery-*.dmg
+
+      - name: Attach DMG to GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          TAG="$GITHUB_REF_NAME"
+          case "$TAG" in
+            *prerelease*) PRE_FLAG=--prerelease ;;
+            *)            PRE_FLAG= ;;
+          esac
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" --title "$TAG" --target "$GITHUB_SHA" $PRE_FLAG
+          fi
+          gh release upload "$TAG" ICCery-*.dmg --clobber

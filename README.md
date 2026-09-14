@@ -206,9 +206,13 @@ xcodebuild test -scheme ICCery -destination 'platform=macOS' \
   -only-testing:ICCeryUITests/Milestone5UITests
 ```
 
-CI (`.gitea/workflows/macos.yml`) runs `build-and-test` then `package` on
+CI (`.gitea/workflows/macos.yml` on Gitea, `.github/workflows/macos.yml` on
+GitHub) runs `build-and-test` then `package` on
 `develop` and on `v*` tags. Tags whose name contains `prerelease` skip the
 test job and still package. `pull_request` is wired for **`develop` only**.
+The GitHub file is the same pipeline on `macos-14` (github.com retired
+`macos-12`), `actions/upload-artifact@v4`, and `gh release upload` for tag
+DMGs.
 
 UI tests need an unlocked console (`IOConsoleLocked=false`). Mock Argyll /
 CUPS fixtures live under the test bundles; they must not be treated as proof
