@@ -220,6 +220,15 @@ struct ManageMediaDialog: View {
             .accessibilityIdentifier("mediaLibraryList")
             .frame(minHeight: 260)
 
+            if let notice = media.manageApplyNotice {
+                Text(notice)
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("manageMediaNotice")
+                    .accessibilityValue(notice)
+            }
+
             HStack {
                 Button("Apply selected") {
                     if let id = selection,
