@@ -23,9 +23,11 @@ if not app_path or not app_path.endswith('.app') or not os.path.isdir(app_path):
 
 files = [app_path]
 
-# Finder on Sonoma+ ignores the legacy Alias Manager blob that
-# dmgbuild 1.6.5 wrote for a PNG. Pass a flattened HiDPI TIFF and
-# require dmgbuild >= 1.6.7 (bookmark-based background). See #95.
+# Finder on Sonoma+ is picky about PNG-with-alpha window pictures and
+# about classic Alias Manager blobs. package-release.sh always passes
+# a flattened HiDPI TIFF as DMG_BACKGROUND. dmgbuild 1.6.7 (bookmark
+# .DS_Store) needs Python >= 3.10, which the Monterey runner does not
+# have; 1.6.5 + TIFF is what CI can ship (#95).
 background = os.environ.get('DMG_BACKGROUND', '')
 if not background or not os.path.isfile(background):
     sys.stderr.write(

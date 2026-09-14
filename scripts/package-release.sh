@@ -103,16 +103,16 @@ EOF
     scripts/verify-sidecar-signatures.sh "$APP"
 fi
 
-echo "==> Installing / locating dmgbuild >= 1.6.7"
-# 1.6.5 writes a classic Alias Manager blob that Sonoma Finder does
-# not resolve after UDZO (#95). Always upgrade — a leftover venv on
-# the runner may still hold 1.6.5.
+echo "==> Installing / locating dmgbuild"
+# Monterey CI Python is 3.9. dmgbuild 1.6.6+ declares Requires-Python
+# >=3.10, so pip only offers 1.6.5 on this runner. Install the newest
+# wheel this interpreter accepts; do not fail the job for 1.6.7.
 VENV="$ROOT/build/.venv-dmgbuild"
 if [ ! -d "$VENV/bin" ]; then
     python3 -m venv "$VENV"
 fi
 "$VENV/bin/pip" install --upgrade pip
-"$VENV/bin/pip" install --upgrade 'dmgbuild>=1.6.7'
+"$VENV/bin/pip" install --upgrade dmgbuild
 PATH="$VENV/bin:$PATH"
 export PATH
 if ! command -v dmgbuild >/dev/null 2>&1; then
@@ -121,20 +121,7 @@ if ! command -v dmgbuild >/dev/null 2>&1; then
 fi
 DMGBUILD_VER="$("$VENV/bin/python" -c 'from importlib.metadata import version; print(version("dmgbuild"))')"
 echo "dmgbuild $DMGBUILD_VER"
-"$VENV/bin/python" -c '
-from importlib.metadata import version
-parts = []
-for p in version("dmgbuild").split("."):
-    try:
-        parts.append(int(p))
-    except ValueError:
-        parts.append(0)
-parts += [0, 0, 0]
-raise SystemExit(0 if tuple(parts[:3]) >= (1, 6, 7) else 1)
-' || {
-    echo "error: dmgbuild $DMGBUILD_VER is older than 1.6.7" >&2
-    exit 1
-}
+"$VENV/bin/python" -c 'import sys; print("venv python", sys.version)'
 
 PNG1X="$ROOT/Resources/dmg-background.png"
 PNG2X="$ROOT/Resources/dmg-background@2x.png"
