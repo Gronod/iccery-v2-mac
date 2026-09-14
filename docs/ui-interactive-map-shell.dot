@@ -1,0 +1,110 @@
+digraph ICCeryUIShell {
+  graph [label="ICCery UI — shell, sidebar, stepper, File menu\nids are accessibility identifiers. Gating: WizardGating.swift",
+         labelloc=t, fontsize=14, fontname="Helvetica"]
+  node [shape=box, style=rounded, fontname="Helvetica", fontsize=9]
+  edge [fontname="Helvetica", fontsize=8]
+
+  win [label="WindowGroup ICCery\nICCeryApp.swift\n1280x800, min 1100x700"]
+  root [label="RootView.swift\nsheets and alerts live here"]
+  win -> root
+
+  subgraph cluster_chrome {
+    label="Persistent chrome"
+    side [label="SidebarView.swift\n270 pt"]
+    ban [label="noticeText  NoticeBanner.swift\nshown: wizard.notice != nil\nauto-hide 6s; close has no id"]
+    stage [label="WizardStageContent\nswitch wizard.stage"]
+  }
+  root -> side
+  root -> ban
+  root -> stage
+
+  subgraph cluster_header {
+    label="Header"
+    sSet [label="openSettingsBtn  Button\nalways on → Settings sheet"]
+    sAbt [label="openAboutBtn  Button\nalways on → About"]
+    sHlp [label="btnToggleAllHelp  Button\ntoggles showingAllHelp overlays"]
+  }
+  side -> sSet
+  side -> sAbt
+  side -> sHlp
+
+  subgraph cluster_preset {
+    label="Presets (#11)"
+    pre [label="presetSelect  Picker.menu\nnone + ProfilingPreset.id\napply on change; none is not factory reset"]
+    preS [label="btnSavePresetModal  Button\nalways on"]
+    preM [label="btnOpenPresetsDialog  Button\nalways on"]
+  }
+  side -> pre
+  side -> preS
+  side -> preM
+
+  subgraph cluster_media {
+    label="Media library (#146)"
+    med [label="mediaSelect  Picker.menu\nnone + MediaRecipe.id\nnever reuses presetSelect"]
+    medSt [label="mediaRecipeStale  Caption\nshown: staleReasons nonempty"]
+    medC [label="btnMediaLibraryCapture  Button\ndisabled: selectedPrinter empty"]
+    medM [label="btnMediaLibraryManage  Button\nalways on"]
+  }
+  side -> med
+  side -> medSt
+  side -> medC
+  side -> medM
+
+  subgraph cluster_studio {
+    label="Studio (not stepper)"
+    calB [label="btnCalibratePrinter  Button\nalways on; Stage 0"]
+    gamB [label="btnViewGamut  Button\nSAME id as Stage 5\nalways on; no .gam = sRGB only"]
+    spotB [label="btnSpotRead  Button\ndisabled: no cwd OR chartread running"]
+  }
+  side -> calB
+  side -> gamB
+  side -> spotB
+
+  subgraph cluster_step {
+    label="Stepper 1-5 (disk is truth)"
+    step [label="StepperRow  Button.plain\ndisabled/opacity 0.45 unless isUnlocked\nbackward always; calibrate is not a row"]
+    nGate [shape=note, label="WizardGating.swift\n1 always\n2 .ti1\n3 .ti1 AND .ti2\n4 .ti3 (not .ti2 alone)\n5 .ti3 AND .icc/.icm\nre-probe on window key (#151)"]
+  }
+  side -> step
+  step -> nGate [style=dashed]
+
+  subgraph cluster_chip {
+    label="projectChip  ProjectUI.swift (#149)"
+    cn [label="projectChipName\nbound name or No project"]
+    cp [label="projectChipPath\nshown if bound"]
+    cs [label="projectChipStale\nshown: diskBehindNotes"]
+    cr [label="btnProjectReveal\nshown if bound"]
+    csv [label="btnProjectSave\nshown if bound\ndisabled: !canSave\ncanSave: bound + basename + cwd\nCAL_ still enabled (refusal banner)"]
+    co [label="btnProjectOpen\nshown if NOT bound"]
+  }
+  side -> cn
+  side -> cp
+  side -> cs
+  side -> cr
+  side -> csv
+  side -> co
+
+  subgraph cluster_menu {
+    label="File menu  ProjectCommands / ICCeryApp.swift"
+    mN [label="menuProjectNew  Cmd-N"]
+    mO [label="menuProjectOpen  Cmd-O"]
+    mR [label="menuProjectRecents  Menu\ndisabled: recents empty\nprojectRecent-{hash}\nmenuProjectRecentsClear"]
+    mS [label="menuProjectSave  Cmd-S\ndisabled: !canSave"]
+    mSa [label="menuProjectSaveAs  Shift-Cmd-S\ndisabled: !canSaveAs\ncanSaveAs: basename + cwd"]
+    mRp [label="menuProjectReport\ndisabled: !canReport"]
+    mCl [label="menuProjectClose\ndisabled: !isBound"]
+  }
+
+  st1 [label="stage-1  Stage1View.swift"]
+  st2 [label="stage-2  Stage2View.swift"]
+  st3 [label="stage-3  Stage3View.swift"]
+  st4 [label="stage-4  Stage4View.swift"]
+  st5 [label="stage-5  Stage5View.swift"]
+  st0 [label="stage-cal  CalibrationView.swift"]
+  stage -> st1
+  stage -> st2
+  stage -> st3
+  stage -> st4
+  stage -> st5
+  stage -> st0
+}

@@ -1,0 +1,77 @@
+digraph ICCeryUIStage12 {
+  graph [label="ICCery UI — Stage 1 Generate Target / Stage 2 Lay Out and Print",
+         labelloc=t, fontsize=14, fontname="Helvetica"]
+  node [shape=box, style=rounded, fontname="Helvetica", fontsize=9]
+  edge [fontname="Helvetica", fontsize=8]
+
+  subgraph cluster_s1 {
+    label="stage-1  Stage1View.swift"
+    csp [label="colourSpace  Picker.segmented\nRGB | CMYK"]
+    pcp [label="patchCountPreset  Picker"]
+    pcc [label="patchCountCustom  TextField.number\nshown: patchPreset == custom"]
+    wp [label="whitePatches  Stepper  0..50"]
+    bp [label="blackPatches  Stepper  0..50"]
+    tb [label="targetBasename  TextField"]
+    bb [label="btnBrowse  Button"]
+    wd [label="btnSelectWorkDir  Button"]
+    oe [label="btnOpenExisting  Button\n.ti1 or .ti2 (+ matching .ti1)"]
+    imp [label="btn-import-dataset  Button\n.ti3 / txt / cgats / csv\nunlocks stage 4"]
+    spd [label="selectedPathDisplay  Text"]
+    adv [label="targenAdvancedDetails  DisclosureGroup\nUI tests pre-expand"]
+    gen [label="btnGenerate  Button\ndisabled: !canGenerate OR targenRunning\ncanGenerate: valid basename AND directory"]
+    tlog [label="targenLogContainer / targenLog\nProcessLogView.swift"]
+  }
+
+  subgraph cluster_adv {
+    label="Advanced (hidden until disclosure open)"
+    ag [label="targenGreySteps  Toggle+TextField\nfield iff toggle on"]
+    as1 [label="targenSingleChannelSteps  Toggle+TextField"]
+    an [label="targenNeutralSteps  Toggle+TextField"]
+    anc [label="targenNeutralConcentration  Toggle+Slider 0..1"]
+    aa [label="targenAdaptation  Toggle+Slider 0..1"]
+    ap [label="targenPrecondProfile  TextField"]
+    apb [label="btnBrowsePrecondProfile  Button"]
+    ahq [label="targenHighQuality  Toggle  OFPS -G"]
+    aal [label="targenAlgorithm  Picker"]
+    ail [label="targenInkLimitGroup  Toggle+TextField\nshown: colourSpace == cmyk"]
+    ad [label="targenDarkEmphasis  Toggle+Slider 0..3"]
+    adp [label="targenDevicePower  Toggle+Slider 0..3"]
+  }
+  adv -> ag [style=dashed]
+
+  subgraph cluster_s2 {
+    label="stage-2  Stage2View.swift"
+    cmw [label="cmWarningBanner  always visible, not a control"]
+    ins [label="instrumentSelect  Picker\nPrintInstrument chart code, NOT USB port"]
+    pgs [label="pageSizeSelect  Picker"]
+    cps [label="customPageSizeRow\nshown: pageSize == custom\ncustomPageW / customPageH mm"]
+    bit [label="bitDepth  Picker  8-bit | 16-bit\n(no a11y id on picker)"]
+    dpi [label="tiffDpi  Stepper  72..600"]
+    lo [label="printtargLayoutOrder  Picker"]
+    seed [label="printtargCustomSeedGroup\nshown: layoutOrder == customSeed\nid printtargCustomSeed"]
+    tle [label="btnToggleLabelEdit  Button\nEdit label / Use automatic"]
+    mp [label="targetMetadataPrinter  TextField"]
+    mi [label="targetMetadataInkSet  TextField"]
+    md [label="targetMetadataDriverPaper  TextField"]
+    ma [label="targetMetadataActualPaper  TextField"]
+    lpv [label="targetLabelPreview  TextField or Text\nTextField iff labelIsCustom"]
+    lay [label="btnCreateLayout  Button\ndisabled: printtargRunning OR basename empty"]
+    plog [label="printtargLogContainer  DisclosureGroup"]
+    gal [label="tiffGallery  shown: printtargResult != nil\ngalleryInfo, galleryGrid\ngalleryPage-{index}\nbtnPrintPage-{index}\nPrint disabled: isPrinting OR no printer"]
+  }
+
+  subgraph cluster_print {
+    label="rawPrintPanel"
+    ps [label="printerSelect  Picker  CUPS queues"]
+    psb [label="printerStatusBadge\nshown: selected printer in list"]
+    prf [label="btnRefreshPrinters  Button"]
+    ppr [label="btnPrinterProperties  Button\ndisabled: selectedPrinter empty"]
+    ptr [label="printerTraySelect  Picker\nshown: trays nonempty"]
+    pmt [label="printerMediaTypeSelect  Picker\nshown: mediaTypes nonempty"]
+    por [label="btnOrientPortrait  Button"]
+    lan [label="btnOrientLandscape  Button"]
+    pal [label="btnPrintAll  Button\ndisabled: isPrinting OR no result OR no printer"]
+    a3 [label="btnAdvanceToStage3  Button\ndisabled: no result OR !isUnlocked(measure)"]
+    pnt [label="printNotificationText\nshown: printNotice != nil"]
+  }
+}
