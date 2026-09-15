@@ -1,6 +1,8 @@
 #!/bin/sh
 # Mock lpoptions for Milestone3UITests. `-p <q>` prints printer-info;
-# `-p <q> -l` prints Key/Label listings incl. Epson bypass keys.
+# `-p <q> -l` prints Key/Label listings incl. Epson bypass keys and the
+# recorded XP-55 EPIJ_Qual line — the driver's own non-sorted order
+# (308 sits between 303 and 304, #180).
 queue=""
 list=0
 for arg in "$@"; do
@@ -15,6 +17,7 @@ if [ "$list" = "1" ]; then
   printf 'PageSize/Media Size: 4x6 5x7 *A4 Letter Legal\n'
   printf 'InputSlot/Media Source: Auto *Main Rear\n'
   printf 'MediaType/Media Type: *Stationery PhotographicGlossy PhotographicMatte\n'
+  printf 'EPIJ_Qual/Print Quality: 301 302 *303 308 304 305 307\n'
   printf 'EPIJ_CMat/Color Adjust: *0 1 2 3\n'
   printf 'ColorModel/Output Mode: *RGB Gray\n'
   exit 0

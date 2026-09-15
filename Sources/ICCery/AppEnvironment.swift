@@ -136,8 +136,18 @@ enum UITestHooks {
                     $0.isEmpty ? nil : $0
                 } ?? queue,
                 options: PrintOptions(
+                    orientation: options.flatMap {
+                        CupsParsers.extractOrientation(fromOptionsString: $0)
+                    },
+                    paperSize: options.flatMap {
+                        CupsParsers.extractOption(
+                            named: "PageSize", fromOptionsString: $0)
+                    },
                     mediaType: options.flatMap {
                         CupsParsers.extractMediaType(fromOptionsString: $0)
+                    },
+                    quality: options.flatMap {
+                        CupsParsers.extractQuality(fromOptionsString: $0)
                     },
                     ppdUncorrectedPassthrough: true,
                     cupsOptions: options))

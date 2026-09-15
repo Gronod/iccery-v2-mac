@@ -4,7 +4,7 @@ import Foundation
 
 /// Issue 12 — CUPS enumeration parsers on recorded fixtures
 /// (docs/10–11). No live `lpstat`/`lpoptions` is spawned here.
-final class CupsParsersTests: XCTestCase {
+final class CupsParserTests: XCTestCase {
 
     // Recorded on an Epson XP-55 + Canon Pro9500 host.
     private let lpstatE = """
@@ -30,7 +30,7 @@ final class CupsParsersTests: XCTestCase {
         MediaType/Media Type: *Stationery PhotographicHighGloss Photographic PhotographicMatte Envelope
         ColorModel/Output Mode: *RGB Gray
         Duplex/Duplex: *None DuplexNoTumble DuplexTumble
-        cupsPrintQuality/cupsPrintQuality: Draft *Normal High
+        EPIJ_Qual/Print Quality: 301 302 *303 308 304 305 307
         """
 
     func testDestinations() {
@@ -117,6 +117,157 @@ final class CupsParsersTests: XCTestCase {
         XCTAssertNil(CupsParsers.detectMediaTypeKey(optionKeys: ["PageSize"]))
     }
 
+    // MARK: - #183 quality key + option extraction
+
+    func testQualityKeyRosterOrder() {
+        // Vendor keys beat the generic ones; OutputMode/Resolution sit
+        // last (they are colour-ish keys on some drivers — #183/#180).
+        XCTAssertEqual(CupsParsers.detectQualityKey(
+            optionKeys: ["EPIJ_Qual", "Quality", "OutputMode"]), "EPIJ_Qual")
+        // A full Epson key set — EPIJ_Qual wins over the colour-mode
+        // key, the generic keys, and Resolution (#180, R11).
+        XCTAssertEqual(CupsParsers.detectQualityKey(
+            optionKeys: ["EPIJ_Qual", "OutputMode", "Resolution",
+                         "cupsPrintQuality", "PrintQuality",
+                         "ColorModel"]), "EPIJ_Qual")
+        XCTAssertEqual(CupsParsers.detectQualityKey(
+            optionKeys: ["Quality", "OutputMode", "Resolution"]), "Quality")
+        XCTAssertEqual(CupsParsers.detectQualityKey(
+            optionKeys: ["cupsPrintQuality", "CNIJQuality"]),
+            "CNIJQuality")
+        XCTAssertEqual(CupsParsers.detectQualityKey(
+            optionKeys: ["OutputMode", "Resolution"]), "OutputMode")
+        XCTAssertEqual(CupsParsers.detectQualityKey(
+            optionKeys: ["Resolution"]), "Resolution")
+        XCTAssertNil(CupsParsers.detectQualityKey(optionKeys: ["PageSize"]))
+    }
+
+    func testCapabilitiesQuality() {
+        let service = CupsService()
+        let listings = CupsParsers.lpoptionsList(lpoptionsL)
+        let caps = service.capabilities(from: listings, ppd: nil)
+
+        // EPIJ_Qual is the roster member — all seven Epson codes
+        // enumerate in the driver's own (non-sorted) order (#180).
+        XCTAssertEqual(caps.qualityKey, "EPIJ_Qual")
+        XCTAssertEqual(caps.qualities.map(\.id),
+            ["301", "302", "303", "308", "304", "305", "307"])
+        XCTAssertEqual(caps.qualityDefault, "303")
+    }
+
+    func testCapabilitiesQualityPpdLabels() {
+        // Epson XP-55 PPD fragment — the seven `*EPIJ_Qual id/Label`
+        // lines in the driver's own order (#180).
+        let ppd = """
+            *OpenUI *EPIJ_Qual/Print Quality: PickOne
+            *DefaultEPIJ_Qual: 303
+            *EPIJ_Qual 301/Fast Economy: ""
+            *EPIJ_Qual 302/Economy: ""
+            *EPIJ_Qual 303/Normal: ""
+            *EPIJ_Qual 308/Draft: ""
+            *EPIJ_Qual 304/Fine: ""
+            *EPIJ_Qual 305/Quality: ""
+            *EPIJ_Qual 307/Best Quality: ""
+            *CloseUI: *EPIJ_Qual
+            """
+        let service = CupsService()
+        let listings = CupsParsers.lpoptionsList(
+            "EPIJ_Qual/Print Quality: 301 302 *303 308 304 305 307\n")
+        let caps = service.capabilities(from: listings, ppd: ppd)
+
+        XCTAssertEqual(caps.qualityKey, "EPIJ_Qual")
+        XCTAssertEqual(caps.qualities, [
+            PrinterQuality(id: "301", name: "Fast Economy"),
+            PrinterQuality(id: "302", name: "Economy"),
+            PrinterQuality(id: "303", name: "Normal"),
+            PrinterQuality(id: "308", name: "Draft"),
+            PrinterQuality(id: "304", name: "Fine"),
+            PrinterQuality(id: "305", name: "Quality"),
+            PrinterQuality(id: "307", name: "Best Quality"),
+        ])
+        XCTAssertEqual(caps.qualityDefault, "303")
+    }
+
+    /// #180 — the Epson listing also carries `OutputMode` (a colour
+    /// mode) and `Resolution`; detection must still pick `EPIJ_Qual`.
+    func testCapabilitiesQualityEpsonDetection() {
+        let service = CupsService()
+        let listings = CupsParsers.lpoptionsList("""
+            PageSize/Media Size: *A4 Letter
+            EPIJ_Qual/Print Quality: 301 302 *303 308 304 305 307
+            OutputMode/Color Mode: *Color Mono
+            Resolution/Resolution: *360dpi 720dpi
+            """)
+        let caps = service.capabilities(from: listings, ppd: nil)
+
+        XCTAssertEqual(caps.qualityKey, "EPIJ_Qual")
+        XCTAssertEqual(caps.qualities.count, 7)
+        XCTAssertEqual(caps.qualityDefault, "303")
+        XCTAssertFalse(caps.qualities.contains { $0.id == "Color" })
+    }
+
+    func testExtractOption() {
+        let options = "PageSize=A4 EPIJ_Qual=303 printer-info='EPSON XP-55'"
+        XCTAssertEqual(CupsParsers.extractOption(
+            named: "PageSize", fromOptionsString: options), "A4")
+        // Case-insensitive key match.
+        XCTAssertEqual(CupsParsers.extractOption(
+            named: "epij_qual", fromOptionsString: options), "303")
+        // Quoted values come back unquoted.
+        XCTAssertEqual(CupsParsers.extractOption(
+            named: "printer-info", fromOptionsString: options), "EPSON XP-55")
+        XCTAssertNil(CupsParsers.extractOption(
+            named: "InputSlot", fromOptionsString: options))
+    }
+
+    func testExtractQualityAndOrientation() {
+        let options = "orientation-requested=4 OutputMode=Gray EPIJ_Qual=305"
+        XCTAssertEqual(CupsParsers.extractQuality(
+            fromOptionsString: options), "305")
+        XCTAssertEqual(CupsParsers.extractOrientation(
+            fromOptionsString: options), "landscape")
+        XCTAssertNil(CupsParsers.extractQuality(
+            fromOptionsString: "PageSize=A4"))
+        XCTAssertNil(CupsParsers.extractOrientation(
+            fromOptionsString: "PageSize=A4"))
+    }
+
+    // MARK: - #186 capture-return
+
+    /// A captured `k=v` string maps to all four `PrintOptions`
+    /// fields — `PageSize`, the detected quality key,
+    /// `orientation-requested`, and a vendor media key (#186).
+    func testCapturedStringMapsAllFields() {
+        let captured =
+            "PageSize=A4 EPIJ_Qual=305 orientation-requested=4 CNIJMediaType=Photo"
+        XCTAssertEqual(CupsParsers.extractOption(
+            named: "PageSize", fromOptionsString: captured), "A4")
+        XCTAssertEqual(CupsParsers.extractQuality(
+            fromOptionsString: captured), "305")
+        XCTAssertEqual(CupsParsers.extractOrientation(
+            fromOptionsString: captured), "landscape")
+        XCTAssertEqual(CupsParsers.extractMediaType(
+            fromOptionsString: captured), "Photo")
+    }
+
+    /// Vendor media keys beyond `MediaType`/`EPIJ_Medi` extract via
+    /// the detection roster — `CNIJMediaType`/`StpMediaType` included
+    /// (#186). `MediaType` still wins when present alongside them.
+    func testExtractMediaTypeRosterFallback() {
+        XCTAssertEqual(CupsParsers.extractMediaType(
+            fromOptionsString: "CNIJMediaType=PhotoPlus"), "PhotoPlus")
+        XCTAssertEqual(CupsParsers.extractMediaType(
+            fromOptionsString: "StpMediaType=Glossy"), "Glossy")
+        XCTAssertEqual(CupsParsers.extractMediaType(
+            fromOptionsString: "EPIJ_Medi=Photo"), "Photo")
+        // `MediaType` keeps first precedence (docs/11 §tests).
+        XCTAssertEqual(CupsParsers.extractMediaType(
+            fromOptionsString: "CNIJMediaType=PhotoPlus MediaType=Plain"),
+            "Plain")
+        XCTAssertNil(CupsParsers.extractMediaType(
+            fromOptionsString: "PageSize=A4"))
+    }
+
     func testDriverBypass() {
         func pair(_ keys: Set<String>) -> String? {
             CupsParsers.detectDriverColorBypass(optionKeys: keys)
@@ -130,5 +281,178 @@ final class CupsParsersTests: XCTestCase {
         XCTAssertEqual(pair(["ColorCorrection"]), "ColorCorrection=Uncorrected")
         XCTAssertEqual(pair(["EpsonColorMode"]), "EpsonColorMode=Off")
         XCTAssertNil(pair(["PageSize"]))
+    }
+
+    // MARK: - #181 Canon media locale precedence + PPD encoding
+
+    /// The 18 Canon Pro9500 media types named in the issue — the ids
+    /// are the numeric codes the driver enumerates via `lpoptions -l`.
+    private let canonMedia: [(id: String, label: String)] = [
+        ("0", "Plain Paper"),
+        ("1", "Photo Paper Plus Glossy II"),
+        ("2", "Photo Paper Pro Platinum N"),
+        ("3", "Photo Paper Pro Platinum"),
+        ("4", "Photo Paper Pro Luster"),
+        ("5", "Photo Paper Plus Semi-gloss"),
+        ("6", "Matte Photo Paper"),
+        ("7", "Fine Art \"Photo Rag\""),
+        ("8", "Fine Art \"Museum Etching\""),
+        ("9", "Photo Paper Pro Premium Matte"),
+        ("10", "Fine Art Premium Matte"),
+        ("11", "Other Fine Art Paper"),
+        ("12", "Canvas"),
+        ("13", "Board Paper"),
+        ("14", "Ink Jet Hagaki"),
+        ("15", "Hagaki"),
+        ("16", "Printable disc"),
+        ("17", "Printable disc (bleed-proof)"),
+    ]
+
+    /// Canon Pro9500-shaped fragment: the unqualified base block comes
+    /// early and the `th.` block trails at the end — the ordering that
+    /// let Thai overwrite English under last-write-wins (#181).
+    private var canonPPD: String {
+        var lines = [
+            "*OpenUI *CNIJMediaType/Media Type: PickOne",
+            "*DefaultCNIJMediaType: 0",
+        ]
+        for media in canonMedia {
+            lines.append(
+                "*CNIJMediaType \(media.id)/\(media.label): \"\"")
+        }
+        lines.append("*CloseUI: *CNIJMediaType")
+        for media in canonMedia {
+            lines.append(
+                "*th.CNIJMediaType \(media.id)/กระดาษ\(media.id): \"\"")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    func testPpdLabelsUnqualifiedSurvivesTrailingThai() {
+        let labels = CupsParsers.ppdChoiceLabels(
+            canonPPD, key: "CNIJMediaType")
+        XCTAssertEqual(labels["0"], "Plain Paper")
+        XCTAssertEqual(labels["17"], "Printable disc (bleed-proof)")
+    }
+
+    func testPpdLabelsUnqualifiedWinsRegardlessOfOrder() {
+        // `th.` block first — precedence is deterministic, not
+        // positional (#181, E3).
+        let ppd = """
+            *th.CNIJMediaType 0/กระดาษธรรมดา: ""
+            *CNIJMediaType 0/Plain Paper: ""
+            """
+        let labels = CupsParsers.ppdChoiceLabels(ppd, key: "CNIJMediaType")
+        XCTAssertEqual(labels["0"], "Plain Paper")
+    }
+
+    func testPpdLabelsQualifiedFallbackOrder() {
+        // en_US > en > first-qualified-seen (#181, E3).
+        let ppd = """
+            *en.CNIJMediaType 1/English Label: ""
+            *en_US.CNIJMediaType 1/US English Label: ""
+            *th.CNIJMediaType 1/กระดาษ: ""
+            *fr.CNIJMediaType 2/Français: ""
+            *de.CNIJMediaType 2/Deutsch: ""
+            """
+        let labels = CupsParsers.ppdChoiceLabels(ppd, key: "CNIJMediaType")
+        XCTAssertEqual(labels["1"], "US English Label")
+        // A qualified-only id still gets its first-seen qualified
+        // label — never left unlabeled (R9).
+        XCTAssertEqual(labels["2"], "Français")
+    }
+
+    func testPpdLabelsHexEscapeDecoding() {
+        let ppd = """
+            *CNIJMediaType 3/Photo Paper Plus Glossy<2F>Matte: ""
+            *CNIJMediaType 4/Plain<20>Paper: ""
+            *CNIJMediaType 5/Bad<ZZ>Escape: ""
+            """
+        let labels = CupsParsers.ppdChoiceLabels(ppd, key: "CNIJMediaType")
+        XCTAssertEqual(labels["3"], "Photo Paper Plus Glossy/Matte")
+        XCTAssertEqual(labels["4"], "Plain Paper")
+        XCTAssertEqual(labels["5"], "Bad<ZZ>Escape")
+    }
+
+    /// Every `CNIJMediaType` choice enumerated by `lpoptions -l` gets a
+    /// non-Thai label (E1 — the true count is the hardware gate's, so
+    /// no count is hardcoded here); the 18 named AC labels are
+    /// spot-checked.
+    func testCapabilitiesCanonMediaAllNonThai() {
+        var choices = canonMedia.map(\.id)
+        choices[0] = "*\(choices[0])"
+        let listings = CupsParsers.lpoptionsList(
+            "CNIJMediaType/Media Type: \(choices.joined(separator: " "))\n")
+        let caps = CupsService().capabilities(from: listings, ppd: canonPPD)
+
+        XCTAssertEqual(caps.mediaTypes.count, canonMedia.count)
+        for type in caps.mediaTypes {
+            XCTAssertFalse(type.name.unicodeScalars.contains {
+                (0x0E00...0x0E7F).contains($0.value)
+            }, "Thai label leaked into \(type.id): \(type.name)")
+        }
+        for media in canonMedia {
+            XCTAssertEqual(
+                caps.mediaTypes.first { $0.id == media.id }?.name,
+                media.label)
+        }
+    }
+
+    /// UTF-8 PPD carrying Thai labels decodes intact — the English
+    /// base block wins precedence and no mojibake leaks through (#181,
+    /// R10). Exercises `loadPPD` through `capabilities(for:)`.
+    func testLoadPPDUtf8ThaiSurvivesDecode() async throws {
+        let (service, root) = try makeCupsService(
+            ppdData: Data(canonPPD.utf8),
+            listing: "CNIJMediaType/Media Type: *0 1")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let caps = try await service.capabilities(for: "Canon_Test")
+        XCTAssertEqual(caps.mediaTypes.map(\.name),
+            ["Plain Paper", "Photo Paper Plus Glossy II"])
+    }
+
+    /// A PPD that is not valid UTF-8 (lone `0xE9` for `é`) falls back
+    /// to ISO-Latin-1 instead of yielding nil → raw ids (#181, R10).
+    func testLoadPPDLatin1Fallback() async throws {
+        let ppd = "*CNIJMediaType 0/Papier Couché: \"\"\n"
+        let (service, root) = try makeCupsService(
+            ppdData: ppd.data(using: .isoLatin1)!,
+            listing: "CNIJMediaType/Media Type: *0")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let caps = try await service.capabilities(for: "Canon_Test")
+        XCTAssertEqual(caps.mediaTypes,
+            [PrinterMediaType(id: "0", name: "Papier Couché")])
+    }
+
+    /// Fixture `lpoptions` + `ppdDir` so `capabilities(for:)` reaches
+    /// the private `loadPPD` — same mock style as
+    /// `MediaLibraryViewModelTests.installMockCups`.
+    private func makeCupsService(
+        ppdData: Data,
+        listing: String,
+        queue: String = "Canon_Test"
+    ) throws -> (CupsService, URL) {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("iccery-ppd-\(UUID().uuidString)")
+        let bin = root.appendingPathComponent("bin")
+        let ppdDir = root.appendingPathComponent("ppd")
+        for dir in [bin, ppdDir] {
+            try FileManager.default.createDirectory(
+                at: dir, withIntermediateDirectories: true)
+        }
+        let lpoptions = """
+            #!/bin/sh
+            printf '%s\\n' '\(listing)'
+            """
+        let scriptURL = bin.appendingPathComponent("lpoptions")
+        try lpoptions.write(to: scriptURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
+        try ppdData.write(to: ppdDir.appendingPathComponent("\(queue).ppd"))
+        return (CupsService(
+            processManager: ProcessManager(),
+            binaryDir: bin, ppdDir: ppdDir), root)
     }
 }

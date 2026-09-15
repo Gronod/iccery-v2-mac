@@ -132,8 +132,28 @@ public struct CupsService: Sendable {
                 continue
             }
         }
+
+        // Print quality — the detected roster key's listing maps to
+        // `PrinterQuality` with PPD labels and the `*` default (#183).
+        var qualities: [PrinterQuality] = []
+        var qualityDefault: String?
+        let qualityKey = CupsParsers.detectQualityKey(
+            optionKeys: Set(listings.map(\.key)))
+        if let qualityKey,
+           let listing = listings.first(where: { $0.key == qualityKey }) {
+            let labels = ppd.map {
+                CupsParsers.ppdChoiceLabels($0, key: qualityKey)
+            } ?? [:]
+            qualities = listing.choices.map {
+                PrinterQuality(id: $0, name: labels[$0] ?? $0)
+            }
+            qualityDefault = listing.defaultChoice
+        }
+
         return PrinterCapabilities(
-            trays: trays, paperSizes: sizes, mediaTypes: media)
+            trays: trays, paperSizes: sizes, mediaTypes: media,
+            qualityKey: qualityKey, qualities: qualities,
+            qualityDefault: qualityDefault)
     }
 
     /// The set of option keys a queue advertises — input to
@@ -167,7 +187,11 @@ public struct CupsService: Sendable {
 
     private func loadPPD(for queue: String) -> String? {
         let url = ppdDir.appendingPathComponent("\(queue).ppd")
-        return try? String(contentsOf: url, encoding: .utf8)
+        // UTF-8 first — the Canon Thai labels are UTF-8 and a blanket
+        // Latin-1 read would mojibake them (#181, R10). Latin-1 only
+        // when UTF-8 decoding fails outright.
+        return (try? String(contentsOf: url, encoding: .utf8))
+            ?? (try? String(contentsOf: url, encoding: .isoLatin1))
     }
 
     // MARK: - Spawn

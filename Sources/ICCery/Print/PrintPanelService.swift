@@ -17,6 +17,24 @@ enum PrintPanelError: LocalizedError {
     }
 }
 
+/// Stage 2 selections pre-applied to the bound print panel before it
+/// opens (#183/#186). Every write is warn-only — the panel still
+/// opens when a driver ignores a key.
+struct PrintPanelInitialSelections {
+    /// CUPS `PageSize` token, e.g. `"A4"` / `"Custom.595x842"`. Written
+    /// to `PMPrintSettings` **and** `PMPageFormat` (#186 E1).
+    var paperSize: String?
+    /// The queue's detected quality enumeration key, e.g. `EPIJ_Qual`.
+    var qualityKey: String?
+    /// The selected quality token.
+    var quality: String?
+    /// The selected media token — written to the queue's detected
+    /// vendor key (`CNIJMediaType`/`EPIJ_Medi`/…) (#186).
+    var mediaType: String?
+    /// `"portrait"`/`"landscape"` → `orientation-requested` 3|4 (#186).
+    var orientation: String?
+}
+
 /// Preferences → native `NSPrintPanel` bound to the selected CUPS
 /// queue (issue 13, docs/11).
 ///
@@ -41,7 +59,9 @@ struct PrintPanelService {
     func showProperties(
         queue: String,
         displayName: String?,
-        cupsService: CupsService
+        cupsService: CupsService,
+        initialSelections: PrintPanelInitialSelections =
+            PrintPanelInitialSelections()
     ) async throws -> PrintPropertiesResult? {
         #if DEBUG
         if UITestHooks.printPanelStubbed {
@@ -56,7 +76,8 @@ struct PrintPanelService {
         let optionKeys = (try? await cupsService.optionKeys(for: queue))
             ?? []
         return try runNativePanel(
-            queue: queue, displayName: display, optionKeys: optionKeys)
+            queue: queue, displayName: display, optionKeys: optionKeys,
+            initialSelections: initialSelections)
     }
 
     // MARK: - Panel
@@ -64,7 +85,8 @@ struct PrintPanelService {
     private func runNativePanel(
         queue: String,
         displayName: String?,
-        optionKeys: Set<String>
+        optionKeys: Set<String>,
+        initialSelections: PrintPanelInitialSelections
     ) throws -> PrintPropertiesResult? {
         let printInfo = NSPrintInfo()
         var pmPrinter: PMPrinter?
@@ -89,9 +111,26 @@ struct PrintPanelService {
             // queue but are not fatal when they fail.
             _ = PMSessionDefaultPrintSettings(session, settings)
             _ = PMSessionDefaultPageFormat(session, pageFormat)
+            // Initial selections — after `PMSessionDefault*`, before
+            // ColorSync suppression ②–⑤ (locked write order,
+            // #183/#186). Paper is TWO writes (E1): the `PageSize`
+            // print-settings value drivers/capture read AND the
+            // `PMPageFormat` paper the panel's dropdown reflects.
+            applyInitialSelections(
+                initialSelections, to: settings, optionKeys: optionKeys)
+            if let paperToken = initialSelections.paperSize {
+                applyPaperPageFormat(
+                    paperToken, printer: printer, session: session,
+                    printInfo: printInfo)
+            }
             boundViaPM = true
         } else {
             // Fallback: NSPrinter by display name (docs/11 §binding).
+            // Warn — the display name can resolve a *different* queue
+            // (#186 E2: diagnosable, not a proven defect).
+            AppLogger.shared.warn(
+                "Print panel: PM binding unavailable for '\(queue)' — "
+                    + "falling back to NSPrinter(displayName)")
             guard let displayName,
                   let nsPrinter = NSPrinter(name: displayName)
             else {
@@ -138,7 +177,9 @@ struct PrintPanelService {
 
         // ⑥ Capture the user's choices — filtered replay options plus
         // the media type they picked. Re-fetch the settings handle so
-        // we read back what the modal wrote.
+        // we read back what the modal wrote. Paper size, quality, and
+        // orientation ride back parsed from the captured `k=v` string
+        // (#183); the PDE may rewrite or drop them (R12).
         var cupsOptions: String?
         var mediaType: String?
         if boundViaPM {
@@ -148,6 +189,7 @@ struct PrintPanelService {
             cupsOptions = captured.cupsOptions
             mediaType = captured.mediaType
         }
+        let capturedOptions = cupsOptions ?? ""
         return PrintPropertiesResult(
             selectedPrinter: boundViaPM
                 ? Self.currentPrinterID(
@@ -156,9 +198,142 @@ struct PrintPanelService {
                     fallback: queue)
                 : nil,
             options: PrintOptions(
+                orientation: CupsParsers.extractOrientation(
+                    fromOptionsString: capturedOptions),
+                paperSize: CupsParsers.extractOption(
+                    named: "PageSize", fromOptionsString: capturedOptions),
                 mediaType: mediaType,
+                quality: CupsParsers.extractQuality(
+                    fromOptionsString: capturedOptions),
                 ppdUncorrectedPassthrough: true,
                 cupsOptions: cupsOptions))
+    }
+
+    /// Initial-selection `PMPrintSettings` writes — paper, quality,
+    /// media type, orientation. All warn-only: a driver that ignores
+    /// a key must not keep the panel from opening (R12 surfaces via
+    /// the capture echo instead).
+    private func applyInitialSelections(
+        _ selections: PrintPanelInitialSelections,
+        to settings: PMPrintSettings,
+        optionKeys: Set<String>
+    ) {
+        if let paperSize = selections.paperSize {
+            warnOnFailure(PMPrintSettingsSetValue(
+                settings, "PageSize" as CFString,
+                paperSize as CFString, false), key: "PageSize")
+        }
+        if let key = selections.qualityKey, let value = selections.quality {
+            warnOnFailure(PMPrintSettingsSetValue(
+                settings, key as CFString,
+                value as CFString, false), key: key)
+        }
+        // Media type via the queue's detected vendor key (#186).
+        if let mediaType = selections.mediaType,
+           let mediaKey = CupsParsers.detectMediaTypeKey(
+               optionKeys: optionKeys) {
+            warnOnFailure(PMPrintSettingsSetValue(
+                settings, mediaKey as CFString,
+                mediaType as CFString, false), key: mediaKey)
+        }
+        // Orientation — portrait=3, landscape=4 (CUPS IPP codes).
+        if let orientation = selections.orientation {
+            let code = orientation == "landscape" ? "4" : "3"
+            warnOnFailure(PMPrintSettingsSetValue(
+                settings, "orientation-requested" as CFString,
+                code as CFString, false), key: "orientation-requested")
+        }
+    }
+
+    /// The `PMPageFormat` half of paper preselect (#186 E1): the
+    /// panel's paper dropdown reflects the page format's `PMPaper`,
+    /// not `PMPrintSettings`. Match the Stage 2 `PageSize` token to a
+    /// paper from `PMPrinterGetPaperList`, rebuild the page format
+    /// around it, and copy it into the printInfo's format (TN2248:
+    /// `PMCreatePageFormatWithPMPaper` → `PMSessionValidatePageFormat`
+    /// → `PMCopyPageFormat` → `updateFromPMPageFormat`).
+    /// `Custom.<w>x<h>` tokens (already points) have no `PMPaper` —
+    /// set the Cocoa `paperSize` directly. Warn-only throughout: a
+    /// missed match must not keep the panel from opening.
+    private func applyPaperPageFormat(
+        _ token: String,
+        printer: PMPrinter,
+        session: PMPrintSession,
+        printInfo: NSPrintInfo
+    ) {
+        if let custom = Self.customPaperDimensions(from: token) {
+            printInfo.paperSize = NSSize(
+                width: custom.width, height: custom.height)
+            return
+        }
+        var paperList: Unmanaged<CFArray>?
+        guard PMPrinterGetPaperList(printer, &paperList) == 0,
+              let papers = paperList?.takeUnretainedValue()
+        else {
+            AppLogger.shared.warn(
+                "Print panel: PMPrinterGetPaperList failed — "
+                    + "paper preselect skipped")
+            return
+        }
+        // The list (and its elements) is owned by the printer —
+        // borrowed, never released.
+        var match: PMPaper?
+        for index in 0..<CFArrayGetCount(papers) {
+            let paper = unsafeBitCast(
+                CFArrayGetValueAtIndex(papers, index), to: PMPaper.self)
+            var idRef: Unmanaged<CFString>?
+            guard PMPaperGetID(paper, &idRef) == 0,
+                  let paperID = idRef?.takeUnretainedValue() as String?
+            else { continue }
+            if paperID == token {
+                match = paper
+                break
+            }
+        }
+        guard let paper = match else {
+            AppLogger.shared.warn(
+                "Print panel: no PMPaper id matches '\(token)'")
+            return
+        }
+        var created: PMPageFormat?
+        guard PMCreatePageFormatWithPMPaper(&created, paper) == 0,
+              let newFormat = created
+        else {
+            AppLogger.shared.warn(
+                "Print panel: PMCreatePageFormatWithPMPaper failed "
+                    + "for '\(token)'")
+            return
+        }
+        defer { PMRelease(unsafeBitCast(newFormat, to: PMObject.self)) }
+        _ = PMSessionValidatePageFormat(session, newFormat, nil)
+        let destination = unsafeBitCast(
+            printInfo.pmPageFormat(), to: PMPageFormat.self)
+        _ = PMCopyPageFormat(newFormat, destination)
+        printInfo.updateFromPMPageFormat()
+    }
+
+    /// `Custom.<w>x<h>` → dimensions in points (the token builder
+    /// emits integer points, mm × 72/25.4). `nil` for non-custom or
+    /// malformed tokens — a malformed `Custom.*` then misses the
+    /// `PMPaper` match and logs instead of guessing a size.
+    static func customPaperDimensions(
+        from token: String
+    ) -> (width: Double, height: Double)? {
+        guard token.hasPrefix("Custom.") else { return nil }
+        let dims = token.dropFirst("Custom.".count).split(separator: "x")
+        guard dims.count == 2,
+              let width = Double(dims[0]), let height = Double(dims[1]),
+              width > 0, height > 0
+        else { return nil }
+        return (width, height)
+    }
+
+    private func warnOnFailure(_ status: OSStatus, key: String) {
+        if status != 0 {
+            AppLogger.shared.warn(
+                "Print panel: PMPrintSettingsSetValue(\(key)) "
+                    + "rejected (\(status))")
+        }
     }
 
     // MARK: - PM helpers
