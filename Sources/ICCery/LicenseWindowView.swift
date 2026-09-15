@@ -117,6 +117,7 @@ See: https://git.i3omb.com/gronod/argyllcms/releases
                             .accessibilityIdentifier("agplIsolationNote")
                     }
                     .padding(.horizontal, 4)
+                    .accessibilityElement(children: .contain)
                     .accessibilityIdentifier("attributionSection")
                 }
                 .padding(24)
@@ -124,6 +125,7 @@ See: https://git.i3omb.com/gronod/argyllcms/releases
             .frame(minWidth: 600, minHeight: 500)
             .background(Theme.panel)
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("licenseWindow")
     }
 

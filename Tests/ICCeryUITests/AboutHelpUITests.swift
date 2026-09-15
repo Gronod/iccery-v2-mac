@@ -20,6 +20,13 @@ final class AboutHelpUITests: XCTestCase {
     private func element(_ id: String) -> XCUIElement {
         let inApp = app.descendants(matching: .any)[id].firstMatch
         if inApp.exists { return inApp }
+        // Search all sheets (including nested sheets) for the element.
+        // The license window is a nested sheet (sheet presented from AboutView).
+        for sheet in app.sheets.allElementsBoundByIndex {
+            let inSheet = sheet.descendants(matching: .any)[id].firstMatch
+            if inSheet.exists { return inSheet }
+        }
+        // Fallback to original behavior
         return app.sheets.firstMatch.descendants(matching: .any)[id].firstMatch
     }
 
