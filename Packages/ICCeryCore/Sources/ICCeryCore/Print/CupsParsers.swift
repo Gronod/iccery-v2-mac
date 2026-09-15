@@ -174,8 +174,13 @@ public enum CupsParsers {
 
     /// PPD `*<key> <id>/<Human Label>:` lines → `id → label` map.
     /// Language-qualified forms (`*en_US.<key> id/Label:`) also match.
+    /// Precedence is deterministic, not positional (#181): unqualified
+    /// `*Key` > `en_US.` > `en.` > first-qualified-seen, so a trailing
+    /// locale block (Canon `th.CNIJMediaType`) can never overwrite the
+    /// base English labels — and a qualified-only id still gets its
+    /// first-seen qualified label (R9).
     public static func ppdChoiceLabels(_ ppd: String, key: String) -> [String: String] {
-        var map: [String: String] = [:]
+        var hits: [String: [(qualifier: String?, label: String)]] = [:]
         for rawLine in ppd.split(separator: "\n") {
             var line = rawLine.trimmingCharacters(in: .whitespaces)
             guard line.hasPrefix("*"), !line.hasPrefix("**") else { continue }
@@ -183,7 +188,9 @@ public enum CupsParsers {
             // Optional locale qualifier: `en_US.InputSlot` → `InputSlot`.
             // Only strip when the part before the first `.` looks like
             // a locale (short `xx`/`xx_YY`); real keys containing dots
-            // are left alone.
+            // are left alone. The qualifier is recorded for precedence
+            // rather than dropped (#181).
+            var qualifier: String?
             if let dot = line.firstIndex(of: ".") {
                 let prefix = line[..<dot]
                 let looksLikeLocale = (2...5).contains(prefix.count)
@@ -191,6 +198,7 @@ public enum CupsParsers {
                     && (prefix.count == 2 || prefix.contains("_"))
                 let candidate = line[line.index(after: dot)...]
                 if looksLikeLocale && candidate.hasPrefix(key) {
+                    qualifier = prefix.lowercased()
                     line = String(candidate)
                 }
             }
@@ -201,13 +209,48 @@ public enum CupsParsers {
             rest = String(rest[..<colon])
             // `<id>/<Human label>` — human label after the last `/`.
             guard let slash = rest.firstIndex(of: "/") else { continue }
-            let id = String(rest[..<slash])
-                .trimmingCharacters(in: .whitespaces)
-            let human = String(rest[rest.index(after: slash)...])
-                .trimmingCharacters(in: .whitespaces)
-            if !id.isEmpty { map[id] = human.isEmpty ? id : human }
+            let id = ppdUnescape(String(rest[..<slash])
+                .trimmingCharacters(in: .whitespaces))
+            let human = ppdUnescape(String(rest[rest.index(after: slash)...])
+                .trimmingCharacters(in: .whitespaces))
+            guard !id.isEmpty else { continue }
+            hits[id, default: []].append(
+                (qualifier, human.isEmpty ? id : human))
+        }
+        var map: [String: String] = [:]
+        for (id, candidates) in hits {
+            // First occurrence wins inside each qualifier class, in
+            // file order — same as the old sequential behaviour.
+            map[id] = candidates.first { $0.qualifier == nil }?.label
+                ?? candidates.first { $0.qualifier == "en_us" }?.label
+                ?? candidates.first { $0.qualifier == "en" }?.label
+                ?? candidates[0].label
         }
         return map
+    }
+
+    /// PPD `<XX>` hex escapes → the literal byte (`<2F>` → `/`,
+    /// `<20>` → space). Anything that is not `<` + two hex digits +
+    /// `>` passes through untouched (#181).
+    private static func ppdUnescape(_ text: String) -> String {
+        var result = ""
+        var index = text.startIndex
+        while index < text.endIndex {
+            guard text[index] == "<",
+                  let hexEnd = text.index(
+                      index, offsetBy: 3, limitedBy: text.endIndex),
+                  hexEnd < text.endIndex, text[hexEnd] == ">",
+                  let byte = UInt8(
+                      text[text.index(after: index)..<hexEnd], radix: 16)
+            else {
+                result.append(text[index])
+                index = text.index(after: index)
+                continue
+            }
+            result.append(Character(UnicodeScalar(byte)))
+            index = text.index(after: hexEnd)
+        }
+        return result
     }
 
     // MARK: - Detection (docs/11)

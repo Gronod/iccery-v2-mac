@@ -246,4 +246,177 @@ final class CupsParserTests: XCTestCase {
         XCTAssertEqual(pair(["EpsonColorMode"]), "EpsonColorMode=Off")
         XCTAssertNil(pair(["PageSize"]))
     }
+
+    // MARK: - #181 Canon media locale precedence + PPD encoding
+
+    /// The 18 Canon Pro9500 media types named in the issue — the ids
+    /// are the numeric codes the driver enumerates via `lpoptions -l`.
+    private let canonMedia: [(id: String, label: String)] = [
+        ("0", "Plain Paper"),
+        ("1", "Photo Paper Plus Glossy II"),
+        ("2", "Photo Paper Pro Platinum N"),
+        ("3", "Photo Paper Pro Platinum"),
+        ("4", "Photo Paper Pro Luster"),
+        ("5", "Photo Paper Plus Semi-gloss"),
+        ("6", "Matte Photo Paper"),
+        ("7", "Fine Art \"Photo Rag\""),
+        ("8", "Fine Art \"Museum Etching\""),
+        ("9", "Photo Paper Pro Premium Matte"),
+        ("10", "Fine Art Premium Matte"),
+        ("11", "Other Fine Art Paper"),
+        ("12", "Canvas"),
+        ("13", "Board Paper"),
+        ("14", "Ink Jet Hagaki"),
+        ("15", "Hagaki"),
+        ("16", "Printable disc"),
+        ("17", "Printable disc (bleed-proof)"),
+    ]
+
+    /// Canon Pro9500-shaped fragment: the unqualified base block comes
+    /// early and the `th.` block trails at the end — the ordering that
+    /// let Thai overwrite English under last-write-wins (#181).
+    private var canonPPD: String {
+        var lines = [
+            "*OpenUI *CNIJMediaType/Media Type: PickOne",
+            "*DefaultCNIJMediaType: 0",
+        ]
+        for media in canonMedia {
+            lines.append(
+                "*CNIJMediaType \(media.id)/\(media.label): \"\"")
+        }
+        lines.append("*CloseUI: *CNIJMediaType")
+        for media in canonMedia {
+            lines.append(
+                "*th.CNIJMediaType \(media.id)/กระดาษ\(media.id): \"\"")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    func testPpdLabelsUnqualifiedSurvivesTrailingThai() {
+        let labels = CupsParsers.ppdChoiceLabels(
+            canonPPD, key: "CNIJMediaType")
+        XCTAssertEqual(labels["0"], "Plain Paper")
+        XCTAssertEqual(labels["17"], "Printable disc (bleed-proof)")
+    }
+
+    func testPpdLabelsUnqualifiedWinsRegardlessOfOrder() {
+        // `th.` block first — precedence is deterministic, not
+        // positional (#181, E3).
+        let ppd = """
+            *th.CNIJMediaType 0/กระดาษธรรมดา: ""
+            *CNIJMediaType 0/Plain Paper: ""
+            """
+        let labels = CupsParsers.ppdChoiceLabels(ppd, key: "CNIJMediaType")
+        XCTAssertEqual(labels["0"], "Plain Paper")
+    }
+
+    func testPpdLabelsQualifiedFallbackOrder() {
+        // en_US > en > first-qualified-seen (#181, E3).
+        let ppd = """
+            *en.CNIJMediaType 1/English Label: ""
+            *en_US.CNIJMediaType 1/US English Label: ""
+            *th.CNIJMediaType 1/กระดาษ: ""
+            *fr.CNIJMediaType 2/Français: ""
+            *de.CNIJMediaType 2/Deutsch: ""
+            """
+        let labels = CupsParsers.ppdChoiceLabels(ppd, key: "CNIJMediaType")
+        XCTAssertEqual(labels["1"], "US English Label")
+        // A qualified-only id still gets its first-seen qualified
+        // label — never left unlabeled (R9).
+        XCTAssertEqual(labels["2"], "Français")
+    }
+
+    func testPpdLabelsHexEscapeDecoding() {
+        let ppd = """
+            *CNIJMediaType 3/Photo Paper Plus Glossy<2F>Matte: ""
+            *CNIJMediaType 4/Plain<20>Paper: ""
+            *CNIJMediaType 5/Bad<ZZ>Escape: ""
+            """
+        let labels = CupsParsers.ppdChoiceLabels(ppd, key: "CNIJMediaType")
+        XCTAssertEqual(labels["3"], "Photo Paper Plus Glossy/Matte")
+        XCTAssertEqual(labels["4"], "Plain Paper")
+        XCTAssertEqual(labels["5"], "Bad<ZZ>Escape")
+    }
+
+    /// Every `CNIJMediaType` choice enumerated by `lpoptions -l` gets a
+    /// non-Thai label (E1 — the true count is the hardware gate's, so
+    /// no count is hardcoded here); the 18 named AC labels are
+    /// spot-checked.
+    func testCapabilitiesCanonMediaAllNonThai() {
+        var choices = canonMedia.map(\.id)
+        choices[0] = "*\(choices[0])"
+        let listings = CupsParsers.lpoptionsList(
+            "CNIJMediaType/Media Type: \(choices.joined(separator: " "))\n")
+        let caps = CupsService().capabilities(from: listings, ppd: canonPPD)
+
+        XCTAssertEqual(caps.mediaTypes.count, canonMedia.count)
+        for type in caps.mediaTypes {
+            XCTAssertFalse(type.name.unicodeScalars.contains {
+                (0x0E00...0x0E7F).contains($0.value)
+            }, "Thai label leaked into \(type.id): \(type.name)")
+        }
+        for media in canonMedia {
+            XCTAssertEqual(
+                caps.mediaTypes.first { $0.id == media.id }?.name,
+                media.label)
+        }
+    }
+
+    /// UTF-8 PPD carrying Thai labels decodes intact — the English
+    /// base block wins precedence and no mojibake leaks through (#181,
+    /// R10). Exercises `loadPPD` through `capabilities(for:)`.
+    func testLoadPPDUtf8ThaiSurvivesDecode() async throws {
+        let (service, root) = try makeCupsService(
+            ppdData: Data(canonPPD.utf8),
+            listing: "CNIJMediaType/Media Type: *0 1")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let caps = try await service.capabilities(for: "Canon_Test")
+        XCTAssertEqual(caps.mediaTypes.map(\.name),
+            ["Plain Paper", "Photo Paper Plus Glossy II"])
+    }
+
+    /// A PPD that is not valid UTF-8 (lone `0xE9` for `é`) falls back
+    /// to ISO-Latin-1 instead of yielding nil → raw ids (#181, R10).
+    func testLoadPPDLatin1Fallback() async throws {
+        let ppd = "*CNIJMediaType 0/Papier Couché: \"\"\n"
+        let (service, root) = try makeCupsService(
+            ppdData: ppd.data(using: .isoLatin1)!,
+            listing: "CNIJMediaType/Media Type: *0")
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let caps = try await service.capabilities(for: "Canon_Test")
+        XCTAssertEqual(caps.mediaTypes,
+            [PrinterMediaType(id: "0", name: "Papier Couché")])
+    }
+
+    /// Fixture `lpoptions` + `ppdDir` so `capabilities(for:)` reaches
+    /// the private `loadPPD` — same mock style as
+    /// `MediaLibraryViewModelTests.installMockCups`.
+    private func makeCupsService(
+        ppdData: Data,
+        listing: String,
+        queue: String = "Canon_Test"
+    ) throws -> (CupsService, URL) {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("iccery-ppd-\(UUID().uuidString)")
+        let bin = root.appendingPathComponent("bin")
+        let ppdDir = root.appendingPathComponent("ppd")
+        for dir in [bin, ppdDir] {
+            try FileManager.default.createDirectory(
+                at: dir, withIntermediateDirectories: true)
+        }
+        let lpoptions = """
+            #!/bin/sh
+            printf '%s\\n' '\(listing)'
+            """
+        let scriptURL = bin.appendingPathComponent("lpoptions")
+        try lpoptions.write(to: scriptURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
+        try ppdData.write(to: ppdDir.appendingPathComponent("\(queue).ppd"))
+        return (CupsService(
+            processManager: ProcessManager(),
+            binaryDir: bin, ppdDir: ppdDir), root)
+    }
 }
