@@ -187,7 +187,11 @@ public struct CupsService: Sendable {
 
     private func loadPPD(for queue: String) -> String? {
         let url = ppdDir.appendingPathComponent("\(queue).ppd")
-        return try? String(contentsOf: url, encoding: .utf8)
+        // UTF-8 first — the Canon Thai labels are UTF-8 and a blanket
+        // Latin-1 read would mojibake them (#181, R10). Latin-1 only
+        // when UTF-8 decoding fails outright.
+        return (try? String(contentsOf: url, encoding: .utf8))
+            ?? (try? String(contentsOf: url, encoding: .isoLatin1))
     }
 
     // MARK: - Spawn
