@@ -18,6 +18,9 @@ Vendor/Argyll/
 # XcodeGen output (regenerate with `make gen`)
 ICCery.xcodeproj/
 
+# Local-only developer helpers (never committed)
+/set-version.sh
+
 # macOS
 .DS_Store
 

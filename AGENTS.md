@@ -61,3 +61,14 @@ Universal (`ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO`) is still required for rel
 2-arg `(PMPrintSession, CFStringRef) -> OSStatus`. Never pass integer `1`.
 Modes: `AP_ApplicationColorMatching` then `ApplicationColorMatching`.
 `lp` path and Quartz/`ICCeryPrintKit` path use **different** ColorSync dictionaries. Never mix.
+
+## Gitea issue dependencies
+Use the `gitea` MCP (custom build with blocking support — verified working):
+
+- `issue_write` methods:
+  - `add_dependency` — `blocking_issue` blocks `issue_number`.
+  - `remove_dependency` — removes `blocking_issue` from `issue_number`'s blockers.
+  - `block_issue` / `unblock_issue` — `issue_number` blocks/unblocks `blocked_issue`.
+- `issue_read` methods: `list_dependencies` (issues blocking N),
+  `list_blocks` (issues N blocks).
+- All issue numbers are *display numbers*, not db ids.
