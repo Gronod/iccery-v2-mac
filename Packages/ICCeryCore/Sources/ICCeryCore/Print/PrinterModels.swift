@@ -66,6 +66,18 @@ public struct PrinterMediaType: Codable, Equatable, Sendable {
     }
 }
 
+/// Print quality: `id` is the option token (e.g. `"303"`), `name` the
+/// human label after PPD enrichment (mirrors `PrinterMediaType`, #183).
+public struct PrinterQuality: Codable, Equatable, Sendable {
+    public var id: String
+    public var name: String
+
+    public init(id: String, name: String) {
+        self.id = id
+        self.name = name
+    }
+}
+
 public struct PrinterCapabilities: Codable, Equatable, Sendable {
     public var trays: [PrinterTray]
     public var paperSizes: [PrinterPaperSize]
@@ -73,17 +85,29 @@ public struct PrinterCapabilities: Codable, Equatable, Sendable {
     /// Always `true` on macOS (spec parity — CUPS honours
     /// `orientation-requested`).
     public var supportsOrientation: Bool
+    /// The queue's detected quality enumeration key
+    /// (`CupsParsers.detectQualityKey`), e.g. `EPIJ_Qual` (#183).
+    public var qualityKey: String?
+    public var qualities: [PrinterQuality]
+    /// The `*`-marked default choice from `lpoptions -l`, if any.
+    public var qualityDefault: String?
 
     public init(
         trays: [PrinterTray] = [],
         paperSizes: [PrinterPaperSize] = [],
         mediaTypes: [PrinterMediaType] = [],
-        supportsOrientation: Bool = true
+        supportsOrientation: Bool = true,
+        qualityKey: String? = nil,
+        qualities: [PrinterQuality] = [],
+        qualityDefault: String? = nil
     ) {
         self.trays = trays
         self.paperSizes = paperSizes
         self.mediaTypes = mediaTypes
         self.supportsOrientation = supportsOrientation
+        self.qualityKey = qualityKey
+        self.qualities = qualities
+        self.qualityDefault = qualityDefault
     }
 }
 
@@ -96,9 +120,12 @@ public struct PrintOptions: Codable, Equatable, Sendable {
     public var paperSource: Int?
     /// `"portrait"` / `"landscape"` → `orientation-requested=3|4`.
     public var orientation: String?
-    /// printtarg layout page size → `PageSize=` (skipped if captured).
+    /// Stage 2 paper token → `PageSize=` (skipped if captured, #183).
     public var paperSize: String?
     public var mediaType: String?
+    /// Print-quality token → `-o <detectedQualityKey>=` (skipped if
+    /// captured, #183).
+    public var quality: String?
     public var ppdUncorrectedPassthrough: Bool?
     /// Space-separated `key=value` captured from
     /// `PMPrintSettingsToOptions` and filtered (docs/11 layer ⑥).
@@ -109,6 +136,7 @@ public struct PrintOptions: Codable, Equatable, Sendable {
         orientation: String? = nil,
         paperSize: String? = nil,
         mediaType: String? = nil,
+        quality: String? = nil,
         ppdUncorrectedPassthrough: Bool? = nil,
         cupsOptions: String? = nil
     ) {
@@ -116,6 +144,7 @@ public struct PrintOptions: Codable, Equatable, Sendable {
         self.orientation = orientation
         self.paperSize = paperSize
         self.mediaType = mediaType
+        self.quality = quality
         self.ppdUncorrectedPassthrough = ppdUncorrectedPassthrough
         self.cupsOptions = cupsOptions
     }

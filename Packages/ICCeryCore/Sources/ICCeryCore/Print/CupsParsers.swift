@@ -232,6 +232,47 @@ public enum CupsParsers {
         return pairs.first(where: { $0.key == "EPIJ_Medi" })?.value
     }
 
+    /// Print-quality option key in preference order — vendor-first,
+    /// weakest last (#183). `OutputMode`/`Resolution` sit last: on some
+    /// drivers they are colour-mode keys, not quality (#180).
+    /// `CNIJPrintMode2`/`CNIJPQualitySlider` are deferred (#16).
+    public static let qualityKeys = [
+        "EPIJ_Qual", "CNIJPrintQuality", "CNIJQuality",
+        "cupsPrintQuality", "PrintQuality", "Quality", "StpQuality",
+        "EPIJ_Quality", "OutputMode", "Resolution",
+    ]
+
+    public static func detectQualityKey(optionKeys: Set<String>) -> String? {
+        qualityKeys.first { optionKeys.contains($0) }
+    }
+
+    /// A single value from a captured `key=value key=value` options
+    /// string — case-insensitive key match (#183 capture-return).
+    public static func extractOption(
+        named key: String,
+        fromOptionsString options: String
+    ) -> String? {
+        lpoptions(options).first {
+            $0.key.caseInsensitiveCompare(key) == .orderedSame
+        }?.value
+    }
+
+    /// Print-quality token from a captured options string — the queue's
+    /// quality key is detected from the roster before extracting (#183).
+    public static func extractQuality(fromOptionsString options: String) -> String? {
+        let pairs = lpoptions(options)
+        guard let key = detectQualityKey(
+            optionKeys: Set(pairs.map(\.key)))
+        else { return nil }
+        return pairs.first(where: { $0.key == key })?.value
+    }
+
+    /// `orientation-requested=3|4` → `"portrait"`/`"landscape"` (#183).
+    public static func extractOrientation(fromOptionsString options: String) -> String? {
+        extractOption(named: "orientation-requested", fromOptionsString: options)
+            .map { $0 == "4" ? "landscape" : "portrait" }
+    }
+
     /// Driver "no colour adjustment" key=value for `lpoptions -l` keys
     /// (docs/11 layer ④): Canon `CNIJIntent2=4` else `CNIJIntent=4`;
     /// Epson `EPIJ_CCor=0` when the key exists else `EPIJ_CMat=3`;

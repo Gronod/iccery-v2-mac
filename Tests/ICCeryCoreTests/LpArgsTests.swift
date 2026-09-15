@@ -101,6 +101,61 @@ final class LpArgsTests: XCTestCase {
         XCTAssertTrue(capturedSize.contains("PageSize=Letter"))
     }
 
+    // MARK: - #183 print quality
+
+    func testQualityDerived() throws {
+        let argv = try build(
+            options: PrintOptions(
+                orientation: "portrait", mediaType: "Photo", quality: "303"),
+            optionKeys: ["EPIJ_Qual", "MediaType"])
+        XCTAssertTrue(argv.contains("EPIJ_Qual=303"))
+        // Emit order: after the media option, before orientation.
+        let media = argv.firstIndex(of: "MediaType=Photo")!
+        let quality = argv.firstIndex(of: "EPIJ_Qual=303")!
+        let orient = argv.firstIndex(of: "orientation-requested=3")!
+        XCTAssertTrue(media < quality && quality < orient)
+    }
+
+    func testQualityDetectedKey() throws {
+        // The detected queue key is used, not a hardcoded one.
+        let argv = try build(
+            options: PrintOptions(quality: "High"),
+            optionKeys: ["cupsPrintQuality"])
+        XCTAssertTrue(argv.contains("cupsPrintQuality=High"))
+    }
+
+    func testCapturedWinsQuality() throws {
+        let argv = try build(
+            options: PrintOptions(
+                quality: "303",
+                cupsOptions: "EPIJ_Qual=308"),
+            optionKeys: ["EPIJ_Qual"])
+        XCTAssertTrue(argv.contains("EPIJ_Qual=308"))
+        XCTAssertFalse(argv.contains("EPIJ_Qual=303"))
+    }
+
+    func testCapturedQualityCaseInsensitiveDedup() throws {
+        let argv = try build(
+            options: PrintOptions(
+                quality: "303",
+                cupsOptions: "epij_qual=308"),
+            optionKeys: ["EPIJ_Qual"])
+        XCTAssertFalse(argv.contains("EPIJ_Qual=303"))
+        XCTAssertTrue(argv.contains("epij_qual=308"))
+    }
+
+    func testQualityNilNoEmit() throws {
+        let argv = try build(
+            options: PrintOptions(mediaType: "Photo"),
+            optionKeys: ["EPIJ_Qual", "MediaType"])
+        XCTAssertFalse(argv.contains { $0.hasPrefix("EPIJ_Qual=") })
+        // No quality key on the queue → no emit either.
+        let noKey = try build(
+            options: PrintOptions(quality: "303"),
+            optionKeys: ["MediaType"])
+        XCTAssertFalse(noKey.contains { $0.hasPrefix("EPIJ_Qual=") })
+    }
+
     func testSanitise() throws {
         XCTAssertThrowsError(try build(options: PrintOptions(
             cupsOptions: "InputSlot=Rear;rm -rf /"))) { error in

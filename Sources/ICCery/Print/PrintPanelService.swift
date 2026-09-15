@@ -17,6 +17,21 @@ enum PrintPanelError: LocalizedError {
     }
 }
 
+/// Stage 2 selections pre-applied to the bound print panel before it
+/// opens (#183). This phase consumes `paperSize` + `qualityKey`/
+/// `quality` only; `mediaType` and `orientation` preselect — and the
+/// `PMPageFormat`/`PMPaper` half of paper — are #186's scope.
+struct PrintPanelInitialSelections {
+    /// CUPS `PageSize` token, e.g. `"A4"` / `"Custom.595x842"`.
+    var paperSize: String?
+    /// The queue's detected quality enumeration key, e.g. `EPIJ_Qual`.
+    var qualityKey: String?
+    /// The selected quality token.
+    var quality: String?
+    var mediaType: String?      // #186 consumes
+    var orientation: String?    // #186 consumes
+}
+
 /// Preferences → native `NSPrintPanel` bound to the selected CUPS
 /// queue (issue 13, docs/11).
 ///
@@ -41,7 +56,9 @@ struct PrintPanelService {
     func showProperties(
         queue: String,
         displayName: String?,
-        cupsService: CupsService
+        cupsService: CupsService,
+        initialSelections: PrintPanelInitialSelections =
+            PrintPanelInitialSelections()
     ) async throws -> PrintPropertiesResult? {
         #if DEBUG
         if UITestHooks.printPanelStubbed {
@@ -56,7 +73,8 @@ struct PrintPanelService {
         let optionKeys = (try? await cupsService.optionKeys(for: queue))
             ?? []
         return try runNativePanel(
-            queue: queue, displayName: display, optionKeys: optionKeys)
+            queue: queue, displayName: display, optionKeys: optionKeys,
+            initialSelections: initialSelections)
     }
 
     // MARK: - Panel
@@ -64,7 +82,8 @@ struct PrintPanelService {
     private func runNativePanel(
         queue: String,
         displayName: String?,
-        optionKeys: Set<String>
+        optionKeys: Set<String>,
+        initialSelections: PrintPanelInitialSelections
     ) throws -> PrintPropertiesResult? {
         let printInfo = NSPrintInfo()
         var pmPrinter: PMPrinter?
@@ -89,6 +108,9 @@ struct PrintPanelService {
             // queue but are not fatal when they fail.
             _ = PMSessionDefaultPrintSettings(session, settings)
             _ = PMSessionDefaultPageFormat(session, pageFormat)
+            // Initial selections — after `PMSessionDefault*`, before
+            // ColorSync suppression ②–⑤ (locked write order, #183).
+            applyInitialSelections(initialSelections, to: settings)
             boundViaPM = true
         } else {
             // Fallback: NSPrinter by display name (docs/11 §binding).
@@ -138,7 +160,9 @@ struct PrintPanelService {
 
         // ⑥ Capture the user's choices — filtered replay options plus
         // the media type they picked. Re-fetch the settings handle so
-        // we read back what the modal wrote.
+        // we read back what the modal wrote. Paper size, quality, and
+        // orientation ride back parsed from the captured `k=v` string
+        // (#183); the PDE may rewrite or drop them (R12).
         var cupsOptions: String?
         var mediaType: String?
         if boundViaPM {
@@ -148,6 +172,7 @@ struct PrintPanelService {
             cupsOptions = captured.cupsOptions
             mediaType = captured.mediaType
         }
+        let capturedOptions = cupsOptions ?? ""
         return PrintPropertiesResult(
             selectedPrinter: boundViaPM
                 ? Self.currentPrinterID(
@@ -156,9 +181,33 @@ struct PrintPanelService {
                     fallback: queue)
                 : nil,
             options: PrintOptions(
+                orientation: CupsParsers.extractOrientation(
+                    fromOptionsString: capturedOptions),
+                paperSize: CupsParsers.extractOption(
+                    named: "PageSize", fromOptionsString: capturedOptions),
                 mediaType: mediaType,
+                quality: CupsParsers.extractQuality(
+                    fromOptionsString: capturedOptions),
                 ppdUncorrectedPassthrough: true,
                 cupsOptions: cupsOptions))
+    }
+
+    /// Initial-selection `PMPrintSettings` writes — paper size and
+    /// quality only this phase; media type / orientation and the
+    /// `PMPageFormat`/`PMPaper` paper half are #186's contract.
+    private func applyInitialSelections(
+        _ selections: PrintPanelInitialSelections,
+        to settings: PMPrintSettings
+    ) {
+        if let paperSize = selections.paperSize {
+            _ = PMPrintSettingsSetValue(
+                settings, "PageSize" as CFString,
+                paperSize as CFString, false)
+        }
+        if let key = selections.qualityKey, let value = selections.quality {
+            _ = PMPrintSettingsSetValue(
+                settings, key as CFString, value as CFString, false)
+        }
     }
 
     // MARK: - PM helpers

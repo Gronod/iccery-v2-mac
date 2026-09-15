@@ -20,6 +20,7 @@ public enum LpArgsError: LocalizedError, Equatable {
 ///    -o AP.ColorMatchingMode=AP_ApplicationColorMatching
 ///    <captured cups_options>
 ///    <media_type, if no media key already captured>
+///    <quality, if no quality key already captured> (#183)
 ///    <driver bypass, if no bypass key captured>
 ///    <orientation-requested=3|4, unless captured>
 ///    <PageSize, unless captured>
@@ -80,6 +81,15 @@ public enum LpArgs {
            !addedKeys.contains(mediaKey.lowercased()) {
             addedKeys.insert(mediaKey.lowercased())
             argv += ["-o", "\(mediaKey)=\(mediaType)"]
+        }
+
+        // Print quality — after media, before the driver bypass; the
+        // detected queue key is skipped when already captured (#183).
+        if let quality = options.quality,
+           let qualityKey = CupsParsers.detectQualityKey(optionKeys: optionKeys),
+           !addedKeys.contains(qualityKey.lowercased()) {
+            addedKeys.insert(qualityKey.lowercased())
+            argv += ["-o", "\(qualityKey)=\(quality)"]
         }
 
         // Driver colour bypass — when no bypass key was captured. NOT

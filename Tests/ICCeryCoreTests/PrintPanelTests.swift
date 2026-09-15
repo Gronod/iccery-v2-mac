@@ -52,6 +52,23 @@ final class PrintPanelStubTests: XCTestCase {
         }
     }
 
+    /// #183 — the stub parses paper size / quality / orientation out of
+    /// `ICCERY_TEST_PANEL_OPTIONS` so UI tests can verify apply-back.
+    func testOkResultExtractsNewFields() throws {
+        try withEnv([
+            "ICCERY_UI_TESTING": "1",
+            "ICCERY_TEST_PRINT_PANEL": "ok",
+            "ICCERY_TEST_PANEL_OPTIONS":
+                "PageSize=Letter EPIJ_Qual=305 orientation-requested=4",
+            "ICCERY_TEST_PANEL_PRINTER": nil,
+        ]) {
+            let result = UITestHooks.printPanelResult(forQueue: "q")
+            XCTAssertEqual(result?.options.paperSize, "Letter")
+            XCTAssertEqual(result?.options.quality, "305")
+            XCTAssertEqual(result?.options.orientation, "landscape")
+        }
+    }
+
     func testOkDefaultsPrinter() throws {
         try withEnv([
             "ICCERY_UI_TESTING": "1",

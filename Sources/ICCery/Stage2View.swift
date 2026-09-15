@@ -255,6 +255,7 @@ struct Stage2View: View {
                 .onChange(of: workflow.print.selectedPrinter) { _ in
                     workflow.print.selectedTray = nil
                     workflow.print.selectedMediaType = nil
+                    workflow.print.selectedQuality = nil
                     Task { @MainActor in await workflow.print.reloadSelectedCapabilities() }
                 }
                 if let selected = workflow.print.printers
@@ -279,7 +280,9 @@ struct Stage2View: View {
                 .accessibilityIdentifier("btnPrinterProperties")
             }
 
-            // Tray / media / orientation — from queue capabilities.
+            // Tray / media / paper / quality / orientation — from
+            // queue capabilities. Extracted subviews keep every
+            // ViewBuilder ≤10 children (R13).
             HStack(spacing: 14) {
                 if !workflow.print.printerCaps.trays.isEmpty {
                     Picker("Tray", selection: $workflow.print.selectedTray) {
@@ -301,6 +304,12 @@ struct Stage2View: View {
                     .accessibilityIdentifier("mediaTypeGroup")
                     .accessibilityIdentifier("printerMediaTypeSelect")
                 }
+                if !workflow.print.printerCaps.paperSizes.isEmpty {
+                    paperSizeGroup
+                }
+                if !workflow.print.printerCaps.qualities.isEmpty {
+                    qualityGroup
+                }
                 HStack(spacing: 0) {
                     Button("Portrait") { workflow.print.printOrientation = "portrait" }
                         .buttonStyle(.bordered)
@@ -313,11 +322,13 @@ struct Stage2View: View {
                 }
                 Spacer()
             }
+            // Stage 1 owns the custom dimensions — the caption lives
+            // inside `paperSizeGroup` (#183).
 
             HStack(spacing: 8) {
                 Button(action: {
                     if let result = workflow.printtargResult {
-                        workflow.print.printAllPages(from: result, pageSize: workflow.pageSize)
+                        workflow.print.printAllPages(from: result)
                     }
                 }) {
                     Label(workflow.print.isPrinting ? "Printing…" : "Print All",
@@ -344,6 +355,50 @@ struct Stage2View: View {
         .onChange(of: workflow.printtargResult?.pages.count) { _ in
             schedulePrinterRefresh()
         }
+        // Editable picker that re-mirrors Stage 1's pageSize (#183 E4).
+        .onChange(of: workflow.pageSize) { _ in
+            workflow.print.seedPaperSelection()
+        }
+    }
+
+    /// Paper picker + custom-size caption under the `paperSizeGroup`
+    /// container (#183). `caps.paperSizes` plus the synthetic custom
+    /// entry (`id: 0`, shown as `Custom (W×H mm)`).
+    private var paperSizeGroup: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Picker("Paper", selection: $workflow.print.selectedPaperSize) {
+                ForEach(workflow.print.printerCaps.paperSizes, id: \.id) { size in
+                    Text(size.id == 0
+                         ? "Custom (\(Int(workflow.customPageW))×\(Int(workflow.customPageH)) mm)"
+                         : size.name)
+                        .tag(Optional(size.id))
+                }
+            }
+            .frame(maxWidth: 200)
+            .accessibilityIdentifier("printerPaperSizeSelect")
+            if workflow.print.selectedPaperSize == 0 {
+                Text("Custom (\(Int(workflow.customPageW))×\(Int(workflow.customPageH)) mm)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("paperSizeGroup")
+    }
+
+    /// Quality picker — driver tokens with PPD-enriched labels (#183).
+    private var qualityGroup: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Picker("Quality", selection: $workflow.print.selectedQuality) {
+                ForEach(workflow.print.printerCaps.qualities, id: \.id) {
+                    Text($0.name).tag(Optional($0.id))
+                }
+            }
+            .frame(maxWidth: 200)
+            .accessibilityIdentifier("printerQualitySelect")
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("qualityGroup")
     }
 
     /// Auto-enumerates printers once a manifest exists and whenever it
@@ -392,7 +447,7 @@ private struct GalleryPageView: View {
             Text("\(page.page.patches) patches · " +
                  "\(Int(page.page.widthMm))×\(Int(page.page.heightMm)) mm")
                 .font(.caption2).foregroundStyle(.secondary)
-            Button("Print") { workflow.print.printPage(page, pageSize: workflow.pageSize) }
+            Button("Print") { workflow.print.printPage(page) }
                 .disabled(workflow.print.isPrinting
                           || workflow.print.selectedPrinter.isEmpty)
                 .accessibilityIdentifier("btnPrintPage-\(page.index)")
