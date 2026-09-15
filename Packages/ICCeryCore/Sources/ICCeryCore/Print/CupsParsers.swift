@@ -266,13 +266,20 @@ public enum CupsParsers {
     }
 
     /// Media type from a captured `key=value key=value` options string.
-    /// Prefers `MediaType`, then `EPIJ_Medi` (docs/11 §tests).
+    /// Prefers `MediaType` (docs/11 §tests), then the remaining roster
+    /// keys in detection order — `CNIJMediaType`, `EPIJ_Medi`,
+    /// `StpMediaType` (#186 capture-return).
     public static func extractMediaType(fromOptionsString options: String) -> String? {
         let pairs = lpoptions(options)
         if let v = pairs.first(where: { $0.key == "MediaType" })?.value {
             return v
         }
-        return pairs.first(where: { $0.key == "EPIJ_Medi" })?.value
+        for key in mediaTypeKeys where key != "MediaType" {
+            if let v = pairs.first(where: { $0.key == key })?.value {
+                return v
+            }
+        }
+        return nil
     }
 
     /// Print-quality option key in preference order — vendor-first,

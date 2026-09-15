@@ -232,6 +232,42 @@ final class CupsParserTests: XCTestCase {
             fromOptionsString: "PageSize=A4"))
     }
 
+    // MARK: - #186 capture-return
+
+    /// A captured `k=v` string maps to all four `PrintOptions`
+    /// fields — `PageSize`, the detected quality key,
+    /// `orientation-requested`, and a vendor media key (#186).
+    func testCapturedStringMapsAllFields() {
+        let captured =
+            "PageSize=A4 EPIJ_Qual=305 orientation-requested=4 CNIJMediaType=Photo"
+        XCTAssertEqual(CupsParsers.extractOption(
+            named: "PageSize", fromOptionsString: captured), "A4")
+        XCTAssertEqual(CupsParsers.extractQuality(
+            fromOptionsString: captured), "305")
+        XCTAssertEqual(CupsParsers.extractOrientation(
+            fromOptionsString: captured), "landscape")
+        XCTAssertEqual(CupsParsers.extractMediaType(
+            fromOptionsString: captured), "Photo")
+    }
+
+    /// Vendor media keys beyond `MediaType`/`EPIJ_Medi` extract via
+    /// the detection roster — `CNIJMediaType`/`StpMediaType` included
+    /// (#186). `MediaType` still wins when present alongside them.
+    func testExtractMediaTypeRosterFallback() {
+        XCTAssertEqual(CupsParsers.extractMediaType(
+            fromOptionsString: "CNIJMediaType=PhotoPlus"), "PhotoPlus")
+        XCTAssertEqual(CupsParsers.extractMediaType(
+            fromOptionsString: "StpMediaType=Glossy"), "Glossy")
+        XCTAssertEqual(CupsParsers.extractMediaType(
+            fromOptionsString: "EPIJ_Medi=Photo"), "Photo")
+        // `MediaType` keeps first precedence (docs/11 §tests).
+        XCTAssertEqual(CupsParsers.extractMediaType(
+            fromOptionsString: "CNIJMediaType=PhotoPlus MediaType=Plain"),
+            "Plain")
+        XCTAssertNil(CupsParsers.extractMediaType(
+            fromOptionsString: "PageSize=A4"))
+    }
+
     func testDriverBypass() {
         func pair(_ keys: Set<String>) -> String? {
             CupsParsers.detectDriverColorBypass(optionKeys: keys)
