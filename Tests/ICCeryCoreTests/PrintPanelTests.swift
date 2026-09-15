@@ -69,6 +69,24 @@ final class PrintPanelStubTests: XCTestCase {
         }
     }
 
+    /// #186 — a vendor media key in the captured string reaches
+    /// `options.mediaType` through the detection roster
+    /// (`CNIJMediaType`/`StpMediaType`, not only `MediaType`).
+    func testOkResultExtractsVendorMediaKey() throws {
+        try withEnv([
+            "ICCERY_UI_TESTING": "1",
+            "ICCERY_TEST_PRINT_PANEL": "ok",
+            "ICCERY_TEST_PANEL_OPTIONS":
+                "PageSize=A4 orientation-requested=4 CNIJMediaType=Photo",
+            "ICCERY_TEST_PANEL_PRINTER": nil,
+        ]) {
+            let result = UITestHooks.printPanelResult(forQueue: "q")
+            XCTAssertEqual(result?.options.paperSize, "A4")
+            XCTAssertEqual(result?.options.orientation, "landscape")
+            XCTAssertEqual(result?.options.mediaType, "Photo")
+        }
+    }
+
     func testOkDefaultsPrinter() throws {
         try withEnv([
             "ICCERY_UI_TESTING": "1",

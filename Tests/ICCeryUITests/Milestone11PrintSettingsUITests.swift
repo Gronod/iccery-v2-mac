@@ -188,6 +188,50 @@ final class Milestone11PrintSettingsUITests: XCTestCase {
         XCTAssertTrue(argv.contains("EPIJ_Qual=305"), argv)
     }
 
+    /// #186 — the stubbed panel result's `orientation-requested=` /
+    /// `MediaType=` apply back to the Stage 2 selections and reach the
+    /// `lp` argv through the captured `cupsOptions` replay.
+    func testPanelResultAppliesBackOrientationAndMedia() throws {
+        app.launchEnvironment["ICCERY_TEST_PRINT_PANEL"] = "ok"
+        app.launchEnvironment["ICCERY_TEST_PANEL_OPTIONS"] =
+            "PageSize=Letter EPIJ_Qual=305 orientation-requested=4 MediaType=PhotographicGlossy"
+        launchAppWithDefaults()
+        reachPrintPanel()
+        _ = waitFor("printerStatusBadge")
+
+        element("btnPrinterProperties").click()
+        let notice = element("printNotificationText")
+        XCTAssertTrue(notice.waitForExistence(timeout: 10))
+        XCTAssertTrue((notice.value as? String ?? "")
+            .contains("Settings captured"))
+
+        // `printerMediaTypeSelect` is the group's id — the popup is a
+        // descendant (stacked identifiers collapse to the container).
+        // The popup's AX title lags the binding — poll for the
+        // apply-back value.
+        let mediaPopup = element("printerMediaTypeSelect")
+            .descendants(matching: .popUpButton).firstMatch
+        XCTAssertTrue(mediaPopup.waitForExistence(timeout: 5))
+        var mediaSelection = ""
+        let deadline = Date().addingTimeInterval(10)
+        while Date() < deadline, mediaSelection != "PhotographicGlossy" {
+            mediaSelection = [
+                mediaPopup.title, mediaPopup.label,
+                mediaPopup.value as? String ?? "",
+            ].first { !$0.isEmpty } ?? ""
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        }
+        XCTAssertEqual(mediaSelection, "PhotographicGlossy")
+        XCTAssertEqual(selection(of: "printerPaperSizeSelect"), "Letter")
+
+        app.buttons["btnPrintAll"].click()
+        let argv = waitForLpLine()
+        XCTAssertTrue(argv.contains("orientation-requested=4"), argv)
+        XCTAssertTrue(argv.contains("MediaType=PhotographicGlossy"), argv)
+        XCTAssertTrue(argv.contains("PageSize=Letter"), argv)
+        XCTAssertTrue(argv.contains("EPIJ_Qual=305"), argv)
+    }
+
     private func launchAppWithDefaults() {
         app.launch()
         app.activate()

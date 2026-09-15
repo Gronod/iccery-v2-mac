@@ -147,8 +147,8 @@ final class PrintSessionViewModel: ObservableObject {
             paperSize: selectedPaperSizeToken,
             qualityKey: printerCaps.qualityKey,
             quality: selectedQuality,
-            mediaType: nil,
-            orientation: nil)
+            mediaType: selectedMediaType,
+            orientation: printOrientation)
         Task { @MainActor in
             do {
                 guard let result = try await PrintPanelService()
@@ -176,9 +176,10 @@ final class PrintSessionViewModel: ObservableObject {
                 if let media = result.options.mediaType {
                     selectedMediaType = media
                 }
-                // Capture-return (#183): a dialog paper/quality change
-                // updates the Stage 2 selections — never
-                // `workflow.pageSize` (printtarg layout is sacred).
+                // Capture-return (#183/#186): a dialog paper/quality/
+                // orientation change updates the Stage 2 selections —
+                // never `workflow.pageSize` (printtarg layout is
+                // sacred).
                 if let paper = result.options.paperSize,
                    let match = printerCaps.paperSizes
                        .first(where: { $0.name == paper }) {
@@ -186,6 +187,9 @@ final class PrintSessionViewModel: ObservableObject {
                 }
                 if let quality = result.options.quality {
                     selectedQuality = quality
+                }
+                if let orientation = result.options.orientation {
+                    printOrientation = orientation
                 }
                 printNotice = Notice(
                     kind: .info,

@@ -244,4 +244,149 @@ final class PrintSessionViewModelTests: XCTestCase {
         XCTAssertEqual(workflow.print.selectedPaperSize, 4)
         XCTAssertEqual(workflow.print.selectedQuality, "305")
     }
+
+    /// #186 — the captured `orientation-requested`/media token apply
+    /// back to `printOrientation`/`selectedMediaType`, and a dialog
+    /// result never mutates `workflow.pageSize` (printtarg layout).
+    func testPanelResultAppliesBackOrientationAndMedia() async throws {
+        setenv("ICCERY_UI_TESTING", "1", 1)
+        setenv("ICCERY_TEST_PRINT_PANEL", "ok", 1)
+        setenv("ICCERY_TEST_PANEL_OPTIONS",
+               "orientation-requested=4 MediaType=Glossy", 1)
+        defer {
+            unsetenv("ICCERY_UI_TESTING")
+            unsetenv("ICCERY_TEST_PRINT_PANEL")
+            unsetenv("ICCERY_TEST_PANEL_OPTIONS")
+        }
+
+        let workflow = makeWorkflow()
+        workflow.pageSize = .a4
+        await loadCaps(workflow.print)
+        XCTAssertEqual(workflow.print.printOrientation, "portrait")
+        XCTAssertEqual(workflow.print.selectedMediaType, "Stationery")
+
+        workflow.print.openPrinterPreferences()
+        await waitForNotice(workflow.print, containing: "Settings captured")
+        XCTAssertEqual(workflow.print.printOrientation, "landscape")
+        XCTAssertEqual(workflow.print.selectedMediaType, "Glossy")
+        XCTAssertEqual(workflow.pageSize, .a4)
+    }
+
+    /// #186 — a captured `PageSize` token with no capability match
+    /// leaves `selectedPaperSize` unchanged (never a guessed id).
+    func testPanelResultUnknownPaperLeavesSelection() async throws {
+        setenv("ICCERY_UI_TESTING", "1", 1)
+        setenv("ICCERY_TEST_PRINT_PANEL", "ok", 1)
+        setenv("ICCERY_TEST_PANEL_OPTIONS", "PageSize=Bogus", 1)
+        defer {
+            unsetenv("ICCERY_UI_TESTING")
+            unsetenv("ICCERY_TEST_PRINT_PANEL")
+            unsetenv("ICCERY_TEST_PANEL_OPTIONS")
+        }
+
+        let workflow = makeWorkflow()
+        workflow.pageSize = .a4
+        await loadCaps(workflow.print)
+        XCTAssertEqual(workflow.print.selectedPaperSize, 3)
+
+        workflow.print.openPrinterPreferences()
+        await waitForNotice(workflow.print, containing: "Settings captured")
+        XCTAssertEqual(workflow.print.selectedPaperSize, 3)
+    }
+
+    /// #186 — a stub result pointing at another queue in `printers`
+    /// switches `selectedPrinter` and reloads its capabilities.
+    func testPanelResultSwitchesToKnownQueue() async throws {
+        setenv("ICCERY_UI_TESTING", "1", 1)
+        setenv("ICCERY_TEST_PRINT_PANEL", "ok", 1)
+        setenv("ICCERY_TEST_PANEL_OPTIONS", "PageSize=Letter", 1)
+        setenv("ICCERY_TEST_PANEL_PRINTER", "Other_Q", 1)
+        defer {
+            unsetenv("ICCERY_UI_TESTING")
+            unsetenv("ICCERY_TEST_PRINT_PANEL")
+            unsetenv("ICCERY_TEST_PANEL_OPTIONS")
+            unsetenv("ICCERY_TEST_PANEL_PRINTER")
+        }
+
+        let workflow = makeWorkflow()
+        workflow.pageSize = .a4
+        workflow.print.printers = [
+            Printer(name: "Mock_Q", isDefault: true),
+            Printer(name: "Other_Q"),
+        ]
+        await loadCaps(workflow.print)
+
+        workflow.print.openPrinterPreferences()
+        await waitForNotice(
+            workflow.print, containing: "Settings captured for Other_Q")
+        XCTAssertEqual(workflow.print.selectedPrinter, "Other_Q")
+        // Caps reloaded for the new queue: paper re-seeded, then the
+        // captured PageSize applied back onto the new caps.
+        XCTAssertEqual(workflow.print.selectedPaperSize, 4)
+        XCTAssertEqual(workflow.print.capturedCupsOptions["Other_Q"],
+            "PageSize=Letter")
+    }
+
+    /// #186 — a stub result naming a queue absent from `printers`
+    /// leaves the selection on the opened queue.
+    func testPanelResultGhostQueueIgnored() async throws {
+        setenv("ICCERY_UI_TESTING", "1", 1)
+        setenv("ICCERY_TEST_PRINT_PANEL", "ok", 1)
+        setenv("ICCERY_TEST_PANEL_PRINTER", "Ghost_Q", 1)
+        defer {
+            unsetenv("ICCERY_UI_TESTING")
+            unsetenv("ICCERY_TEST_PRINT_PANEL")
+            unsetenv("ICCERY_TEST_PANEL_PRINTER")
+        }
+
+        let workflow = makeWorkflow()
+        workflow.pageSize = .a4
+        workflow.print.printers = [Printer(name: "Mock_Q", isDefault: true)]
+        await loadCaps(workflow.print)
+
+        workflow.print.openPrinterPreferences()
+        await waitForNotice(
+            workflow.print, containing: "Settings captured for Mock_Q")
+        XCTAssertEqual(workflow.print.selectedPrinter, "Mock_Q")
+    }
+
+    /// #186 — cancel returns `nil`: info notice, no field changes.
+    func testPanelCancelLeavesSelections() async throws {
+        setenv("ICCERY_UI_TESTING", "1", 1)
+        setenv("ICCERY_TEST_PRINT_PANEL", "cancel", 1)
+        defer {
+            unsetenv("ICCERY_UI_TESTING")
+            unsetenv("ICCERY_TEST_PRINT_PANEL")
+        }
+
+        let workflow = makeWorkflow()
+        workflow.pageSize = .a4
+        await loadCaps(workflow.print)
+        workflow.print.printOrientation = "landscape"
+
+        workflow.print.openPrinterPreferences()
+        await waitForNotice(workflow.print, containing: "cancelled")
+        XCTAssertEqual(workflow.print.selectedPaperSize, 3)
+        XCTAssertEqual(workflow.print.selectedQuality, "303")
+        XCTAssertEqual(workflow.print.selectedMediaType, "Stationery")
+        XCTAssertEqual(workflow.print.printOrientation, "landscape")
+        XCTAssertTrue(workflow.print.capturedCupsOptions.isEmpty)
+    }
+
+    /// Poll until the panel task posts a notice whose text contains
+    /// `fragment` (the Task-completion signal for `nil` results too).
+    private func waitForNotice(
+        _ vm: PrintSessionViewModel,
+        containing fragment: String,
+        timeout: TimeInterval = 10
+    ) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if let text = vm.printNotice?.text, text.contains(fragment) {
+                return
+            }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+        XCTFail("Timed out waiting for notice containing '\(fragment)'")
+    }
 }
