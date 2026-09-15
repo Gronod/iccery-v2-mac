@@ -20,8 +20,14 @@ public enum ArtefactFiles {
         bundle: Bundle = .main
     ) -> (version: String, build: String, buildDate: String) {
         let info = bundle.infoDictionary ?? [:]
-        let version = info["CFBundleShortVersionString"] as? String ?? "0.0.0"
+        let short = info["CFBundleShortVersionString"] as? String ?? "0.0.0"
         let build = info["CFBundleVersion"] as? String ?? "0"
+        var tag = ""
+        if let url = bundle.url(forResource: "ICCeryReleaseTag", withExtension: nil),
+           let raw = try? String(contentsOf: url, encoding: .utf8) {
+            tag = raw
+        }
+        let version = displayVersion(shortVersion: short, releaseTag: tag)
 
         let url = bundle.executableURL ?? bundle.bundleURL
         let buildDate: String
@@ -36,5 +42,16 @@ public enum ArtefactFiles {
         }
 
         return (version, build, buildDate)
+    }
+
+    /// About "Version:" string from the release tag + marketing version
+    /// (#189): `v2.0.0-pre2 (2.0.0)`; dedupes to `v2.0.0` on an exact
+    /// release tag; falls back to the short version when untagged.
+    static func displayVersion(shortVersion: String, releaseTag: String) -> String {
+        let tag = releaseTag.trimmingCharacters(in: .whitespacesAndNewlines)
+        if tag.isEmpty || tag == shortVersion || tag == "v\(shortVersion)" {
+            return tag.isEmpty ? shortVersion : tag
+        }
+        return "\(tag) (\(shortVersion))"
     }
 }

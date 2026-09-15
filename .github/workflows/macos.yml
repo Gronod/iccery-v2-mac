@@ -30,9 +30,16 @@ jobs:
     runs-on: macos-14
     env:
       DERIVED: build/DerivedData-test
+      # Tag name on tag pushes, branch name otherwise — scripts/version.sh
+      # only honours values matching 'v[0-9]*'.
+      RELEASE_TAG: ${{ github.ref_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Full history + tags: scripts/version.sh needs `git describe` and
+          # `git rev-list --count`; the default depth-1 clone has neither.
+          fetch-depth: 0
 
       - name: Assert Xcode 14+ toolchain
         run: |
@@ -64,6 +71,10 @@ jobs:
       - name: Build for testing (host arch)
         if: "!(startsWith(github.ref, 'refs/tags/') && contains(github.ref_name, 'prerelease'))"
         run: |
+          # Stamp the test build with the same version triple packaging uses
+          # so CI-built apps are traceable (and mis-tags fail early) (#189).
+          eval "$(scripts/version.sh)"
+          echo "version=$MARKETING_VERSION build=$CURRENT_PROJECT_VERSION tag=$ICCERY_RELEASE_TAG"
           xcodebuild build-for-testing \
             -scheme ICCery \
             -destination 'platform=macOS' \
@@ -72,7 +83,10 @@ jobs:
             ARCHS="$(uname -m)" \
             ONLY_ACTIVE_ARCH=NO \
             CODE_SIGNING_ALLOWED=YES \
-            CODE_SIGN_IDENTITY='-'
+            CODE_SIGN_IDENTITY='-' \
+            MARKETING_VERSION="$MARKETING_VERSION" \
+            CURRENT_PROJECT_VERSION="$CURRENT_PROJECT_VERSION" \
+            ICCERY_RELEASE_TAG="$ICCERY_RELEASE_TAG"
 
       # Xcode embeds the shared ICCeryCore package framework into the app
       # and the test bundle without signing it. Ad-hoc hosts still require
@@ -191,6 +205,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # Full history + tags: scripts/version.sh needs `git describe` and
+          # `git rev-list --count`; the default depth-1 clone has neither.
+          fetch-depth: 0
 
       # scripts/package-release.sh runs `xcodegen generate` and dmgbuild;
       # see build-and-test for why brew is not used on macOS 12 (#109).
@@ -202,6 +220,7 @@ jobs:
       - name: Package release
         run: scripts/package-release.sh
         env:
+          RELEASE_TAG: ${{ github.ref_name }}
           CODESIGN_IDENTITY: ${{ secrets.CODESIGN_IDENTITY }}
           DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
           NOTARIZE_APPLE_ID: ${{ secrets.NOTARIZE_APPLE_ID }}

@@ -102,6 +102,62 @@ final class TiffPreviewTests: XCTestCase {
     }
 }
 
+final class AppInfoTests: XCTestCase {
+    // MARK: displayVersion (#189)
+
+    func testNoTagFallsBackToShortVersion() {
+        XCTAssertEqual(
+            ArtefactFiles.displayVersion(shortVersion: "2.0.0", releaseTag: ""),
+            "2.0.0"
+        )
+    }
+
+    func testWhitespaceTagFallsBackToShortVersion() {
+        XCTAssertEqual(
+            ArtefactFiles.displayVersion(shortVersion: "2.0.0", releaseTag: "  "),
+            "2.0.0"
+        )
+    }
+
+    func testExactReleaseTagDedupes() {
+        XCTAssertEqual(
+            ArtefactFiles.displayVersion(shortVersion: "2.0.0", releaseTag: "v2.0.0"),
+            "v2.0.0"
+        )
+    }
+
+    func testBareVersionTagDedupes() {
+        XCTAssertEqual(
+            ArtefactFiles.displayVersion(shortVersion: "2.0.0", releaseTag: "2.0.0"),
+            "2.0.0"
+        )
+    }
+
+    func testPrereleaseTagShowsMarketingInParens() {
+        XCTAssertEqual(
+            ArtefactFiles.displayVersion(
+                shortVersion: "2.0.0", releaseTag: "v2.0.0-pre2-grok"),
+            "v2.0.0-pre2-grok (2.0.0)"
+        )
+    }
+
+    func testDescribeStringShowsMarketingInParens() {
+        XCTAssertEqual(
+            ArtefactFiles.displayVersion(
+                shortVersion: "2.0.0", releaseTag: "v2.0.0-5-gdeadbee"),
+            "v2.0.0-5-gdeadbee (2.0.0)"
+        )
+    }
+
+    func testAppInfoUsesComposedVersion() {
+        // .main in the test host is the ICCery app under test; whatever it
+        // resolves to, build must be a non-empty digits-or-default string.
+        let info = ArtefactFiles.appInfo()
+        XCTAssertFalse(info.version.isEmpty)
+        XCTAssertFalse(info.build.isEmpty)
+    }
+}
+
 final class ArtefactFilesTests: XCTestCase {
     func testBase64RoundTrip() throws {
         let url = tempURL("a.txt")

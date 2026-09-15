@@ -45,6 +45,13 @@ DEST="platform=macOS"
 IDENTITY="${CODESIGN_IDENTITY:--}"
 DEVELOPMENT_TEAM="${DEVELOPMENT_TEAM:-}"
 
+# Resolve the version triple from the release tag / git state. On tag builds
+# (RELEASE_TAG=v*) this hard-fails if the tag's X.Y.Z != project.yml
+# MARKETING_VERSION, so a mis-tag cannot ship mismatched metadata (#189).
+echo "==> Resolving version"
+eval "$(scripts/version.sh)"
+echo "version=$MARKETING_VERSION build=$CURRENT_PROJECT_VERSION tag=$ICCERY_RELEASE_TAG"
+
 echo "==> Building universal Release app"
 BUILD_EXTRA=""
 if [ -n "$DEVELOPMENT_TEAM" ]; then
@@ -60,6 +67,9 @@ xcodebuild \
     ONLY_ACTIVE_ARCH=NO \
     CODE_SIGNING_ALLOWED=YES \
     CODE_SIGN_IDENTITY="$IDENTITY" \
+    MARKETING_VERSION="$MARKETING_VERSION" \
+    CURRENT_PROJECT_VERSION="$CURRENT_PROJECT_VERSION" \
+    ICCERY_RELEASE_TAG="$ICCERY_RELEASE_TAG" \
     $BUILD_EXTRA \
     build
 
@@ -142,7 +152,14 @@ fi
 echo "==> Building DMG"
 VERSION="$(plutil -extract CFBundleShortVersionString raw "$APP/Contents/Info.plist" 2>/dev/null || printf '2.0.0')"
 BUILD_NUM="$(plutil -extract CFBundleVersion raw "$APP/Contents/Info.plist" 2>/dev/null || printf '1')"
-DMG="ICCery-${VERSION}-${BUILD_NUM}.dmg"
+# Tagged/described builds carry the tag in the DMG name so prerelease
+# artefacts are self-describing (ICCery-2.0.0-pre2-grok-236.dmg); a plain
+# release tag keeps the classic ICCery-<ver>-<build>.dmg form.
+TAG_NAME="${ICCERY_RELEASE_TAG#v}"
+case "$TAG_NAME" in
+    ''|"$VERSION"|dev) DMG="ICCery-${VERSION}-${BUILD_NUM}.dmg" ;;
+    *)                 DMG="ICCery-${TAG_NAME}-${BUILD_NUM}.dmg" ;;
+esac
 VOLUME_NAME="ICCery ${VERSION}"
 
 DMG_APP="$APP" \

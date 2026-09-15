@@ -42,6 +42,15 @@ targets:
             echo "note: Vendor/Argyll absent — run scripts/fetch-argyll.sh"
           fi
         basedOnDependencyAnalysis: false
+      - name: Stamp release tag
+        # GENERATE_INFOPLIST_FILE writes Info.plist after script phases and
+        # only honours Apple's INFOPLIST_KEY_* allowlist — so the tag ships as
+        # a bundled resource read by ArtefactFiles.appInfo (#189).
+        script: |
+          DEST="$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH"
+          mkdir -p "$DEST"
+          printf '%s' "${ICCERY_RELEASE_TAG:-}" > "$DEST/ICCeryReleaseTag"
+        basedOnDependencyAnalysis: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.gronod.iccery2
@@ -54,6 +63,13 @@ targets:
         INFOPLIST_KEY_NSHumanReadableCopyright: "Copyright © 2026 Gronod. AGPLv3."
         MARKETING_VERSION: "2.0.0"
         CURRENT_PROJECT_VERSION: "1"
+        # Stamped by scripts/version.sh at packaging/CI time (release tag or
+        # `git describe` string); About shows it next to the marketing version.
+        # Written to the bundled ICCeryReleaseTag resource by the
+        # "Stamp release tag" phase — GENERATE_INFOPLIST_FILE drops custom
+        # INFOPLIST_KEY_* names and generates the plist after script phases.
+        # Tag builds hard-fail when the tag's X.Y.Z != MARKETING_VERSION above.
+        ICCERY_RELEASE_TAG: ""
         ENABLE_HARDENED_RUNTIME: YES
         CODE_SIGN_ENTITLEMENTS: Resources/ICCery.entitlements
         CODE_SIGN_IDENTITY: "-"

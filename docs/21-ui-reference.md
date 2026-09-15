@@ -69,7 +69,7 @@ Keyboard: **R** resets gamut camera when Stage 5 is visible. Bind to a focusable
 | Dialog | Root id | Controls |
 |--------|---------|----------|
 | Settings | `settingsDialog` | `settingsDeltaEGood`, `settingsDeltaEWarning`, `settingsCalStaleDays`; other controls listed in [22](22-settings-presets.md) |
-| About | `aboutDialog` | `aboutVersion`, `aboutBuildDate` from `get_app_info`, `closeAboutBtn` |
+| About | `aboutDialog` | `aboutVersion` (release tag + marketing, e.g. `v2.0.0-pre2 (2.0.0)`), `aboutBuildDate` from `get_app_info`, `closeAboutBtn` |
 | Save preset | `savePresetDialog` | `savePresetName`, `savePresetDesc`, `btnConfirmSavePreset`, `btnCloseSavePresetDialog` |
 | Manage presets | `managePresetsDialog` | `managePresetsList`, `btnExportActivePreset`, `btnImportPreset`, `btnCloseManagePresetsDialog` |
 | Save media recipe | `saveMediaRecipeDialog` | `saveMediaName`, `saveMediaNotes`, `saveMediaPaper`, `saveMediaInk`, `saveMediaPrinter`, `saveMediaPreset`, `saveMediaColourSpace`, `saveMediaCal`, `saveMediaApplyCal`, `btnConfirmSaveMedia`, `btnCloseSaveMediaDialog` |

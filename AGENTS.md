@@ -39,6 +39,13 @@ Empty cwd illegal (#59). Atomic writes = `.tmp` + rename (#213).
 User-supplied strings via SwiftUI `Text` only (#114).
 TIFF never rendered directly — host-side PNG preview (#58).
 
+## Versioning
+`scripts/version.sh` is the single source: tag/describe → `ICCERY_RELEASE_TAG`
+(About shows `tag (marketing)`), `MARKETING_VERSION` = strict `X.Y.Z`,
+`CURRENT_PROJECT_VERSION` = `git rev-list --count HEAD` (#189).
+`v*` tag builds hard-fail if tag's X.Y.Z ≠ `project.yml` MARKETING_VERSION —
+bump `project.yml` on `develop` before tagging. CI needs `fetch-depth: 0`.
+
 ## Branching
 `develop` ← `milestone/mN-<name>` ← `feat/<issue#>-<slug>`.
 PRs via Gitea MCP. Every issue/PR: `Project/ICCery-v2` + `Feature/*` or `Bug/*` + `Priority/*`.

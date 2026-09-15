@@ -125,7 +125,35 @@ The script builds with a fixed derived data path (`build/DerivedData`), locates
 `Release/ICCery.app` from it, signs the bundle, recursively verifies every
 bundled Mach-O sidecar (`scripts/verify-sidecar-signatures.sh`), builds a
 HiDPI TIFF from `Resources/dmg-background.png` (+ `@2x`) via `tiffutil`, and
-writes `ICCery-${VERSION}-${BUILD_NUM}.dmg` with `dmgbuild==1.6.7`.
+writes the DMG with `dmgbuild==1.6.7`.
+
+### Versioning
+
+`scripts/version.sh` resolves the version triple and is the single source for
+packaging and CI:
+
+- **`ICCERY_RELEASE_TAG`** — `RELEASE_TAG` env when it matches `v[0-9]*` (CI
+  tag builds), else `git describe --tags --always --dirty --match 'v[0-9]*'`.
+  Stamped into the bundle's `ICCeryReleaseTag` resource (a generated
+  Info.plist cannot carry custom keys); the About dialog shows
+  `tag (marketing)` — e.g. `v2.0.0-pre2-grok (2.0.0)` — falling back to the
+  plain version when untagged.
+- **`MARKETING_VERSION`** (`CFBundleShortVersionString`) — first three numeric
+  components of the tag core. Must equal `project.yml`'s
+  `MARKETING_VERSION` on tag builds — packaging hard-fails on mismatch, so
+  bump `project.yml` on `develop` *before* tagging.
+- **`CURRENT_PROJECT_VERSION`** (`CFBundleVersion`) — `BUILD_NUMBER` env
+  override, else `git rev-list --count HEAD`. A single monotonically
+  increasing integer per Apple's macOS convention (Mac build numbers never
+  reset per version, unlike iOS).
+
+Tagged/described DMGs carry the tag: `ICCery-2.0.0-pre2-grok-<build>.dmg`;
+plain releases keep `ICCery-<ver>-<build>.dmg`.
+
+Release procedure: bump `MARKETING_VERSION` in `project.yml` on `develop` →
+merge `develop` → `main` → tag the release commit `vX.Y.Z[-suffix]` → push
+the tag. CI builds, signs, notarizes (when secrets exist) and attaches the
+DMG to the release.
 
 Sidecars stay ad-hoc signed inside the bundle — the app is never
 `codesign --deep`ed.
@@ -145,6 +173,8 @@ Environment variables read by the pipeline:
 | `CODESIGN_IDENTITY` | Developer ID identity for the outer `.app`; unset or `-` = ad-hoc |
 | `DEVELOPMENT_TEAM` | team ID passed to `xcodebuild` when signing |
 | `NOTARIZE_APPLE_ID` / `NOTARIZE_PASSWORD` / `APPLE_TEAM_ID` | `notarytool` + staple when all three are set |
+| `RELEASE_TAG` | release tag string (CI sets `github.ref_name`); stamped into the bundle + DMG name |
+| `BUILD_NUMBER` | `CFBundleVersion` override; default `git rev-list --count HEAD` |
 
 ## Layout
 

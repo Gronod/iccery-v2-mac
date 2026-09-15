@@ -43,6 +43,8 @@ Do not install Argyll to `$PATH`. ICCery never searches `$PATH` for binaries.
 | `NOTARIZE_APPLE_ID` | Apple ID for `notarytool` |
 | `NOTARIZE_PASSWORD` | App-specific password for `notarytool` |
 | `APPLE_TEAM_ID` | Team ID for `notarytool` |
+| `RELEASE_TAG` | Optional. Simulates a tag build (`vX.Y.Z[-suffix]`); stamped into the bundle and DMG name |
+| `BUILD_NUMBER` | Optional `CFBundleVersion` override; default `git rev-list --count HEAD` |
 
 Invocation for a signed, notarized DMG:
 
@@ -56,7 +58,8 @@ export APPLE_TEAM_ID="TEAMID"
 scripts/package-release.sh
 ```
 
-The script will emit `ICCery-<version>-<build>.dmg`. After mounting, verify Gatekeeper acceptance:
+The script will emit `ICCery-<version>-<build>.dmg` (or `ICCery-<tag>-<build>.dmg`
+when `RELEASE_TAG`/a `v*` git tag applies). After mounting, verify Gatekeeper acceptance:
 
 ```
 spctl -a -t open --context context:primary-signature -v ICCery-*.dmg
