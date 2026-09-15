@@ -106,12 +106,12 @@ final class LpArgsTests: XCTestCase {
     func testQualityDerived() throws {
         let argv = try build(
             options: PrintOptions(
-                orientation: "portrait", mediaType: "Photo", quality: "303"),
+                orientation: "portrait", mediaType: "Photo", quality: "305"),
             optionKeys: ["EPIJ_Qual", "MediaType"])
-        XCTAssertTrue(argv.contains("EPIJ_Qual=303"))
+        XCTAssertTrue(argv.contains("EPIJ_Qual=305"))
         // Emit order: after the media option, before orientation.
         let media = argv.firstIndex(of: "MediaType=Photo")!
-        let quality = argv.firstIndex(of: "EPIJ_Qual=303")!
+        let quality = argv.firstIndex(of: "EPIJ_Qual=305")!
         let orient = argv.firstIndex(of: "orientation-requested=3")!
         XCTAssertTrue(media < quality && quality < orient)
     }
