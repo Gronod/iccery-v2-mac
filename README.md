@@ -25,7 +25,8 @@ as AGPLv3 child processes. The GUI never `dlopen`s or links Argyll.
 | M7 | Pre-UAT hardening — shipped |
 | M8 | Deduplication contracts & UAT-ready hardening (#79–#86) — shipped |
 | M9 | macOS 12 / Xcode 14.2 retarget (PR #145) — shipped |
-| M10 | Studio workflow: gamut compare (#147), Spot Read (#148), project files (#149) shipped on `develop`; media library (#146) is in the tree, issue still open |
+| M10 | Studio workflow: media library (#146), gamut compare (#147), Spot Read (#148), project files (#149) — shipped on `develop` |
+| M11 | Printer settings completeness & dialog binding (#183, #180, #181, #186) — in flight on `milestone/m11-print-settings` |
 | Licence | Proprietary source in [`LICENCE.md`](LICENCE.md); bundled Argyll sidecars remain AGPLv3 |
 
 ## What it does
@@ -298,9 +299,9 @@ fix/<issue>-<slug>
 ```
 
 Open feature/fix PRs against **`develop`**. A `milestone/m…` integration
-branch is used only while that milestone is assembling; `milestone/m10-studio`
-has been merged and deleted. Do not open umbrella “bugfix” branches that mix
-tickets.
+branch is used only while that milestone is assembling — currently
+`milestone/m11-print-settings` (`milestone/m10-studio` was merged and
+deleted). Do not open umbrella “bugfix” branches that mix tickets.
 
 `main` is push-protected and requires status check
 `macOS CI / build-and-test (push)`. Protected **file** patterns on `main`
