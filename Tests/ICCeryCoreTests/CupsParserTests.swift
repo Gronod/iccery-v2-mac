@@ -4,7 +4,7 @@ import Foundation
 
 /// Issue 12 — CUPS enumeration parsers on recorded fixtures
 /// (docs/10–11). No live `lpstat`/`lpoptions` is spawned here.
-final class CupsParsersTests: XCTestCase {
+final class CupsParserTests: XCTestCase {
 
     // Recorded on an Epson XP-55 + Canon Pro9500 host.
     private let lpstatE = """
@@ -115,6 +115,82 @@ final class CupsParsersTests: XCTestCase {
         XCTAssertEqual(CupsParsers.detectMediaTypeKey(
             optionKeys: ["PageSize", "MediaType"]), "MediaType")
         XCTAssertNil(CupsParsers.detectMediaTypeKey(optionKeys: ["PageSize"]))
+    }
+
+    // MARK: - #183 quality key + option extraction
+
+    func testQualityKeyRosterOrder() {
+        // Vendor keys beat the generic ones; OutputMode/Resolution sit
+        // last (they are colour-ish keys on some drivers — #183/#180).
+        XCTAssertEqual(CupsParsers.detectQualityKey(
+            optionKeys: ["EPIJ_Qual", "Quality", "OutputMode"]), "EPIJ_Qual")
+        XCTAssertEqual(CupsParsers.detectQualityKey(
+            optionKeys: ["Quality", "OutputMode", "Resolution"]), "Quality")
+        XCTAssertEqual(CupsParsers.detectQualityKey(
+            optionKeys: ["cupsPrintQuality", "CNIJQuality"]),
+            "CNIJQuality")
+        XCTAssertEqual(CupsParsers.detectQualityKey(
+            optionKeys: ["OutputMode", "Resolution"]), "OutputMode")
+        XCTAssertEqual(CupsParsers.detectQualityKey(
+            optionKeys: ["Resolution"]), "Resolution")
+        XCTAssertNil(CupsParsers.detectQualityKey(optionKeys: ["PageSize"]))
+    }
+
+    func testCapabilitiesQuality() {
+        let service = CupsService()
+        let listings = CupsParsers.lpoptionsList(lpoptionsL)
+        let caps = service.capabilities(from: listings, ppd: nil)
+
+        // The fixture's only roster member is cupsPrintQuality.
+        XCTAssertEqual(caps.qualityKey, "cupsPrintQuality")
+        XCTAssertEqual(caps.qualities.map(\.id), ["Draft", "Normal", "High"])
+        XCTAssertEqual(caps.qualityDefault, "Normal")
+    }
+
+    func testCapabilitiesQualityPpdLabels() {
+        let ppd = """
+            *EPIJ_Qual 301/Draft: ""
+            *EPIJ_Qual 303/Normal: ""
+            *EPIJ_Qual 308/High Speed: ""
+            """
+        let service = CupsService()
+        let listings = CupsParsers.lpoptionsList(
+            "EPIJ_Qual/Print Quality: 301 *303 308\n")
+        let caps = service.capabilities(from: listings, ppd: ppd)
+
+        XCTAssertEqual(caps.qualityKey, "EPIJ_Qual")
+        XCTAssertEqual(caps.qualities, [
+            PrinterQuality(id: "301", name: "Draft"),
+            PrinterQuality(id: "303", name: "Normal"),
+            PrinterQuality(id: "308", name: "High Speed"),
+        ])
+        XCTAssertEqual(caps.qualityDefault, "303")
+    }
+
+    func testExtractOption() {
+        let options = "PageSize=A4 EPIJ_Qual=303 printer-info='EPSON XP-55'"
+        XCTAssertEqual(CupsParsers.extractOption(
+            named: "PageSize", fromOptionsString: options), "A4")
+        // Case-insensitive key match.
+        XCTAssertEqual(CupsParsers.extractOption(
+            named: "epij_qual", fromOptionsString: options), "303")
+        // Quoted values come back unquoted.
+        XCTAssertEqual(CupsParsers.extractOption(
+            named: "printer-info", fromOptionsString: options), "EPSON XP-55")
+        XCTAssertNil(CupsParsers.extractOption(
+            named: "InputSlot", fromOptionsString: options))
+    }
+
+    func testExtractQualityAndOrientation() {
+        let options = "orientation-requested=4 OutputMode=Gray EPIJ_Qual=305"
+        XCTAssertEqual(CupsParsers.extractQuality(
+            fromOptionsString: options), "305")
+        XCTAssertEqual(CupsParsers.extractOrientation(
+            fromOptionsString: options), "landscape")
+        XCTAssertNil(CupsParsers.extractQuality(
+            fromOptionsString: "PageSize=A4"))
+        XCTAssertNil(CupsParsers.extractOrientation(
+            fromOptionsString: "PageSize=A4"))
     }
 
     func testDriverBypass() {

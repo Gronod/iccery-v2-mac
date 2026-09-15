@@ -25,8 +25,9 @@ public enum CupsOptionsFilter {
         "EPIJ_OSColMat", "ColorCorrection", "StpColorCorrection",
         "EpsonColorMode", "ColorModel",
         // Quality
-        "Resolution", "cupsPrintQuality", "Quality", "EPIJ_Quality",
-        "CNIJQuality", "StpQuality", "OutputMode",
+        "Resolution", "cupsPrintQuality", "Quality", "EPIJ_Qual",
+        "EPIJ_Quality", "CNIJQuality", "CNIJPrintQuality",
+        "PrintQuality", "StpQuality", "OutputMode",
         // Duplex
         "Duplex", "sides",
     ]

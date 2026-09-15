@@ -137,6 +137,9 @@ final class TargetWorkflowViewModel: ObservableObject {
             environment: environment
         )
         self.print = PrintSessionViewModel(wizard: wizard, environment: environment)
+        // Paper-size seeding reads the Stage 1 form through this weak
+        // back-reference; the print side never writes it (#183).
+        self.print.workflow = self
         self.calibration = nil
         self.calibration = CalibrationViewModel(
             workflow: self,

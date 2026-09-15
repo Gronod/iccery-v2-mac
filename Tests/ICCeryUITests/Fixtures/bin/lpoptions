@@ -15,6 +15,7 @@ if [ "$list" = "1" ]; then
   printf 'PageSize/Media Size: 4x6 5x7 *A4 Letter Legal\n'
   printf 'InputSlot/Media Source: Auto *Main Rear\n'
   printf 'MediaType/Media Type: *Stationery PhotographicGlossy PhotographicMatte\n'
+  printf 'EPIJ_Qual/Print Quality: 301 302 *303 304 305 307 308\n'
   printf 'EPIJ_CMat/Color Adjust: *0 1 2 3\n'
   printf 'ColorModel/Output Mode: *RGB Gray\n'
   exit 0
