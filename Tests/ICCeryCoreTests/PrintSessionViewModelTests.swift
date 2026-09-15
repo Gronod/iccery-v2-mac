@@ -50,7 +50,7 @@ final class PrintSessionViewModelTests: XCTestCase {
               printf 'PageSize/Media Size: 4x6 5x7 *A4 Letter Legal Custom.WIDTHxHEIGHT\\n'
               printf 'InputSlot/Media Source: Auto *Main Rear\\n'
               printf 'MediaType/Media Type: *Stationery Glossy Matte\\n'
-              printf 'EPIJ_Qual/Print Quality: 301 302 *303 304\\n'
+              printf 'EPIJ_Qual/Print Quality: 301 302 *303 308 304 305 307\\n'
               exit 0
             fi
             printf "printer-info='Mock %s' printer-type=42\\n" "$queue"
@@ -106,6 +106,9 @@ final class PrintSessionViewModelTests: XCTestCase {
         XCTAssertEqual(workflow.print.selectedPaperSize, 3)
         // Quality seeds from the `*` default on caps load.
         XCTAssertEqual(workflow.print.selectedQuality, "303")
+        // All seven Epson codes enumerate in driver order (#180).
+        XCTAssertEqual(workflow.print.printerCaps.qualities.map(\.id),
+            ["301", "302", "303", "308", "304", "305", "307"])
     }
 
     /// `.custom` → synthetic `id: 0` entry whose token is the

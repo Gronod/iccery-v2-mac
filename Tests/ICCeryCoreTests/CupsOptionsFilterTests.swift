@@ -24,6 +24,18 @@ final class CupsOptionsFilterTests: XCTestCase {
         XCTAssertEqual(CupsOptionsFilter.filter(raw), raw)
     }
 
+    /// #180 — a captured `EPIJ_Qual` (and the other canonical quality
+    /// keys) survives the filter so it wins over the Stage 2 explicit
+    /// quality in `LpArgs`.
+    func testKeepsQualityKeys() {
+        let raw = "EPIJ_Qual=304 CNIJPrintQuality=3 PrintQuality=2 "
+            + "cupsPrintQuality=High Quality=Best "
+            + "com.apple.print.JobTicket.PMTotalSidesImaged=0"
+        XCTAssertEqual(CupsOptionsFilter.filter(raw),
+            "EPIJ_Qual=304 CNIJPrintQuality=3 PrintQuality=2 "
+            + "cupsPrintQuality=High Quality=Best")
+    }
+
     func testKeepsUnknown() {
         let raw = "VendorFooBar=baz MediaType=Plain"
         XCTAssertEqual(CupsOptionsFilter.filter(raw), raw)

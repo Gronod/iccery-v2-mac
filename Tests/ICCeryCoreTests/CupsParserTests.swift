@@ -30,7 +30,7 @@ final class CupsParserTests: XCTestCase {
         MediaType/Media Type: *Stationery PhotographicHighGloss Photographic PhotographicMatte Envelope
         ColorModel/Output Mode: *RGB Gray
         Duplex/Duplex: *None DuplexNoTumble DuplexTumble
-        cupsPrintQuality/cupsPrintQuality: Draft *Normal High
+        EPIJ_Qual/Print Quality: 301 302 *303 308 304 305 307
         """
 
     func testDestinations() {
@@ -124,6 +124,12 @@ final class CupsParserTests: XCTestCase {
         // last (they are colour-ish keys on some drivers — #183/#180).
         XCTAssertEqual(CupsParsers.detectQualityKey(
             optionKeys: ["EPIJ_Qual", "Quality", "OutputMode"]), "EPIJ_Qual")
+        // A full Epson key set — EPIJ_Qual wins over the colour-mode
+        // key, the generic keys, and Resolution (#180, R11).
+        XCTAssertEqual(CupsParsers.detectQualityKey(
+            optionKeys: ["EPIJ_Qual", "OutputMode", "Resolution",
+                         "cupsPrintQuality", "PrintQuality",
+                         "ColorModel"]), "EPIJ_Qual")
         XCTAssertEqual(CupsParsers.detectQualityKey(
             optionKeys: ["Quality", "OutputMode", "Resolution"]), "Quality")
         XCTAssertEqual(CupsParsers.detectQualityKey(
@@ -141,30 +147,63 @@ final class CupsParserTests: XCTestCase {
         let listings = CupsParsers.lpoptionsList(lpoptionsL)
         let caps = service.capabilities(from: listings, ppd: nil)
 
-        // The fixture's only roster member is cupsPrintQuality.
-        XCTAssertEqual(caps.qualityKey, "cupsPrintQuality")
-        XCTAssertEqual(caps.qualities.map(\.id), ["Draft", "Normal", "High"])
-        XCTAssertEqual(caps.qualityDefault, "Normal")
+        // EPIJ_Qual is the roster member — all seven Epson codes
+        // enumerate in the driver's own (non-sorted) order (#180).
+        XCTAssertEqual(caps.qualityKey, "EPIJ_Qual")
+        XCTAssertEqual(caps.qualities.map(\.id),
+            ["301", "302", "303", "308", "304", "305", "307"])
+        XCTAssertEqual(caps.qualityDefault, "303")
     }
 
     func testCapabilitiesQualityPpdLabels() {
+        // Epson XP-55 PPD fragment — the seven `*EPIJ_Qual id/Label`
+        // lines in the driver's own order (#180).
         let ppd = """
-            *EPIJ_Qual 301/Draft: ""
+            *OpenUI *EPIJ_Qual/Print Quality: PickOne
+            *DefaultEPIJ_Qual: 303
+            *EPIJ_Qual 301/Fast Economy: ""
+            *EPIJ_Qual 302/Economy: ""
             *EPIJ_Qual 303/Normal: ""
-            *EPIJ_Qual 308/High Speed: ""
+            *EPIJ_Qual 308/Draft: ""
+            *EPIJ_Qual 304/Fine: ""
+            *EPIJ_Qual 305/Quality: ""
+            *EPIJ_Qual 307/Best Quality: ""
+            *CloseUI: *EPIJ_Qual
             """
         let service = CupsService()
         let listings = CupsParsers.lpoptionsList(
-            "EPIJ_Qual/Print Quality: 301 *303 308\n")
+            "EPIJ_Qual/Print Quality: 301 302 *303 308 304 305 307\n")
         let caps = service.capabilities(from: listings, ppd: ppd)
 
         XCTAssertEqual(caps.qualityKey, "EPIJ_Qual")
         XCTAssertEqual(caps.qualities, [
-            PrinterQuality(id: "301", name: "Draft"),
+            PrinterQuality(id: "301", name: "Fast Economy"),
+            PrinterQuality(id: "302", name: "Economy"),
             PrinterQuality(id: "303", name: "Normal"),
-            PrinterQuality(id: "308", name: "High Speed"),
+            PrinterQuality(id: "308", name: "Draft"),
+            PrinterQuality(id: "304", name: "Fine"),
+            PrinterQuality(id: "305", name: "Quality"),
+            PrinterQuality(id: "307", name: "Best Quality"),
         ])
         XCTAssertEqual(caps.qualityDefault, "303")
+    }
+
+    /// #180 — the Epson listing also carries `OutputMode` (a colour
+    /// mode) and `Resolution`; detection must still pick `EPIJ_Qual`.
+    func testCapabilitiesQualityEpsonDetection() {
+        let service = CupsService()
+        let listings = CupsParsers.lpoptionsList("""
+            PageSize/Media Size: *A4 Letter
+            EPIJ_Qual/Print Quality: 301 302 *303 308 304 305 307
+            OutputMode/Color Mode: *Color Mono
+            Resolution/Resolution: *360dpi 720dpi
+            """)
+        let caps = service.capabilities(from: listings, ppd: nil)
+
+        XCTAssertEqual(caps.qualityKey, "EPIJ_Qual")
+        XCTAssertEqual(caps.qualities.count, 7)
+        XCTAssertEqual(caps.qualityDefault, "303")
+        XCTAssertFalse(caps.qualities.contains { $0.id == "Color" })
     }
 
     func testExtractOption() {

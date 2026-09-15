@@ -136,6 +136,32 @@ final class Milestone11PrintSettingsUITests: XCTestCase {
         XCTAssertEqual(selection(of: "printerQualitySelect"), "303")
     }
 
+    /// #180 — the quality picker lists all seven Epson `EPIJ_Qual`
+    /// codes in the driver's own order (308 between 303 and 304); no
+    /// PPD is injected under UI testing so items show raw tokens.
+    func testQualityPickerListsAllSevenDriverOptions() throws {
+        launchAppWithDefaults()
+        reachPrintPanel()
+        _ = waitFor("printerStatusBadge")
+
+        let picker = app.popUpButtons["printerQualitySelect"]
+        XCTAssertTrue(picker.waitForExistence(timeout: 10))
+        picker.click()
+
+        let expected = ["301", "302", "303", "308", "304", "305", "307"]
+        for token in expected {
+            XCTAssertTrue(
+                app.menuItems[token].waitForExistence(timeout: 5),
+                "Missing quality menu item \(token)")
+        }
+        let titles = app.menuItems.allElementsBoundByIndex
+            .map(\.title)
+            .filter { expected.contains($0) }
+        XCTAssertEqual(titles, expected)
+
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+    }
+
     /// The stubbed panel result's captured `PageSize=`/`EPIJ_Qual=`
     /// apply back into the Stage 2 pickers and reach the `lp` argv
     /// (R15 — the real modal is never driven).
