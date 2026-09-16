@@ -23,7 +23,7 @@ Hardware gates block *release of that sprint*, not filing, and not starting codi
 | M11 | Printer settings completeness & dialog binding | 183, 180, 181, 186 | Quality/media/paper caps parse + `LpArgs` emit + picker UI smoke + panel capture-return | Real Epson: 7 `EPIJ_Qual` options; real Canon Pro9500: English media labels; dialog bound to non-default queue with paper/quality/media/orientation preselected; captured settings reach `lp` argv |
 | Later | Quartz / TargetPrint | 16 | `ICCeryPrintKit` standalone + seam test | 1:1 on paper vs TIFF |
 
-M8–M10 are merged to `develop`; M11 assembles on `milestone/m11-print-settings` from `736fd08`.
+M8–M11 are merged to `develop`; M11 shipped via PR #199 (hardware gate passed on real Epson XP-55 / Canon Pro9500 II).
 
 Issue **16 is not an M3, M6, M10, or M11 exit gate.**
 
