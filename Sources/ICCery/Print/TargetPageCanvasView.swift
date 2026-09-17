@@ -29,7 +29,7 @@ final class TargetPageCanvasView: NSView {
 
     /// Flipped: the CoreGraphics coordinate space is correctly oriented
     /// top-down, so page 1 is the TOP rect.
-    override var isFlipped: Bool { true }
+    override var isFlipped: Bool { false }
     override var isOpaque: Bool { true }
 
     override func knowsPageRange(_ range: NSRangePointer) -> Bool {

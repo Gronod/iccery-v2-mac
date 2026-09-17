@@ -39,7 +39,7 @@ final class TargetCanvasGeometryTests: XCTestCase {
         let view = TargetPageCanvasView(
             pages: [raster(), raster(), raster()],
             paperSize: paperSize)
-        XCTAssertTrue(view.isFlipped)
+        XCTAssertFalse(view.isFlipped)
 
         let page1 = view.rectForPage(1)
         let page3 = view.rectForPage(3)
