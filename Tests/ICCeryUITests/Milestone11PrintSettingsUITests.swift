@@ -11,7 +11,7 @@ final class Milestone11PrintSettingsUITests: XCTestCase {
     private var testRoot: URL!
     private var binDir: URL!
     private var workDir: URL!
-    private var lpArgvURL: URL!
+    private var spoolLogURL: URL!
 
     override func setUp() async throws {
         continueAfterFailure = false
@@ -21,7 +21,7 @@ final class Milestone11PrintSettingsUITests: XCTestCase {
             .deletingLastPathComponent()
             .appendingPathComponent("Fixtures/bin")
         workDir = testRoot.appendingPathComponent("work")
-        lpArgvURL = testRoot.appendingPathComponent("lp-argv.log")
+        spoolLogURL = testRoot.appendingPathComponent("spool.log")
         try FileManager.default.createDirectory(
             at: workDir, withIntermediateDirectories: true)
 
@@ -34,7 +34,7 @@ final class Milestone11PrintSettingsUITests: XCTestCase {
             "ICCERY_TEST_SAVE_TARGET":
                 workDir.appendingPathComponent("mytarget.ti1").path,
             "ICCERY_TEST_WORKDIR": workDir.path,
-            "ICCERY_TEST_LP_ARGV": lpArgvURL.path,
+            "ICCERY_TEST_SPOOL_LOG": spoolLogURL.path,
         ]
     }
 
@@ -75,14 +75,33 @@ final class Milestone11PrintSettingsUITests: XCTestCase {
         _ = waitFor("galleryPage-0", timeout: 25)
     }
 
-    private func waitForLpLine(_ timeout: TimeInterval = 10) -> String {
+    private func spoolLogLines() -> [String] {
+        ((try? String(contentsOf: spoolLogURL, encoding: .utf8)) ?? "")
+            .split(separator: "\n").map(String.init)
+    }
+
+    private func waitForSpoolLine(_ timeout: TimeInterval = 10) -> String {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
-            let out = (try? String(contentsOf: lpArgvURL, encoding: .utf8)) ?? ""
-            if !out.isEmpty { return out }
+            let lines = spoolLogLines()
+            if !lines.isEmpty { return lines.joined(separator: "\n") }
             RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         }
-        return (try? String(contentsOf: lpArgvURL, encoding: .utf8)) ?? ""
+        return spoolLogLines().joined(separator: "\n")
+    }
+
+    /// Poll until the spool log holds at least `count` lines.
+    @discardableResult
+    private func waitForSpoolLineCount(
+        _ count: Int, timeout: TimeInterval = 15
+    ) -> [String] {
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let lines = spoolLogLines()
+            if lines.count >= count { return lines }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        return spoolLogLines()
     }
 
     // MARK: - Tests
@@ -163,8 +182,8 @@ final class Milestone11PrintSettingsUITests: XCTestCase {
     }
 
     /// The stubbed panel result's captured `PageSize=`/`EPIJ_Qual=`
-    /// apply back into the Stage 2 pickers and reach the `lp` argv
-    /// (R15 — the real modal is never driven).
+    /// apply back into the Stage 2 pickers and reach the recorded
+    /// ticket writes (#201 — the real modal is never driven).
     func testPanelResultAppliesBackToPickers() throws {
         app.launchEnvironment["ICCERY_TEST_PRINT_PANEL"] = "ok"
         app.launchEnvironment["ICCERY_TEST_PANEL_OPTIONS"] =
@@ -183,14 +202,14 @@ final class Milestone11PrintSettingsUITests: XCTestCase {
         XCTAssertEqual(selection(of: "printerQualitySelect"), "305")
 
         app.buttons["btnPrintAll"].click()
-        let argv = waitForLpLine()
-        XCTAssertTrue(argv.contains("PageSize=Letter"), argv)
-        XCTAssertTrue(argv.contains("EPIJ_Qual=305"), argv)
+        let log = waitForSpoolLine()
+        XCTAssertTrue(log.contains("PageSize=Letter"), log)
+        XCTAssertTrue(log.contains("EPIJ_Qual=305"), log)
     }
 
     /// #186 — the stubbed panel result's `orientation-requested=` /
     /// `MediaType=` apply back to the Stage 2 selections and reach the
-    /// `lp` argv through the captured `cupsOptions` replay.
+    /// recorded ticket writes via the Stage 2 overrides (#201 D6).
     func testPanelResultAppliesBackOrientationAndMedia() throws {
         app.launchEnvironment["ICCERY_TEST_PRINT_PANEL"] = "ok"
         app.launchEnvironment["ICCERY_TEST_PANEL_OPTIONS"] =
@@ -225,11 +244,38 @@ final class Milestone11PrintSettingsUITests: XCTestCase {
         XCTAssertEqual(selection(of: "printerPaperSizeSelect"), "Letter")
 
         app.buttons["btnPrintAll"].click()
-        let argv = waitForLpLine()
-        XCTAssertTrue(argv.contains("orientation-requested=4"), argv)
-        XCTAssertTrue(argv.contains("MediaType=PhotographicGlossy"), argv)
-        XCTAssertTrue(argv.contains("PageSize=Letter"), argv)
-        XCTAssertTrue(argv.contains("EPIJ_Qual=305"), argv)
+        let log = waitForSpoolLine()
+        XCTAssertTrue(log.contains("orientation-requested=4"), log)
+        XCTAssertTrue(log.contains("MediaType=PhotographicGlossy"), log)
+        XCTAssertTrue(log.contains("PageSize=Letter"), log)
+        XCTAssertTrue(log.contains("EPIJ_Qual=305"), log)
+    }
+
+    /// #201 D5 — per-page mode records one line per page; the
+    /// `chkSingleSpoolJob` toggle collapses the job into a single
+    /// request logged once with `pages=N`.
+    func testSingleSpoolJobTogglesGranularity() throws {
+        app.launchEnvironment["ICCERY_MOCK_PRINTTARG_PAGES"] = "2"
+        launchAppWithDefaults()
+        reachPrintPanel()
+        _ = waitFor("printerStatusBadge")
+        XCTAssertTrue(element("chkSingleSpoolJob").exists)
+
+        // Default off → one request per page → one line per page.
+        app.buttons["btnPrintAll"].click()
+        var lines = waitForSpoolLineCount(2)
+        XCTAssertEqual(lines.count, 2)
+        XCTAssertTrue(lines.allSatisfy { $0.contains("pages=1") },
+                      lines.joined(separator: "\n"))
+
+        // Toggle on → one request for all pages → a single line.
+        element("chkSingleSpoolJob").click()
+        app.buttons["btnPrintAll"].click()
+        lines = waitForSpoolLineCount(3)
+        XCTAssertEqual(lines.count, 3)
+        XCTAssertEqual(
+            lines.filter { $0.contains("pages=2") }.count, 1,
+            lines.joined(separator: "\n"))
     }
 
     private func launchAppWithDefaults() {

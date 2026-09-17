@@ -5,33 +5,35 @@ import XCTest
 
 /// Issue #183 — Stage 2 paper-size / quality selection: seeding from
 /// Stage 1 `pageSize`, the synthetic `Custom.<pt>x<pt>` entry, re-mirror
-/// triggers, and `PrintOptions` wiring into `lp` argv.
-/// `lpoptions`/`lp` are mock scripts in the test env's `cups-bin` — no
+/// triggers, and `TargetPrintOverrides` wiring into the resolved
+/// ticket writes (#201 — the `RecordingTargetSpooler` seam replaces
+/// the deleted `lp` argv log).
+/// `lpoptions` is a mock script in the test env's `cups-bin` — no
 /// live CUPS is touched.
 @MainActor
 final class PrintSessionViewModelTests: XCTestCase {
 
     private var env: TestAppEnvironment!
-    private var lpArgvURL: URL!
+    private var spoolLogURL: URL!
 
     override func setUp() async throws {
         env = try TestAppEnvironment.make()
-        lpArgvURL = env.root.appendingPathComponent("lp-argv.log")
+        spoolLogURL = env.root.appendingPathComponent("spool.log")
         try writeCupsFixtures()
     }
 
     override func tearDown() async throws {
         env?.cleanup()
         env = nil
-        lpArgvURL = nil
+        spoolLogURL = nil
     }
 
     private var binDir: URL {
         env.root.appendingPathComponent("cups-bin")
     }
 
-    /// Mock `lpoptions -l` advertises paper sizes + a quality key;
-    /// mock `lp` appends its argv to `lpArgvURL` for assertions.
+    /// Mock `lpoptions -l` advertises paper sizes + a quality key —
+    /// the queue's option-key roster feeds media/quality detection.
     private func writeCupsFixtures() throws {
         try FileManager.default.createDirectory(
             at: binDir, withIntermediateDirectories: true)
@@ -56,17 +58,10 @@ final class PrintSessionViewModelTests: XCTestCase {
             printf "printer-info='Mock %s' printer-type=42\\n" "$queue"
             exit 0
             """
-        let lp = """
-            #!/bin/sh
-            printf '%s\\n' "$*" >> "\(lpArgvURL.path)"
-            exit 0
-            """
-        for (name, body) in [("lpoptions", lpoptions), ("lp", lp)] {
-            let url = binDir.appendingPathComponent(name)
-            try body.write(to: url, atomically: true, encoding: .utf8)
-            try FileManager.default.setAttributes(
-                [.posixPermissions: 0o755], ofItemAtPath: url.path)
-        }
+        let url = binDir.appendingPathComponent("lpoptions")
+        try lpoptions.write(to: url, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: url.path)
     }
 
     private func makeWorkflow() -> TargetWorkflowViewModel {
@@ -185,14 +180,17 @@ final class PrintSessionViewModelTests: XCTestCase {
 
     // MARK: - Spool wiring
 
-    /// `spool` emits the Stage 2 paper token and quality through
-    /// `PrintOptions` → `lp` argv (`-o PageSize=`, `-o <qualityKey>=`).
+    /// `spool` resolves the Stage 2 paper token and quality into the
+    /// ticket writes (`PageSize=`, `<qualityKey>=`) recorded by the
+    /// DEBUG spool seam (#201 D8).
     func testSpoolPassesPaperTokenAndQuality() async throws {
         let workflow = makeWorkflow()
         workflow.pageSize = .a4
         await loadCaps(workflow.print)
         workflow.print.selectedPaperSize = 4 // Letter
         workflow.print.selectedQuality = "301"
+        workflow.print.spooler = RecordingTargetSpooler(
+            logURL: spoolLogURL)
 
         let tiff = env.root.appendingPathComponent("page1.tif")
         try Data([0x49, 0x49]).write(to: tiff)
@@ -208,9 +206,46 @@ final class PrintSessionViewModelTests: XCTestCase {
             pages: [page])
         workflow.print.printAllPages(from: result)
 
-        let argv = await waitForFile(lpArgvURL)
-        XCTAssertTrue(argv.contains("PageSize=Letter"), argv)
-        XCTAssertTrue(argv.contains("EPIJ_Qual=301"), argv)
+        let log = await waitForFile(spoolLogURL)
+        XCTAssertTrue(log.contains("PageSize=Letter"), log)
+        XCTAssertTrue(log.contains("EPIJ_Qual=301"), log)
+    }
+
+    /// #201 — the stubbed panel never produces a `PrintTicket`, so a
+    /// spool with `capturedTickets` empty must still resolve every
+    /// Stage 2 write (the default UI-test path).
+    func testSpoolWithoutTicketResolvesStage2Writes() async throws {
+        let workflow = makeWorkflow()
+        workflow.pageSize = .a4
+        await loadCaps(workflow.print)
+        workflow.print.spooler = RecordingTargetSpooler(
+            logURL: spoolLogURL)
+        XCTAssertTrue(workflow.print.capturedTickets.isEmpty)
+
+        let tiff = env.root.appendingPathComponent("page1.tif")
+        try Data([0x49, 0x49]).write(to: tiff)
+        let page = GalleryPage(
+            index: 0,
+            page: PrinttargPage(
+                filename: "page1.tif", patches: 10,
+                widthMm: 210, heightMm: 297),
+            fileURL: tiff, previewPNG: nil, previewError: nil)
+        let result = PrinttargResult(
+            ti2URL: env.root.appendingPathComponent("target.ti2"),
+            manifest: PrinttargManifest(pages: [page.page]),
+            pages: [page])
+        workflow.print.printAllPages(from: result)
+
+        let log = await waitForFile(spoolLogURL)
+        XCTAssertTrue(log.contains("pages=1"), log)
+        XCTAssertTrue(log.contains("PageSize=A4"), log)
+        XCTAssertTrue(log.contains("EPIJ_Qual=303"), log)
+        XCTAssertTrue(log.contains("MediaType=Stationery"), log)
+        XCTAssertTrue(log.contains("orientation-requested=3"), log)
+        XCTAssertTrue(log.contains(
+            "AP_ColorMatchingMode=AP_ApplicationColorMatching"), log)
+        XCTAssertTrue(log.contains(
+            "PMColorMatchingMode=APCustomColorMatching"), log)
     }
 
     // MARK: - Panel apply-back (stubbed NSPrintPanel)
