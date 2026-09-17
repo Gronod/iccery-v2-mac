@@ -27,8 +27,10 @@ final class TargetPageCanvasView: NSView {
         fatalError("TargetPageCanvasView is code-only")
     }
 
-    /// Flipped: the CoreGraphics coordinate space is correctly oriented
-    /// top-down, so page 1 is the TOP rect.
+    /// Bottom-up CoreGraphics space: `CGContext.draw(_:in:)` renders
+    /// the raster upright — a flipped view prints mirrored (#211).
+    /// Page 1 is the BOTTOM band of the frame, the non-flipped
+    /// pagination convention.
     override var isFlipped: Bool { false }
     override var isOpaque: Bool { true }
 
@@ -37,7 +39,7 @@ final class TargetPageCanvasView: NSView {
         return true
     }
 
-    /// 1-based page → its paper-sized rect, stacked top-down.
+    /// 1-based page → its paper-sized rect, stacked bottom-up.
     override func rectForPage(_ page: Int) -> NSRect {
         NSRect(x: 0,
                y: CGFloat(page - 1) * paperSize.height,
@@ -53,7 +55,7 @@ final class TargetPageCanvasView: NSView {
         let pageRect = rectForPage(page)
         let size = pages[page - 1].pointSize
         return NSRect(x: Self.snap(pageRect.minX),
-                      y: Self.snap(pageRect.minY),
+                      y: Self.snap(pageRect.maxY - size.height),
                       width: size.width,
                       height: size.height)
     }

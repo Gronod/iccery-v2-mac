@@ -4,7 +4,7 @@ import Foundation
 import XCTest
 @testable import ICCery
 
-/// Issue #201 Phase 3 — `TargetPageCanvasView` top-down page stacking,
+/// Issue #201 Phase 3 — `TargetPageCanvasView` bottom-up page stacking,
 /// snapped top-left anchoring, and the draw-time interpolation /
 /// antialias contract asserted via `drawProbe`.
 @MainActor
@@ -35,7 +35,9 @@ final class TargetCanvasGeometryTests: XCTestCase {
 
     // MARK: - Page stacking
 
-    func testRectForPageStacksTopDown() {
+    /// Bottom-up space: page 1 is the BOTTOM band of the frame — the
+    /// non-flipped pagination convention (#211).
+    func testRectForPageStacksBottomUp() {
         let view = TargetPageCanvasView(
             pages: [raster(), raster(), raster()],
             paperSize: paperSize)
@@ -68,18 +70,33 @@ final class TargetCanvasGeometryTests: XCTestCase {
             pages: [raster(), raster()],
             paperSize: paperSize)
 
+        // Near-full-page raster: in bottom-up space the page's top
+        // edge is `maxY`, so the top-anchored origin is ~0.03 pt
+        // negative — the overflow clips at the BOTTOM of the sheet.
         let first = view.destinationRect(forPage: 1)
         XCTAssertEqual(first.origin.x, 0, accuracy: 0.001)
-        XCTAssertEqual(first.origin.y, 0, accuracy: 0.001)
+        XCTAssertEqual(first.origin.y, -0.03, accuracy: 0.001)
         XCTAssertEqual(first.width, 595.2, accuracy: 0.01)
         XCTAssertEqual(first.height, 841.92, accuracy: 0.01)
 
         let second = view.destinationRect(forPage: 2)
         XCTAssertEqual(
-            second.origin.y, paperSize.height, accuracy: 0.001)
+            second.origin.y,
+            2 * paperSize.height - first.height, accuracy: 0.001)
         XCTAssertEqual(second.size, first.size)
 
-        for rect in [first, second] {
+        // A raster smaller than the paper hangs from the page's TOP
+        // edge — minY would anchor it at the bottom (#211 follow-up).
+        let small = TargetPageCanvasView(
+            pages: [raster(pixelWidth: 72, pixelHeight: 72, dpi: 72)],
+            paperSize: paperSize)
+        let smallRect = small.destinationRect(forPage: 1)
+        XCTAssertEqual(smallRect.origin.x, 0, accuracy: 0.001)
+        XCTAssertEqual(
+            smallRect.origin.y, paperSize.height - 72, accuracy: 0.001)
+        XCTAssertEqual(smallRect.size, CGSize(width: 72, height: 72))
+
+        for rect in [first, second, smallRect] {
             XCTAssertEqual(
                 rect.origin.x * 1000,
                 (rect.origin.x * 1000).rounded(),
