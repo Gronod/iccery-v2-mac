@@ -147,6 +147,7 @@ struct PrintPanelService {
             let session = PMTicketBridge.session(printInfo)
             suppressor.applySPIMode(to: session)                    // ②
             suppressor.applyLockedKeys(to: settings)                // ③
+            suppressor.applyQuartzMode(to: settings)                // ⑤′-a (D2)
             driverBypass = suppressor.applyDriverBypass(            // ④
                 to: settings, optionKeys: optionKeys)
             suppressor.mirror(into: printInfo, driverBypass: driverBypass) // ⑤

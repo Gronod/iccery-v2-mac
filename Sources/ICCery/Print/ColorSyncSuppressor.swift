@@ -84,6 +84,35 @@ struct ColorSyncSuppressor {
         return applied
     }
 
+    // MARK: - Layer ⑤′ Quartz vocabulary (#201 D2)
+
+    /// With `lp` gone there is one print path and it carries **both**
+    /// dictionaries: write keys 3–5 of the resolver order into
+    /// `PMPrintSettings` so the PDE and the spool job see them
+    /// (docs/14 §7). Warn-only — a rejected key never aborts.
+    @discardableResult
+    func applyQuartzMode(to settings: PMPrintSettings) -> Int {
+        var applied = 0
+        let pairs: [(key: String, value: String, locked: Bool)] = [
+            (ColorMatchingAttempts.quartzModeKey,
+             ColorMatchingAttempts.quartzCustomMatching, true),
+            (ColorMatchingAttempts.quartzProfileKey, "", false),
+            (ColorMatchingAttempts.quartzLegacyModeKey,
+             ColorMatchingAttempts.quartzCustomMatching, false),
+        ]
+        for pair in pairs {
+            let status = PMPrintSettingsSetValue(
+                settings, pair.key as CFString, pair.value as CFString,
+                pair.locked)
+            if status == 0 { applied += 1 }
+        }
+        if applied == 0 {
+            log("ColorSync: PMPrintSettingsSetValue rejected the "
+                + "Quartz colour-matching keys")
+        }
+        return applied
+    }
+
     // MARK: - Layer ④ driver bypass
 
     /// Pre-select the driver "no colour adjustment" option, unlocked —
@@ -112,7 +141,11 @@ struct ColorSyncSuppressor {
     // MARK: - Layer ⑤ NSPrintInfo mirror
 
     /// Mirror the applied keys into `printSettings` so the PDE pick
-    /// sees them.
+    /// sees them. Also populates the nested
+    /// `com.apple.print.printSettings` sub-dictionary of
+    /// `printInfo.dictionary()` with the AP_* **and** Quartz keys —
+    /// the single remaining path carries both vocabularies (#201 D2,
+    /// docs/14 §7).
     func mirror(
         into printInfo: NSPrintInfo,
         driverBypass: (key: String, value: String)?
@@ -121,9 +154,29 @@ struct ColorSyncSuppressor {
         for key in ColorMatchingAttempts.printSettingsKeys {
             settings[key as NSString] = ColorMatchingAttempts.applicationMatchingValue as NSString
         }
+        settings[ColorMatchingAttempts.quartzModeKey as NSString] =
+            ColorMatchingAttempts.quartzCustomMatching as NSString
+        settings[ColorMatchingAttempts.quartzProfileKey as NSString] =
+            "" as NSString
+        settings[ColorMatchingAttempts.quartzLegacyModeKey as NSString] =
+            ColorMatchingAttempts.quartzCustomMatching as NSString
         if let driverBypass {
             settings[driverBypass.key as NSString] = driverBypass.value as NSString
         }
+
+        // Nested mirror — drivers that read the flattened dictionary.
+        let nestedKey = ColorMatchingAttempts.quartzNestedDictKey as NSString
+        let nested = (settings[nestedKey] as? NSMutableDictionary)
+            ?? NSMutableDictionary()
+        for key in ColorMatchingAttempts.printSettingsKeys {
+            nested[key] = ColorMatchingAttempts.applicationMatchingValue
+        }
+        nested[ColorMatchingAttempts.quartzModeKey] =
+            ColorMatchingAttempts.quartzCustomMatching
+        nested[ColorMatchingAttempts.quartzProfileKey] = ""
+        nested[ColorMatchingAttempts.quartzLegacyModeKey] =
+            ColorMatchingAttempts.quartzCustomMatching
+        settings[nestedKey] = nested
     }
 
     // MARK: - Layer ⑥ capture

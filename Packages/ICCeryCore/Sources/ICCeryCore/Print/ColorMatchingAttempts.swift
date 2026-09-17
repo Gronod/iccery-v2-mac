@@ -46,4 +46,23 @@ public enum ColorMatchingAttempts {
         "AP_ColorMatchingMode",
         "AP.ColorMatchingMode",
     ]
+
+    /// The Quartz/`NSPrintOperation` colour-matching vocabulary
+    /// (docs/14 §7). With the `lp` path removed there is a single
+    /// spool path and it carries **both** dictionaries — these keys
+    /// are written alongside the AP_* pair (#201 D2).
+    ///
+    /// `PMColorMatchingMode=APCustomColorMatching` plus an empty
+    /// `PMCustomColorMatchingProfile` tell Quartz the application
+    /// supplies device colour; the `com.apple.print.PrintSettings.*`
+    /// legacy spelling covers drivers that read the flattened
+    /// dictionary.
+    public static let quartzModeKey = "PMColorMatchingMode"
+    public static let quartzCustomMatching = "APCustomColorMatching"
+    public static let quartzProfileKey = "PMCustomColorMatchingProfile"
+    public static let quartzLegacyModeKey =
+        "com.apple.print.PrintSettings.PMColorMatchingMode"
+    /// The nested sub-dictionary inside `NSPrintInfo.dictionary()` the
+    /// colour keys are mirrored into.
+    public static let quartzNestedDictKey = "com.apple.print.printSettings"
 }

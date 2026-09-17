@@ -111,24 +111,24 @@ public struct PrinterCapabilities: Codable, Equatable, Sendable {
     }
 }
 
-/// Options carried into `lp` (docs/10 §PrintOptions). On macOS
-/// `paperSource` is ignored unless already present inside captured
-/// `cupsOptions`; `ppdUncorrectedPassthrough` is stored (the panel sets
-/// it on OK) but never gates the argv — macOS always bypasses driver
-/// colour management.
+/// The Stage 2 mirror — panel selections and the captured `k=v`
+/// string (docs/10 §PrintOptions). Since #201 removed the `lp` path
+/// these fields feed `TargetPrintOverrides` (Stage 2 always wins, D6)
+/// and the mirror apply-back; the opaque vendor state now travels
+/// inside the `PrintTicket`, not a flattened option string.
 public struct PrintOptions: Codable, Equatable, Sendable {
     public var paperSource: Int?
     /// `"portrait"` / `"landscape"` → `orientation-requested=3|4`.
     public var orientation: String?
-    /// Stage 2 paper token → `PageSize=` (skipped if captured, #183).
+    /// Stage 2 paper token → `PageSize=` ticket write + `PMPaper`.
     public var paperSize: String?
     public var mediaType: String?
-    /// Print-quality token → `-o <detectedQualityKey>=` (skipped if
-    /// captured, #183).
+    /// Print-quality token → `<detectedQualityKey>=` ticket write.
     public var quality: String?
     public var ppdUncorrectedPassthrough: Bool?
     /// Space-separated `key=value` captured from
-    /// `PMPrintSettingsToOptions` and filtered (docs/11 layer ⑥).
+    /// `PMPrintSettingsToOptions` and filtered (docs/11 layer ⑥) —
+    /// the Stage 2 mirror only, never a spool payload.
     public var cupsOptions: String?
 
     public init(

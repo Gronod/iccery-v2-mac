@@ -2,7 +2,8 @@ import Combine
 import Foundation
 import ICCeryCore
 
-/// CUPS queue selection, bound print panel, and `lp` spool (issues 12–15, 17 / #85).
+/// CUPS queue selection, bound print panel, and native headless spool
+/// (issues 12–15, 17 / #85, #201).
 @MainActor
 final class PrintSessionViewModel: ObservableObject {
     let wizard: WizardViewModel
@@ -13,7 +14,15 @@ final class PrintSessionViewModel: ObservableObject {
     weak var workflow: TargetWorkflowViewModel?
 
     @Published var printers: [Printer] = []
-    @Published var selectedPrinter = ""
+    @Published var selectedPrinter = "" {
+        didSet {
+            // Tickets are queue- and driver-version-specific — a stale
+            // ticket must never replay onto a re-selected queue (R3).
+            if selectedPrinter != oldValue {
+                capturedTickets[oldValue] = nil
+            }
+        }
+    }
     @Published var printerCaps = PrinterCapabilities()
     @Published var selectedTray: Int?
     @Published var selectedMediaType: String?
@@ -28,11 +37,39 @@ final class PrintSessionViewModel: ObservableObject {
     @Published var capturedTickets: [String: PrintTicket] = [:]
     @Published var printNotice: Notice?
     @Published var isPrinting = false
+    /// Session-only job granularity (#201 D5): off → one job per page
+    /// (per-page notices + error attribution); on → a single job.
+    @Published var singleJobForAllPages = false
+    /// The spool backend — the `ICCERY_TEST_SPOOL_LOG` recording seam
+    /// under UI testing, `NSPrintOperation` otherwise (#201 D8).
+    /// `internal` so unit tests inject.
+    var spooler: TargetSpooling
     private var printTask: Task<Void, Never>?
 
     init(wizard: WizardViewModel, environment: AppEnvironment) {
         self.wizard = wizard
         self.environment = environment
+        #if DEBUG
+        if UITestHooks.isEnabled, let logURL = UITestHooks.spoolLogURL {
+            spooler = RecordingTargetSpooler(logURL: logURL)
+        } else {
+            spooler = NativeTargetSpooler()
+        }
+        #else
+        spooler = NativeTargetSpooler()
+        #endif
+        attachDiagnostics()
+    }
+
+    /// Warn-only spooler diagnostics (manifest drift, oversize page)
+    /// surface as the in-panel notice. Re-attached per request so an
+    /// injected spooler picks it up too — and so `spooler` needs no
+    /// `didSet` (mutating `diagnostics` through the existential would
+    /// re-fire the observer and recurse).
+    private func attachDiagnostics() {
+        spooler.diagnostics = { [weak self] notice in
+            self?.printNotice = notice
+        }
     }
 
     private var printerEnumTask: Task<[Printer]?, Never>?
@@ -134,7 +171,8 @@ final class PrintSessionViewModel: ObservableObject {
 
     /// The CUPS `PageSize` token for the current Stage 2 pick — live
     /// `Custom.<pt>x<pt>` for the synthetic entry, else the capability
-    /// name. This is what `lp -o PageSize=` sees.
+    /// name. Resolved into the `PageSize` ticket write and the
+    /// `PMPaper` match on the native spool path (#201).
     var selectedPaperSizeToken: String? {
         guard let id = selectedPaperSize else { return nil }
         if id == 0 { return customPaperToken() }
@@ -216,10 +254,31 @@ final class PrintSessionViewModel: ObservableObject {
             guard let self else { return }
             // `defer` cannot mutate isolated state under Swift 5.7
             // (Xcode 14.2 / macOS 12 runner), so clear explicitly (#113).
+            if singleJobForAllPages {
+                // D5 — one job carries every page; a failure names the
+                // job, not a page (R14).
+                do {
+                    try await spoolAll(result)
+                    printNotice = Notice(
+                        kind: .info,
+                        text: "Sent \(result.pages.count) page(s) in "
+                            + "one job to \(selectedPrinter).",
+                        autoHideAfter: nil
+                    )
+                } catch {
+                    printNotice = Notice(
+                        kind: .error,
+                        text: "Print failed: \(error.localizedDescription)"
+                    )
+                }
+                isPrinting = false
+                self.printTask = nil
+                return
+            }
             var printed = 0
             for page in result.pages {
                 do {
-                    try await spool(page, index: page.index)
+                    try await spool(page)
                     printed += 1
                 } catch {
                     printNotice = Notice(
@@ -249,7 +308,7 @@ final class PrintSessionViewModel: ObservableObject {
         let task = Task { @MainActor [weak self] in
             guard let self else { return }
             do {
-                try await spool(page, index: page.index)
+                try await spool(page)
                 printNotice = Notice(
                     kind: .info,
                     text: "Sent \(page.page.filename) to \(selectedPrinter).",
@@ -267,25 +326,55 @@ final class PrintSessionViewModel: ObservableObject {
         printTask = task
     }
 
-    private func spool(_ page: GalleryPage, index: Int) async throws {
+    private func spool(_ page: GalleryPage) async throws {
+        let request = try await makeRequest(
+            pages: [page], title: page.page.filename)
+        try spooler.spool(request)
+        wizard.printerName = selectedPrinter
+    }
+
+    private func spoolAll(_ result: PrinttargResult) async throws {
+        let request = try await makeRequest(
+            pages: result.pages,
+            title: result.ti2URL.deletingPathExtension()
+                .lastPathComponent)
+        try spooler.spool(request)
+        wizard.printerName = selectedPrinter
+    }
+
+    /// Assemble the deterministic spool request: the captured ticket
+    /// (when the panel produced one) plus the Stage 2 overrides and
+    /// the queue's option-key roster for vendor-key detection (#201).
+    /// The Stage 2 paper token feeds the `PageSize` write;
+    /// `workflow.pageSize` remains the printtarg layout input only
+    /// (#183).
+    private func makeRequest(
+        pages: [GalleryPage], title: String
+    ) async throws -> TargetPrintRequest {
         guard !selectedPrinter.isEmpty else {
             throw CupsError.noPrinterSelected
         }
-        // The Stage 2 paper token is what `lp -o PageSize=` sees;
-        // `workflow.pageSize` remains the printtarg layout input only
-        // (#183).
-        let options = PrintOptions(
-            orientation: printOrientation,
-            paperSize: selectedPaperSizeToken,
-            mediaType: selectedMediaType,
-            quality: selectedQuality,
-            ppdUncorrectedPassthrough: true,
-            cupsOptions: capturedCupsOptions[selectedPrinter])
-        try await environment.cupsService.printTarget(
-            queue: selectedPrinter,
-            tiffPath: page.fileURL.path,
-            options: options,
-            page: index)
-        wizard.printerName = selectedPrinter
+        let queue = selectedPrinter
+        let optionKeys = (try? await environment.cupsService
+            .optionKeys(for: queue)) ?? []
+        attachDiagnostics()
+        return TargetPrintRequest(
+            queue: queue,
+            displayName: printers.first { $0.name == queue }?.displayName,
+            pages: pages.map {
+                TargetPrintPage(
+                    url: $0.fileURL,
+                    expectedWidthMm: $0.page.widthMm,
+                    expectedHeightMm: $0.page.heightMm)
+            },
+            jobTitle: "ICCery Target - \(title)",
+            ticket: capturedTickets[queue],
+            overrides: TargetPrintOverrides(
+                paperSize: selectedPaperSizeToken,
+                mediaType: selectedMediaType,
+                qualityKey: printerCaps.qualityKey,
+                quality: selectedQuality,
+                orientation: printOrientation),
+            optionKeys: optionKeys)
     }
 }

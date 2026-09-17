@@ -106,12 +106,14 @@ enum UITestHooks {
 
     // MARK: - Print panel / CUPS stubs (issue 13/17)
 
-    /// Directory of mock `lp`/`lpstat`/`lpoptions` fixture scripts —
+    /// Directory of mock `lpstat`/`lpoptions` fixture scripts —
     /// `CupsService.binaryDir` under UI tests.
     static var cupsBinaryDir: URL? { url("ICCERY_CUPS_BIN_DIR") }
 
-    /// Path the mock `lp` script appends its argv to, for assertions.
-    static var lpArgvOutURL: URL? { url("ICCERY_TEST_LP_ARGV") }
+    /// Path the `RecordingTargetSpooler` appends resolved ticket
+    /// lines to, for assertions (#201 D8 — replaces the `lp` argv
+    /// log).
+    static var spoolLogURL: URL? { url("ICCERY_TEST_SPOOL_LOG") }
 
     /// Whether the `NSPrintPanel` should be stubbed under UI testing —
     /// separate from the stub's *result* so "cancel" (`nil`) does not

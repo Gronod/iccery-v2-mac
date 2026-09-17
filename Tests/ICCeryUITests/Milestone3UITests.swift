@@ -3,9 +3,10 @@ import XCTest
 /// Milestone 3 UI tests — issue #17 print panel end-to-end with mock
 /// CUPS binaries and a stubbed `NSPrintPanel`. The real panel is a
 /// system modal XCUITest cannot drive; `ICCERY_TEST_PRINT_PANEL`
-/// returns a canned `PrintPropertiesResult` instead. Mock `lp` appends
-/// its argv to `ICCERY_TEST_LP_ARGV` for assertions — that file is the
-/// evidence that captured options are replayed (docs/11 §tests).
+/// returns a canned `PrintPropertiesResult` instead. The DEBUG
+/// `RecordingTargetSpooler` appends one resolved-ticket line per
+/// request to `ICCERY_TEST_SPOOL_LOG` (#201 D8) — that file is the
+/// evidence that the Stage 2 selections reach the spool.
 @MainActor
 final class Milestone3UITests: XCTestCase {
 
@@ -13,7 +14,7 @@ final class Milestone3UITests: XCTestCase {
     private var testRoot: URL!
     private var binDir: URL!
     private var workDir: URL!
-    private var lpArgvURL: URL!
+    private var spoolLogURL: URL!
 
     override func setUp() async throws {
         continueAfterFailure = false
@@ -23,7 +24,7 @@ final class Milestone3UITests: XCTestCase {
             .deletingLastPathComponent()
             .appendingPathComponent("Fixtures/bin")
         workDir = testRoot.appendingPathComponent("work")
-        lpArgvURL = testRoot.appendingPathComponent("lp-argv.log")
+        spoolLogURL = testRoot.appendingPathComponent("spool.log")
         try FileManager.default.createDirectory(
             at: workDir, withIntermediateDirectories: true)
 
@@ -36,7 +37,7 @@ final class Milestone3UITests: XCTestCase {
             "ICCERY_TEST_SAVE_TARGET":
                 workDir.appendingPathComponent("mytarget.ti1").path,
             "ICCERY_TEST_WORKDIR": workDir.path,
-            "ICCERY_TEST_LP_ARGV": lpArgvURL.path,
+            "ICCERY_TEST_SPOOL_LOG": spoolLogURL.path,
         ]
     }
 
@@ -99,18 +100,18 @@ final class Milestone3UITests: XCTestCase {
         _ = waitFor("galleryPage-0", timeout: 25)
     }
 
-    private func recordedLpArgv() -> String {
-        (try? String(contentsOf: lpArgvURL, encoding: .utf8)) ?? ""
+    private func recordedSpoolLog() -> String {
+        (try? String(contentsOf: spoolLogURL, encoding: .utf8)) ?? ""
     }
 
-    private func waitForLpLine(_ timeout: TimeInterval = 10) -> String {
+    private func waitForSpoolLine(_ timeout: TimeInterval = 10) -> String {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
-            let out = recordedLpArgv()
+            let out = recordedSpoolLog()
             if !out.isEmpty { return out }
             RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         }
-        return recordedLpArgv()
+        return recordedSpoolLog()
     }
 
     /// Drags `#galleryPage-0`'s TIFF upward so `identifier`'s button
@@ -203,10 +204,13 @@ final class Milestone3UITests: XCTestCase {
         XCTAssertEqual(element("printNotificationIcon").value as? String, "info")
     }
 
-    /// Preferences OK → captured options are replayed verbatim in the
-    /// `lp` argv alongside the two mandatory AP_* headers (issue 17's
-    /// acceptance test: "captured options replayed in argv").
-    func testCapturedOptionsReplayedInLpArgv() throws {
+    /// Preferences OK → the captured media selection applies back to
+    /// Stage 2 and reaches the recorded ticket writes alongside the
+    /// mandatory colour keys (issue 17's acceptance test, ported to
+    /// the native spool seam in #201). The captured `InputSlot` is no
+    /// longer replayed — captured vendor state lives inside the
+    /// `PrintTicket`, which the stub deliberately does not produce.
+    func testPanelSelectionsApplyBackToSpoolWrites() throws {
         app.launchEnvironment["ICCERY_TEST_PRINT_PANEL"] = "ok"
         app.launchEnvironment["ICCERY_TEST_PANEL_OPTIONS"] =
             "InputSlot=Rear MediaType=PhotographicGlossy"
@@ -221,20 +225,17 @@ final class Milestone3UITests: XCTestCase {
             .contains("Settings captured"))
 
         app.buttons["btnPrintAll"].click()
-        let argv = waitForLpLine()
-        XCTAssertTrue(argv.contains(
-            "AP_ColorMatchingMode=AP_ApplicationColorMatching"), argv)
-        XCTAssertTrue(argv.contains(
-            "AP.ColorMatchingMode=AP_ApplicationColorMatching"), argv)
-        XCTAssertTrue(argv.contains("InputSlot=Rear"), argv)
-        XCTAssertTrue(argv.contains("MediaType=PhotographicGlossy"), argv)
+        let log = waitForSpoolLine()
+        XCTAssertTrue(log.contains(
+            "AP_ColorMatchingMode=AP_ApplicationColorMatching"), log)
+        XCTAssertTrue(log.contains(
+            "AP.ColorMatchingMode=AP_ApplicationColorMatching"), log)
+        XCTAssertTrue(log.contains("MediaType=PhotographicGlossy"), log)
         // Detected bypass for the mock queue (EPIJ_CMat present in
-        // lpoptions -l) is appended when not captured.
-        XCTAssertTrue(argv.contains("EPIJ_CMat=3"), argv)
-        XCTAssertTrue(argv.contains("orientation-requested=3"), argv)
-        // Last token is the TIFF.
-        XCTAssertTrue(argv.trimmingCharacters(in: .whitespacesAndNewlines)
-            .hasSuffix("page1.tif"), argv)
+        // lpoptions -l) is always written.
+        XCTAssertTrue(log.contains("EPIJ_CMat=3"), log)
+        XCTAssertTrue(log.contains("orientation-requested=3"), log)
+        XCTAssertTrue(log.contains("page=page1.tif"), log)
     }
 
     /// Per-page print uses the same spool path (btnPrintPage-N).
@@ -262,14 +263,16 @@ final class Milestone3UITests: XCTestCase {
             return
         }
         printPage.click()
-        let argv = waitForLpLine()
-        XCTAssertTrue(argv.contains("AP_ColorMatchingMode"), argv)
-        XCTAssertTrue(argv.contains("page1.tif"), argv)
+        let log = waitForSpoolLine()
+        XCTAssertTrue(log.contains("AP_ColorMatchingMode"), log)
+        XCTAssertTrue(log.contains("page=page1.tif"), log)
     }
 
-    /// lp failure surfaces in the in-panel notice, not the wizard banner.
-    func testLpFailureShowsPrintNotice() throws {
-        app.launchEnvironment["ICCERY_MOCK_LP_EXIT"] = "1"
+    /// A spool failure surfaces in the in-panel notice, not the
+    /// wizard banner (`ICCERY_TEST_SPOOL_FAIL` makes the recording
+    /// spooler throw `TargetSpoolError.operationFailed`).
+    func testSpoolFailureShowsPrintNotice() throws {
+        app.launchEnvironment["ICCERY_TEST_SPOOL_FAIL"] = "1"
         launchApp()
         reachPrintPanel()
         _ = waitFor("printerStatusBadge")
@@ -290,7 +293,7 @@ final class Milestone3UITests: XCTestCase {
         _ = waitFor("printerStatusBadge")
 
         app.buttons["btnPrintAll"].click()
-        _ = waitForLpLine()
+        _ = waitForSpoolLine()
         let stateURL = testRoot
             .appendingPathComponent("AppData")
             .appendingPathComponent("wizard_state.json")
