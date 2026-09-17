@@ -36,7 +36,10 @@ enum PMTicketError: LocalizedError, Equatable {
 ///   so Swift hands back an unbalanced `Unmanaged`).
 /// * `PMPrinterGetPaperList`, `PMPaperGetID`, `PMPrinterGetID`,
 ///   `PMPrintSettingsGetValue` are **borrowed** → `takeUnretainedValue()`,
-///   never released.
+///   never released. `PMSessionGetCurrentPrinter` hands back the
+///   session's own printer — also borrowed, never `PMRelease`d (an
+///   over-release here dangles the session and crashes AppKit's
+///   `_printerInPrintSession` / session teardown).
 /// * `printInfo.pmPrintSession()/pmPrintSettings()/pmPageFormat()` are
 ///   borrowed from the `NSPrintInfo` → never released.
 @MainActor
@@ -102,10 +105,166 @@ enum PMTicketBridge {
         guard PMSessionGetCurrentPrinter(session, &current) == 0,
               let printer = current
         else { return fallback }
-        defer { PMRelease(object(printer)) }
+        // Borrowed from the session — never released (see header doc).
         guard let id = PMPrinterGetID(printer)
         else { return fallback }
         return id.takeUnretainedValue() as String
+    }
+
+    // MARK: Ticket  (#201 D3)
+
+    /// Capture the live `PMPrintSettings` + `PMPageFormat` as XML
+    /// `Data` plus a plist-safe `NSPrintInfo.dictionary()` fallback.
+    /// The CFData out-params are **+1** by header contract
+    /// ("the caller is responsible for releasing") →
+    /// `takeRetainedValue()`.
+    static func serialise(
+        _ printInfo: NSPrintInfo,
+        queue: String
+    ) throws -> PrintTicket {
+        var settingsRef: Unmanaged<CFData>?
+        let settingsStatus = PMPrintSettingsCreateDataRepresentation(
+            settings(printInfo), &settingsRef, kPMDataFormatXMLDefault)
+        guard settingsStatus == noErr, let settingsRef else {
+            throw PMTicketError.serialiseFailed(
+                stage: "printSettings", status: settingsStatus)
+        }
+        let settingsData = settingsRef.takeRetainedValue() as Data
+
+        var pageFormatRef: Unmanaged<CFData>?
+        let pageFormatStatus = PMPageFormatCreateDataRepresentation(
+            pageFormat(printInfo), &pageFormatRef, kPMDataFormatXMLDefault)
+        guard pageFormatStatus == noErr, let pageFormatRef else {
+            throw PMTicketError.serialiseFailed(
+                stage: "pageFormat", status: pageFormatStatus)
+        }
+        let pageFormatData = pageFormatRef.takeRetainedValue() as Data
+
+        // Cocoa-level fallback — warn-only, never fatal: filter the
+        // dictionary to plist-safe values so one exotic attribute
+        // cannot fail the whole snapshot.
+        let plist = try? PropertyListSerialization.data(
+            fromPropertyList: plistSafe(printInfo.dictionary()) ?? [:],
+            format: .binary, options: 0)
+
+        return PrintTicket(
+            queue: queue,
+            printSettings: settingsData,
+            pageFormat: pageFormatData,
+            printInfoPlist: plist,
+            capturedAt: Date())
+    }
+
+    /// Rehydrate a ticket into `printInfo`'s live PM objects. Order is
+    /// load-bearing: create → copy → session-validate → Cocoa update.
+    /// Cross-queue replay is refused (R3) — the destination's bound
+    /// queue is the session's current printer; a destination with no
+    /// bound printer accepts the ticket (the spooler always binds
+    /// first, so production replay is always guarded).
+    /// A page-format failure is warn-only — paper is re-derived
+    /// upstream by the spooler's S6/S7.
+    static func restore(
+        _ ticket: PrintTicket,
+        into printInfo: NSPrintInfo
+    ) throws {
+        let bound = currentPrinterID(
+            session: session(printInfo),
+            fallback: ticket.queue)
+        guard ticket.queue == bound else {
+            AppLogger.shared.warn(
+                "PrintTicket: refusing to replay a ticket captured "
+                    + "for '\(ticket.queue)' onto '\(bound)'")
+            return
+        }
+
+        var srcSettings: PMPrintSettings?
+        let createStatus = PMPrintSettingsCreateWithDataRepresentation(
+            ticket.printSettings as CFData, &srcSettings)
+        defer {
+            if let srcSettings { PMRelease(object(srcSettings)) }
+        }
+        guard createStatus == noErr, let srcSettings else {
+            throw PMTicketError.restoreFailed(
+                stage: "printSettings", status: createStatus)
+        }
+        let copyStatus = PMCopyPrintSettings(
+            srcSettings, settings(printInfo))
+        guard copyStatus == noErr else {
+            throw PMTicketError.restoreFailed(
+                stage: "printSettings", status: copyStatus)
+        }
+        var changed = DarwinBoolean(false)
+        _ = PMSessionValidatePrintSettings(
+            session(printInfo), settings(printInfo), &changed)
+        if changed.boolValue {
+            AppLogger.shared.info(
+                "PrintTicket: driver adjusted the restored ticket")
+        }
+        printInfo.updateFromPMPrintSettings()
+
+        // Page format — warn-only.
+        var srcFormat: PMPageFormat?
+        let formatStatus = PMPageFormatCreateWithDataRepresentation(
+            ticket.pageFormat as CFData, &srcFormat)
+        defer {
+            if let srcFormat { PMRelease(object(srcFormat)) }
+        }
+        guard formatStatus == noErr, let srcFormat else {
+            AppLogger.shared.warn(
+                "PrintTicket: page format restore failed "
+                    + "(\(formatStatus)) — paper re-derived upstream")
+            return
+        }
+        guard PMCopyPageFormat(srcFormat, pageFormat(printInfo)) == noErr
+        else {
+            AppLogger.shared.warn(
+                "PrintTicket: page format copy failed — "
+                    + "paper re-derived upstream")
+            return
+        }
+        var formatChanged = DarwinBoolean(false)
+        _ = PMSessionValidatePageFormat(
+            session(printInfo), pageFormat(printInfo), &formatChanged)
+        printInfo.updateFromPMPageFormat()
+    }
+
+    /// Recursive plist-safety filter for `NSPrintInfo.dictionary()`:
+    /// keeps String / NSNumber / Bool / Date / Data / URL (→
+    /// absoluteString) / Array / Dictionary, drops everything else, so
+    /// one non-plist attribute cannot fail the whole snapshot.
+    private static func plistSafe(_ value: Any) -> Any? {
+        switch value {
+        case let string as String:
+            return string
+        case let number as NSNumber:
+            return number
+        case let date as Date:
+            return date
+        case let data as Data:
+            return data
+        case let url as URL:
+            return url.absoluteString
+        case let array as [Any]:
+            return array.compactMap(plistSafe)
+        case let dictionary as [String: Any]:
+            var safe: [String: Any] = [:]
+            for (key, element) in dictionary {
+                if let filtered = plistSafe(element) {
+                    safe[key] = filtered
+                }
+            }
+            return safe
+        case let dictionary as [NSPrintInfo.AttributeKey: Any]:
+            var safe: [String: Any] = [:]
+            for (key, element) in dictionary {
+                if let filtered = plistSafe(element) {
+                    safe[key.rawValue] = filtered
+                }
+            }
+            return safe
+        default:
+            return nil
+        }
     }
 
     // MARK: Values
