@@ -57,19 +57,29 @@ public struct CupsService: Sendable {
             "lpstat", ["-p"], id: ProcessID.cupsLpstat("p"), tolerateFailure: true)
         let defaultOut = try await run(
             "lpstat", ["-d"], id: ProcessID.cupsLpstat("d"), tolerateFailure: true)
+        // One-shot device-URI fetch for AirPrint detection (#202). A
+        // failed `lpstat -v` is tolerated — enumeration proceeds with
+        // no URIs and no fallback respawn.
+        let deviceOut = try await run(
+            "lpstat", ["-v"], id: ProcessID.cupsLpstat("v"), tolerateFailure: true)
 
         let names = CupsParsers.lpstatDestinations(destinationsOut.stdout)
         let statuses = CupsParsers.lpstatStatuses(statusOut.stdout)
         let defaultName = CupsParsers.lpstatDefault(defaultOut.stdout)
+        let deviceURIs = CupsParsers.lpstatDeviceURIs(output: deviceOut.stdout)
 
         var printers: [Printer] = []
         for name in names {
-            let displayName = try? await displayName(for: name)
+            let identity = try? await queueIdentity(for: name)
             printers.append(Printer(
                 name: name,
                 status: statuses[name] ?? .unknown,
                 isDefault: name == defaultName,
-                displayName: displayName
+                displayName: identity?.displayName,
+                isAirPrint: CupsParsers.detectAirPrint(
+                    deviceURI: deviceURIs[name],
+                    makeAndModel: identity?.makeAndModel,
+                    ppd: loadPPD(for: name) ?? "")
             ))
         }
         return printers
@@ -78,9 +88,19 @@ public struct CupsService: Sendable {
     /// `lpoptions -p <queue>` → `printer-info` (the NSPrinter fallback
     /// display name, docs/11 §binding).
     public func displayName(for queue: String) async throws -> String? {
+        try await queueIdentity(for: queue).displayName
+    }
+
+    /// One `lpoptions -p <queue>` spawn yields both identity fields —
+    /// `printer-info` (display name) and `printer-make-and-model`
+    /// (AirPrint rule 3, #202).
+    private func queueIdentity(
+        for queue: String
+    ) async throws -> (displayName: String?, makeAndModel: String?) {
         let result = try await run(
             "lpoptions", ["-p", queue], id: ProcessID.cupsLpoptions(queue))
-        return CupsParsers.lpoptionsDisplayName(result.stdout)
+        return (CupsParsers.lpoptionsDisplayName(result.stdout),
+                CupsParsers.lpoptionsMakeAndModel(output: result.stdout))
     }
 
     // MARK: - Capabilities (lpoptions -l + PPD)

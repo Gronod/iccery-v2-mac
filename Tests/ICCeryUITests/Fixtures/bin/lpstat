@@ -12,6 +12,12 @@ case "$1" in
   -d)
     printf 'system default destination: Mock_Epson_7450\n'
     ;;
+  -v)
+    # Mock_Canon_Pro is the AirPrint fixture queue (#202): local
+    # unencrypted ipp:// resolved via the _universal mDNS subtype.
+    printf 'device for Mock_Epson_7450: usb://EPSON/XP-55%%20Series?serial=MOCK123\n'
+    printf 'device for Mock_Canon_Pro: ipp://Mock%%20Canon%%20Pro._universal._sub._ipp._tcp.local./\n'
+    ;;
   *)
     exit 1
     ;;
