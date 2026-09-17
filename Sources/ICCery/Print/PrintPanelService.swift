@@ -59,10 +59,12 @@ struct PrintPanelService {
         cupsService: CupsService,
         initialSelections: PrintPanelInitialSelections =
             PrintPanelInitialSelections()
-    ) async throws -> PrintPropertiesResult? {
+    ) async throws -> PanelCaptureResult? {
         #if DEBUG
         if UITestHooks.printPanelStubbed {
-            return UITestHooks.printPanelResult(forQueue: queue)
+            return UITestHooks.printPanelResult(forQueue: queue).map {
+                PanelCaptureResult(properties: $0, ticket: nil)
+            }
         }
         #endif
         // `??` rhs is a non-async @autoclosure — fetch first.
@@ -84,7 +86,7 @@ struct PrintPanelService {
         displayName: String?,
         optionKeys: Set<String>,
         initialSelections: PrintPanelInitialSelections
-    ) throws -> PrintPropertiesResult? {
+    ) throws -> PanelCaptureResult? {
         let printInfo = NSPrintInfo()
         var pmPrinter: PMPrinter?
         var boundViaPM = false
@@ -177,22 +179,31 @@ struct PrintPanelService {
             mediaType = captured.mediaType
         }
         let capturedOptions = cupsOptions ?? ""
-        return PrintPropertiesResult(
-            selectedPrinter: boundViaPM
-                ? PMTicketBridge.currentPrinterID(
-                    session: PMTicketBridge.session(printInfo),
-                    fallback: queue)
-                : nil,
-            options: PrintOptions(
-                orientation: CupsParsers.extractOrientation(
-                    fromOptionsString: capturedOptions),
-                paperSize: CupsParsers.extractOption(
-                    named: "PageSize", fromOptionsString: capturedOptions),
-                mediaType: mediaType,
-                quality: CupsParsers.extractQuality(
-                    fromOptionsString: capturedOptions),
-                ppdUncorrectedPassthrough: true,
-                cupsOptions: cupsOptions))
+        let resolvedQueue = boundViaPM
+            ? PMTicketBridge.currentPrinterID(
+                session: PMTicketBridge.session(printInfo),
+                fallback: queue)
+            : queue
+        // ⑦ Serialise the native ticket — the payload `lp -o` could
+        // never carry (#201). Warn-only via `try?`: a serialise
+        // failure must not lose the Stage 2 mirror above.
+        let ticket = try? PMTicketBridge.serialise(
+            printInfo, queue: resolvedQueue)
+        return PanelCaptureResult(
+            properties: PrintPropertiesResult(
+                selectedPrinter: boundViaPM ? resolvedQueue : nil,
+                options: PrintOptions(
+                    orientation: CupsParsers.extractOrientation(
+                        fromOptionsString: capturedOptions),
+                    paperSize: CupsParsers.extractOption(
+                        named: "PageSize",
+                        fromOptionsString: capturedOptions),
+                    mediaType: mediaType,
+                    quality: CupsParsers.extractQuality(
+                        fromOptionsString: capturedOptions),
+                    ppdUncorrectedPassthrough: true,
+                    cupsOptions: cupsOptions)),
+            ticket: ticket)
     }
 
     /// Initial-selection `PMPrintSettings` writes — paper, quality,

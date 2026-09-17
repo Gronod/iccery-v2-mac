@@ -23,6 +23,9 @@ final class PrintSessionViewModel: ObservableObject {
     @Published var selectedQuality: String?
     @Published var printOrientation = "portrait"
     @Published var capturedCupsOptions: [String: String] = [:]
+    /// Native print tickets per queue — the spool payload (#201).
+    /// Session-only; cleared whenever the queue's mirror is.
+    @Published var capturedTickets: [String: PrintTicket] = [:]
     @Published var printNotice: Notice?
     @Published var isPrinting = false
     private var printTask: Task<Void, Never>?
@@ -164,31 +167,35 @@ final class PrintSessionViewModel: ObservableObject {
                     )
                     return
                 }
-                if let selected = result.selectedPrinter,
+                if let selected = result.properties.selectedPrinter,
                    printers.contains(where: { $0.name == selected }),
                    selected != queue {
                     selectedPrinter = selected
                     await reloadSelectedCapabilities()
                 }
-                if let captured = result.options.cupsOptions {
+                if let captured = result.properties.options.cupsOptions {
                     capturedCupsOptions[selectedPrinter] = captured
                 }
-                if let media = result.options.mediaType {
+                // The native ticket rides alongside the mirror (#201).
+                if let ticket = result.ticket {
+                    capturedTickets[ticket.queue] = ticket
+                }
+                if let media = result.properties.options.mediaType {
                     selectedMediaType = media
                 }
                 // Capture-return (#183/#186): a dialog paper/quality/
                 // orientation change updates the Stage 2 selections —
                 // never `workflow.pageSize` (printtarg layout is
                 // sacred).
-                if let paper = result.options.paperSize,
+                if let paper = result.properties.options.paperSize,
                    let match = printerCaps.paperSizes
                        .first(where: { $0.name == paper }) {
                     selectedPaperSize = match.id
                 }
-                if let quality = result.options.quality {
+                if let quality = result.properties.options.quality {
                     selectedQuality = quality
                 }
-                if let orientation = result.options.orientation {
+                if let orientation = result.properties.options.orientation {
                     printOrientation = orientation
                 }
                 printNotice = Notice(
