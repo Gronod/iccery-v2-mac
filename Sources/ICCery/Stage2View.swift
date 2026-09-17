@@ -218,7 +218,7 @@ struct Stage2View: View {
         }
     }
 
-    // MARK: - Raw print panel (#rawPrintPanel) — unmanaged lp path
+    // MARK: - Raw print panel (#rawPrintPanel) — native spool path (#201)
 
     private var printPanel: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -266,6 +266,18 @@ struct Stage2View: View {
                         .background(Theme.background)
                         .clipShape(Capsule())
                         .accessibilityIdentifier("printerStatusBadge")
+                    // AirPrint queues colour-manage the URF path —
+                    // unmanaged colour cannot be guaranteed (#202).
+                    if selected.isAirPrint {
+                        Text("AirPrint queue — unmanaged colour "
+                             + "cannot be guaranteed.")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(Color.orange.opacity(0.12))
+                            .clipShape(Capsule())
+                            .accessibilityIdentifier("airPrintWarningBadge")
+                    }
                 }
                 Button(action: workflow.print.refreshPrinters) {
                     Image(systemName: "arrow.clockwise")
@@ -325,26 +337,7 @@ struct Stage2View: View {
             // Stage 1 owns the custom dimensions — the caption lives
             // inside `paperSizeGroup` (#183).
 
-            HStack(spacing: 8) {
-                Button(action: {
-                    if let result = workflow.printtargResult {
-                        workflow.print.printAllPages(from: result)
-                    }
-                }) {
-                    Label(workflow.print.isPrinting ? "Printing…" : "Print All",
-                          systemImage: "printer")
-                }
-                .controlSize(.large)
-                .disabled(workflow.print.isPrinting
-                          || workflow.printtargResult == nil
-                          || workflow.print.selectedPrinter.isEmpty)
-                .accessibilityIdentifier("btnPrintAll")
-                Spacer()
-                Button("Advance to Stage 3") { workflow.advanceToStage3() }
-                    .accessibilityIdentifier("btnAdvanceToStage3")
-                    .disabled(workflow.printtargResult == nil
-                              || !workflow.wizard.isUnlocked(.measure))
-            }
+            printAllRow
         }
         .padding(12)
         .background(Theme.panel)
@@ -358,6 +351,37 @@ struct Stage2View: View {
         // Editable picker that re-mirrors Stage 1's pageSize (#183 E4).
         .onChange(of: workflow.pageSize) { _ in
             workflow.print.seedPaperSelection()
+        }
+    }
+
+    /// Print All + single-job granularity (#201 D5) + advance.
+    /// Extracted so every ViewBuilder body stays ≤10 children (R13 —
+    /// Xcode 14.2 has no `buildPartialBlock`).
+    private var printAllRow: some View {
+        HStack(spacing: 8) {
+            Button(action: {
+                if let result = workflow.printtargResult {
+                    workflow.print.printAllPages(from: result)
+                }
+            }) {
+                Label(workflow.print.isPrinting ? "Printing…" : "Print All",
+                      systemImage: "printer")
+            }
+            .controlSize(.large)
+            .disabled(workflow.print.isPrinting
+                      || workflow.printtargResult == nil
+                      || workflow.print.selectedPrinter.isEmpty)
+            .accessibilityIdentifier("btnPrintAll")
+            Toggle("Single spool job",
+                   isOn: $workflow.print.singleJobForAllPages)
+                .help("Send all pages as one print job instead of "
+                      + "one job per page")
+                .accessibilityIdentifier("chkSingleSpoolJob")
+            Spacer()
+            Button("Advance to Stage 3") { workflow.advanceToStage3() }
+                .accessibilityIdentifier("btnAdvanceToStage3")
+                .disabled(workflow.printtargResult == nil
+                          || !workflow.wizard.isUnlocked(.measure))
         }
     }
 

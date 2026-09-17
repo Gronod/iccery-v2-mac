@@ -18,8 +18,8 @@ public enum ProcessID {
     public static func applycal(_ stem: String) -> String { "applycal_\(stem)" }
 
     /// CUPS system tools (`/usr/bin/…`) — captured one-shots, not
-    /// streaming Argyll children.
-    public static func lpstat(_ mode: String) -> String { "lpstat_\(mode)" }
-    public static func lpoptions(_ queue: String) -> String { "lpoptions_\(queue)" }
-    public static func lp(_ queue: String, page: Int) -> String { "lp_\(queue)_\(page)" }
+    /// streaming Argyll children. Named `cups*` so no `lp*`-prefixed
+    /// identifier survives the target-print removal (#201).
+    public static func cupsLpstat(_ mode: String) -> String { "lpstat_\(mode)" }
+    public static func cupsLpoptions(_ queue: String) -> String { "lpoptions_\(queue)" }
 }

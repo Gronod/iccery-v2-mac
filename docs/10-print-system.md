@@ -71,7 +71,10 @@ AGENTS.md warns: adding fields requires updating **every** platform constructor 
 | `media_types` | `Vec<PrinterMediaType>` | `#[serde(default)]`. Frontend fills `#printerMediaTypeSelect`. |
 | `supports_orientation` | `bool` | Always `true` on both Windows and Unix. |
 
-### `PrintOptions` (mod.rs:42–55) — `Default` + `PartialEq + Eq`
+### `PrintOptions` (mod.rs:42–55) — `Default` + `PartialEq + Eq` — historical v1
+
+> The `lp`/`-o` columns below describe the v0.8.5 spool contract. v2.0
+> replaced the macOS `lp` path with a headless `NSPrintOperation` (#201).
 
 | Field | Type | Windows | Linux | macOS |
 |-------|------|---------|-------|-------|

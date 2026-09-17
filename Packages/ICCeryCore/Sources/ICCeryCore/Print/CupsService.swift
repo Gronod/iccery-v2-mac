@@ -3,7 +3,6 @@ import Foundation
 /// Errors from CUPS tool invocations.
 public enum CupsError: LocalizedError, Equatable {
     case toolFailed(tool: String, code: Int32, stderr: String)
-    case tiffMissing(String)
     case noPrinterSelected
 
     public var errorDescription: String? {
@@ -13,8 +12,6 @@ public enum CupsError: LocalizedError, Equatable {
             return detail.isEmpty
                 ? "\(tool) failed with exit code \(code)"
                 : "\(tool) failed (\(code)): \(detail)"
-        case .tiffMissing(let path):
-            return "Target TIFF does not exist: \(path)"
         case .noPrinterSelected:
             return "No printer selected."
         }
@@ -27,9 +24,11 @@ public enum CupsError: LocalizedError, Equatable {
 /// `ProcessManager.runCaptured` so spawns are logged, get killAll
 /// coverage, and share the dup-id discipline; `binaryDir`/`ppdDir` are
 /// injectable so tests use fixture scripts and never touch real CUPS.
+/// Target spooling is **not** here — it is the app-target
+/// `NativeTargetSpooler` (`NSPrintOperation`, #201 D1/D4).
 public struct CupsService: Sendable {
     public let processManager: ProcessManager
-    /// Directory containing `lpstat`/`lpoptions`/`lp` — `/usr/bin` in
+    /// Directory containing `lpstat`/`lpoptions` — `/usr/bin` in
     /// production, a fixture dir under test.
     public let binaryDir: URL
     /// `/etc/cups/ppd` in production.
@@ -53,24 +52,34 @@ public struct CupsService: Sendable {
         // lpstat exits non-zero when no destinations exist — an empty
         // queue list is a valid result, not a failure (issue 12).
         let destinationsOut = try await run(
-            "lpstat", ["-e"], id: ProcessID.lpstat("e"), tolerateFailure: true)
+            "lpstat", ["-e"], id: ProcessID.cupsLpstat("e"), tolerateFailure: true)
         let statusOut = try await run(
-            "lpstat", ["-p"], id: ProcessID.lpstat("p"), tolerateFailure: true)
+            "lpstat", ["-p"], id: ProcessID.cupsLpstat("p"), tolerateFailure: true)
         let defaultOut = try await run(
-            "lpstat", ["-d"], id: ProcessID.lpstat("d"), tolerateFailure: true)
+            "lpstat", ["-d"], id: ProcessID.cupsLpstat("d"), tolerateFailure: true)
+        // One-shot device-URI fetch for AirPrint detection (#202). A
+        // failed `lpstat -v` is tolerated — enumeration proceeds with
+        // no URIs and no fallback respawn.
+        let deviceOut = try await run(
+            "lpstat", ["-v"], id: ProcessID.cupsLpstat("v"), tolerateFailure: true)
 
         let names = CupsParsers.lpstatDestinations(destinationsOut.stdout)
         let statuses = CupsParsers.lpstatStatuses(statusOut.stdout)
         let defaultName = CupsParsers.lpstatDefault(defaultOut.stdout)
+        let deviceURIs = CupsParsers.lpstatDeviceURIs(output: deviceOut.stdout)
 
         var printers: [Printer] = []
         for name in names {
-            let displayName = try? await displayName(for: name)
+            let identity = try? await queueIdentity(for: name)
             printers.append(Printer(
                 name: name,
                 status: statuses[name] ?? .unknown,
                 isDefault: name == defaultName,
-                displayName: displayName
+                displayName: identity?.displayName,
+                isAirPrint: CupsParsers.detectAirPrint(
+                    deviceURI: deviceURIs[name],
+                    makeAndModel: identity?.makeAndModel,
+                    ppd: loadPPD(for: name) ?? "")
             ))
         }
         return printers
@@ -79,9 +88,19 @@ public struct CupsService: Sendable {
     /// `lpoptions -p <queue>` → `printer-info` (the NSPrinter fallback
     /// display name, docs/11 §binding).
     public func displayName(for queue: String) async throws -> String? {
+        try await queueIdentity(for: queue).displayName
+    }
+
+    /// One `lpoptions -p <queue>` spawn yields both identity fields —
+    /// `printer-info` (display name) and `printer-make-and-model`
+    /// (AirPrint rule 3, #202).
+    private func queueIdentity(
+        for queue: String
+    ) async throws -> (displayName: String?, makeAndModel: String?) {
         let result = try await run(
-            "lpoptions", ["-p", queue], id: ProcessID.lpoptions(queue))
-        return CupsParsers.lpoptionsDisplayName(result.stdout)
+            "lpoptions", ["-p", queue], id: ProcessID.cupsLpoptions(queue))
+        return (CupsParsers.lpoptionsDisplayName(result.stdout),
+                CupsParsers.lpoptionsMakeAndModel(output: result.stdout))
     }
 
     // MARK: - Capabilities (lpoptions -l + PPD)
@@ -90,7 +109,7 @@ public struct CupsService: Sendable {
     /// to media-key and colour-bypass detection (docs/11 layer ④).
     public func optionListings(for queue: String) async throws -> [CupsOptionListing] {
         let result = try await run(
-            "lpoptions", ["-p", queue, "-l"], id: ProcessID.lpoptions("\(queue)-l"))
+            "lpoptions", ["-p", queue, "-l"], id: ProcessID.cupsLpoptions("\(queue)-l"))
         return CupsParsers.lpoptionsList(result.stdout)
     }
 
@@ -160,27 +179,6 @@ public struct CupsService: Sendable {
     /// `detectDriverColorBypass` / `detectMediaTypeKey`.
     public func optionKeys(for queue: String) async throws -> Set<String> {
         Set(try await optionListings(for: queue).map(\.key))
-    }
-
-    // MARK: - Spool (issue 15)
-
-    /// `lp -d <queue> … <tiff>` — spool one target page unmanaged.
-    /// Never uses `-o raw` (#92). `page` disambiguates the process id
-    /// when several pages are spooled in sequence.
-    public func printTarget(
-        queue: String,
-        tiffPath: String,
-        options: PrintOptions,
-        page: Int = 0
-    ) async throws {
-        guard FileManager.default.fileExists(atPath: tiffPath) else {
-            throw CupsError.tiffMissing(tiffPath)
-        }
-        let optionKeys = (try? await self.optionKeys(for: queue)) ?? []
-        let argv = try LpArgs.build(
-            queue: queue, tiffPath: tiffPath,
-            options: options, optionKeys: optionKeys)
-        try await run("lp", argv, id: ProcessID.lp(queue, page: page))
     }
 
     // MARK: - PPD

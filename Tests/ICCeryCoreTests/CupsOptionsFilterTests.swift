@@ -25,8 +25,7 @@ final class CupsOptionsFilterTests: XCTestCase {
     }
 
     /// #180 — a captured `EPIJ_Qual` (and the other canonical quality
-    /// keys) survives the filter so it wins over the Stage 2 explicit
-    /// quality in `LpArgs`.
+    /// keys) survives the filter so it reaches the Stage 2 mirror.
     func testKeepsQualityKeys() {
         let raw = "EPIJ_Qual=304 CNIJPrintQuality=3 PrintQuality=2 "
             + "cupsPrintQuality=High Quality=Best "

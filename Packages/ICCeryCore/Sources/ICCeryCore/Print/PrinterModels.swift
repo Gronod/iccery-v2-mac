@@ -17,17 +17,33 @@ public struct Printer: Codable, Equatable, Sendable {
     public var status: PrinterStatus
     public var isDefault: Bool
     public var displayName: String?
+    /// AirPrint queue (#202, docs/14 §10.2) — the URF pipeline is always
+    /// colour-managed, so Stage 2 shows a persistent warning badge.
+    public var isAirPrint: Bool = false
 
     public init(
         name: String,
         status: PrinterStatus = .unknown,
         isDefault: Bool = false,
-        displayName: String? = nil
+        displayName: String? = nil,
+        isAirPrint: Bool = false
     ) {
         self.name = name
         self.status = status
         self.isDefault = isDefault
         self.displayName = displayName
+        self.isAirPrint = isAirPrint
+    }
+
+    /// `isAirPrint` predates #202 payloads — a missing key decodes as
+    /// `false` instead of failing the whole decode.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = try c.decode(String.self, forKey: .name)
+        status = try c.decode(PrinterStatus.self, forKey: .status)
+        isDefault = try c.decode(Bool.self, forKey: .isDefault)
+        displayName = try c.decodeIfPresent(String.self, forKey: .displayName)
+        isAirPrint = try c.decodeIfPresent(Bool.self, forKey: .isAirPrint) ?? false
     }
 }
 
@@ -111,24 +127,24 @@ public struct PrinterCapabilities: Codable, Equatable, Sendable {
     }
 }
 
-/// Options carried into `lp` (docs/10 §PrintOptions). On macOS
-/// `paperSource` is ignored unless already present inside captured
-/// `cupsOptions`; `ppdUncorrectedPassthrough` is stored (the panel sets
-/// it on OK) but never gates the argv — macOS always bypasses driver
-/// colour management.
+/// The Stage 2 mirror — panel selections and the captured `k=v`
+/// string (docs/10 §PrintOptions). Since #201 removed the `lp` path
+/// these fields feed `TargetPrintOverrides` (Stage 2 always wins, D6)
+/// and the mirror apply-back; the opaque vendor state now travels
+/// inside the `PrintTicket`, not a flattened option string.
 public struct PrintOptions: Codable, Equatable, Sendable {
     public var paperSource: Int?
     /// `"portrait"` / `"landscape"` → `orientation-requested=3|4`.
     public var orientation: String?
-    /// Stage 2 paper token → `PageSize=` (skipped if captured, #183).
+    /// Stage 2 paper token → `PageSize=` ticket write + `PMPaper`.
     public var paperSize: String?
     public var mediaType: String?
-    /// Print-quality token → `-o <detectedQualityKey>=` (skipped if
-    /// captured, #183).
+    /// Print-quality token → `<detectedQualityKey>=` ticket write.
     public var quality: String?
     public var ppdUncorrectedPassthrough: Bool?
     /// Space-separated `key=value` captured from
-    /// `PMPrintSettingsToOptions` and filtered (docs/11 layer ⑥).
+    /// `PMPrintSettingsToOptions` and filtered (docs/11 layer ⑥) —
+    /// the Stage 2 mirror only, never an `lp` payload.
     public var cupsOptions: String?
 
     public init(

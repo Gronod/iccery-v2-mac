@@ -73,6 +73,26 @@ public enum CupsParsers {
         return nil
     }
 
+    /// `lpstat -v` — `device for <name>: <uri>` → queue → device URI.
+    /// Entries with no URI (e.g. `network <name>` remote stubs) are
+    /// skipped (#202 AirPrint detection).
+    public static func lpstatDeviceURIs(output: String) -> [String: String] {
+        var result: [String: String] = [:]
+        for line in output.split(separator: "\n") {
+            let text = line.trimmingCharacters(in: .whitespaces)
+            guard text.hasPrefix("device for ") else { continue }
+            let rest = text.dropFirst("device for ".count)
+            guard let colon = rest.firstIndex(of: ":") else { continue }
+            let name = String(rest[..<colon])
+                .trimmingCharacters(in: .whitespaces)
+            let uri = String(rest[rest.index(after: colon)...])
+                .trimmingCharacters(in: .whitespaces)
+            guard !name.isEmpty, !uri.isEmpty else { continue }
+            result[name] = uri
+        }
+        return result
+    }
+
     // MARK: - lpoptions -p <queue>
 
     /// `lpoptions -p` — `key=value` pairs, values may be
@@ -132,6 +152,16 @@ public enum CupsParsers {
     public static func lpoptionsDisplayName(_ output: String) -> String? {
         guard let value = lpoptions(output)
             .first(where: { $0.key == "printer-info" })?.value,
+            !value.isEmpty
+        else { return nil }
+        return value
+    }
+
+    /// Make-and-model from `printer-make-and-model` in `lpoptions -p`
+    /// output — an AirPrint detection input (#202).
+    public static func lpoptionsMakeAndModel(output: String) -> String? {
+        guard let value = lpoptions(output)
+            .first(where: { $0.key == "printer-make-and-model" })?.value,
             !value.isEmpty
         else { return nil }
         return value
@@ -352,4 +382,62 @@ public enum CupsParsers {
         "EPIJ_OSColMat", "ColorCorrection", "StpColorCorrection",
         "EpsonColorMode",
     ]
+
+    // MARK: - AirPrint detection (#202, docs/14 §10.2)
+
+    /// AirPrint queues always colour-manage the URF raster path, so
+    /// unmanaged device colour cannot be guaranteed — Stage 2 warns
+    /// via `airPrintWarningBadge`. `true` when ANY rule matches:
+    ///
+    /// 1. device URI contains `apple-airprint://`
+    /// 2. PPD declares `*APAirPrint: True`
+    /// 3. make-and-model contains "Apple" **and** "AirPrint"
+    /// 4. `ipps://` URI **and** the PPD text mentions "airprint"
+    ///    (case-insensitive)
+    /// 5. local unencrypted `ipp://` URI resolved via an AirPrint mDNS
+    ///    subtype (`_universal._sub._ipp._tcp`)
+    /// 6. PPD carries a `*cupsFilter2` rule whose destination MIME
+    ///    type is `image/urf` — the raster only AirPrint consumes
+    public static func detectAirPrint(
+        deviceURI: String?, makeAndModel: String?, ppd: String
+    ) -> Bool {
+        if let uri = deviceURI {
+            let lower = uri.lowercased()
+            if lower.contains("apple-airprint://") { return true }
+            if lower.hasPrefix("ipps://"),
+               ppd.range(of: "airprint", options: .caseInsensitive) != nil {
+                return true
+            }
+            if lower.hasPrefix("ipp://"),
+               lower.contains("_universal._sub._ipp._tcp") {
+                return true
+            }
+        }
+        if ppd.contains("*APAirPrint: True") { return true }
+        if let model = makeAndModel,
+           model.contains("Apple"), model.contains("AirPrint") {
+            return true
+        }
+        return ppdCarriesURFFilter(ppd)
+    }
+
+    /// Rule 6 — `*cupsFilter2: "src dst cost program"` (quotes
+    /// optional); `image/urf` as the destination token means the queue
+    /// consumes the AirPrint raster.
+    private static func ppdCarriesURFFilter(_ ppd: String) -> Bool {
+        for rawLine in ppd.split(separator: "\n") {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            guard line.lowercased().hasPrefix("*cupsfilter2"),
+                  let colon = line.firstIndex(of: ":")
+            else { continue }
+            let tokens = line[line.index(after: colon)...]
+                .replacingOccurrences(of: "\"", with: "")
+                .split(separator: " ")
+            if tokens.count >= 2,
+               tokens[1].lowercased() == "image/urf" {
+                return true
+            }
+        }
+        return false
+    }
 }

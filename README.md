@@ -207,15 +207,16 @@ not in this tree.
   leases. Quit path: `q\n`, ~500 ms, kill; `killAll` on terminate.
 - **Argv builders** in ICCeryCore (`TargenArgs`, `PrinttargArgs`,
   `ChartreadArgs`, `ColprofArgs`, `ApplycalArgs`, `IccgamutArgs`,
-  `ProfcheckArgs`, `LpArgs`, `SpotReadArgs`, …). UI must not concatenate flags.
+  `ProfcheckArgs`, `SpotReadArgs`, …). UI must not concatenate flags.
 - **Atomic artefacts.** Writes go to `*.tmp` then `replaceItemAt`. `applycal`
   must not replace the input profile on cancel or non-zero exit.
 - **Concurrency.** View models are `@MainActor`. No blocking I/O on the main
   actor. Swift 5.7 / macOS 12: `ObservableObject`, not Observation
   `@Observable`.
-- **Print.** Unmanaged `lp` with ColorSync suppression
-  (`AP_ColorMatchingMode` / `AP.ColorMatchingMode`). Captured `NSPrintPanel`
-  options win over derived CUPS keys. Never `lp -o raw`.
+- **Print.** Unmanaged headless `NSPrintOperation` (#201 — no `lp`):
+  restore the captured `PrintTicket`, write both ColorSync vocabularies
+  (locked `AP_*` + Quartz `PMColorMatchingMode`), Stage 2 selections always
+  win over the ticket, draw 1:1 with interpolation off.
 - **SwiftUI ViewBuilder.** Xcode 14.2 / Swift 5.7 still has the ten-child
   limit. Split large `VStack`/`Group` trees (#146).
 
