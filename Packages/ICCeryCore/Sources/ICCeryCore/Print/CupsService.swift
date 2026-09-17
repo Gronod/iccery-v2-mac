@@ -115,9 +115,16 @@ public struct CupsService: Sendable {
 
     /// Trays / paper sizes / media types for a queue, with PPD
     /// `*Key id/Human:` enrichment when the queue's PPD is readable.
+    /// Also resolves the per-media quality map from vendor driver
+    /// data (`MediaQualityConstraints`, #214) — empty when the driver
+    /// exposes none.
     public func capabilities(for queue: String) async throws -> PrinterCapabilities {
         let listings = try await optionListings(for: queue)
-        return capabilities(from: listings, ppd: loadPPD(for: queue))
+        let ppd = loadPPD(for: queue)
+        var caps = capabilities(from: listings, ppd: ppd)
+        caps.qualityIDsByMediaType = MediaQualityConstraints.resolve(
+            listings: listings, ppd: ppd)
+        return caps
     }
 
     /// Pure mapping — extracted so fixture tests need no process.

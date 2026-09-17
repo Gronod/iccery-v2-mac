@@ -24,6 +24,7 @@ struct AppEnvironment: Sendable {
             .map { URL(fileURLWithPath: $0) }
         var bundledRoot = AppPaths.bundledArgyllDir
         var cupsDir = URL(fileURLWithPath: "/usr/bin")
+        var ppdDir = URL(fileURLWithPath: "/etc/cups/ppd")
         #if DEBUG
         if let dir = environment["ICCERY_ARGYLL_BINARY_DIR"], !dir.isEmpty {
             overrideDir = URL(fileURLWithPath: dir)
@@ -33,6 +34,11 @@ struct AppEnvironment: Sendable {
         }
         if let dir = environment["ICCERY_CUPS_BIN_DIR"], !dir.isEmpty {
             cupsDir = URL(fileURLWithPath: dir)
+        }
+        // #214 — fixture PPD dir lets UI tests exercise the media→
+        // quality constraint resolver without installed drivers.
+        if let dir = environment["ICCERY_CUPS_PPD_DIR"], !dir.isEmpty {
+            ppdDir = URL(fileURLWithPath: dir)
         }
         #endif
         return AppEnvironment(
@@ -46,7 +52,7 @@ struct AppEnvironment: Sendable {
             ),
             cupsService: CupsService(
                 processManager: .shared,
-                binaryDir: cupsDir),
+                binaryDir: cupsDir, ppdDir: ppdDir),
             historyStore: VerificationHistoryStore(),
             mediaStore: MediaLibraryStore(),
             recentProjectsStore: RecentProjectsStore()

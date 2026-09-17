@@ -107,6 +107,11 @@ public struct PrinterCapabilities: Codable, Equatable, Sendable {
     public var qualities: [PrinterQuality]
     /// The `*`-marked default choice from `lpoptions -l`, if any.
     public var qualityDefault: String?
+    /// Media-type id → the quality ids the driver accepts for it
+    /// (#214 — `MediaQualityConstraints`). Empty when the driver
+    /// exposes no per-media quality matrix; a missing entry means
+    /// "unconstrained" — show everything.
+    public var qualityIDsByMediaType: [String: Set<String>]
 
     public init(
         trays: [PrinterTray] = [],
@@ -115,7 +120,8 @@ public struct PrinterCapabilities: Codable, Equatable, Sendable {
         supportsOrientation: Bool = true,
         qualityKey: String? = nil,
         qualities: [PrinterQuality] = [],
-        qualityDefault: String? = nil
+        qualityDefault: String? = nil,
+        qualityIDsByMediaType: [String: Set<String>] = [:]
     ) {
         self.trays = trays
         self.paperSizes = paperSizes
@@ -124,6 +130,35 @@ public struct PrinterCapabilities: Codable, Equatable, Sendable {
         self.qualityKey = qualityKey
         self.qualities = qualities
         self.qualityDefault = qualityDefault
+        self.qualityIDsByMediaType = qualityIDsByMediaType
+    }
+
+    /// Qualities valid for `mediaID`, preserving the driver's listing
+    /// order (#180). Falls back to the full list when the driver has
+    /// no per-media data, the media is absent from the map, or the
+    /// filter would empty the picker (#214).
+    public func qualities(forMediaType mediaID: String?) -> [PrinterQuality] {
+        guard let mediaID,
+              let allowed = qualityIDsByMediaType[mediaID],
+              !allowed.isEmpty
+        else { return qualities }
+        let filtered = qualities.filter { allowed.contains($0.id) }
+        return filtered.isEmpty ? qualities : filtered
+    }
+
+    /// Whether `qualityID` is usable with `mediaID` — `true` whenever
+    /// the driver exposes no constraint for that media (#214). A
+    /// quality absent from `qualities` entirely is still allowed: a
+    /// driver-captured token can be legitimate even when `lpoptions`
+    /// never listed it.
+    public func allowsQuality(
+        _ qualityID: String, forMediaType mediaID: String?
+    ) -> Bool {
+        guard let mediaID,
+              let allowed = qualityIDsByMediaType[mediaID],
+              !allowed.isEmpty
+        else { return true }
+        return allowed.contains(qualityID)
     }
 }
 

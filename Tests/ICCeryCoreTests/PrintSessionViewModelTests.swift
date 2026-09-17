@@ -408,6 +408,169 @@ final class PrintSessionViewModelTests: XCTestCase {
         XCTAssertTrue(workflow.print.capturedCupsOptions.isEmpty)
     }
 
+    // MARK: - Media-aware quality filtering (#214)
+
+    /// Constrains the loaded fixture caps: `Stationery` allows
+    /// {301,302,303,304}, `Glossy` allows {305,307}, `Matte` is
+    /// unconstrained. Mirrors the Epson `EPIJUIConstraint` matrix.
+    private func constrainCaps(_ vm: PrintSessionViewModel) {
+        var caps = vm.printerCaps
+        caps.qualityIDsByMediaType = [
+            "Stationery": ["301", "302", "303", "304"],
+            "Glossy": ["305", "307"],
+        ]
+        vm.printerCaps = caps
+    }
+
+    /// Media switch → an invalid quality pick re-seeds to the first
+    /// allowed choice; the picker source shrinks to the media's set.
+    func testMediaChangeClampsInvalidQuality() async {
+        let workflow = makeWorkflow()
+        await loadCaps(workflow.print)
+        constrainCaps(workflow.print)
+        XCTAssertEqual(workflow.print.selectedMediaType, "Stationery")
+        XCTAssertEqual(workflow.print.selectedQuality, "303")
+
+        workflow.print.selectedMediaType = "Glossy"
+        XCTAssertEqual(workflow.print.selectedQuality, "305")
+        XCTAssertEqual(workflow.print.availableQualities.map(\.id),
+            ["305", "307"])
+    }
+
+    /// A still-valid pick survives a media switch; an unconstrained
+    /// media keeps the pick too.
+    func testMediaChangeKeepsValidQuality() async {
+        let workflow = makeWorkflow()
+        await loadCaps(workflow.print)
+        constrainCaps(workflow.print)
+        workflow.print.selectedQuality = "302"
+
+        workflow.print.selectedMediaType = "Matte" // unconstrained
+        XCTAssertEqual(workflow.print.selectedQuality, "302")
+
+        workflow.print.selectedMediaType = "Glossy" // 302 invalid
+        XCTAssertEqual(workflow.print.selectedQuality, "305")
+        workflow.print.selectedQuality = "307"
+        workflow.print.selectedMediaType = "Stationery" // 307 invalid
+        // Driver default 303 is allowed there → preferred over first.
+        XCTAssertEqual(workflow.print.selectedQuality, "303")
+    }
+
+    /// Seeding lands inside the allowed set even when the driver
+    /// default quality is invalid for the first media — end to end
+    /// through `CupsService.capabilities(for:)` + a fixture
+    /// `PDEData.dat` (#214).
+    func testQualitySeedRespectsMediaMap() async throws {
+        let ppdDir = env.root.appendingPathComponent("ppd")
+        let epsonRoot = env.root.appendingPathComponent("epson-driver")
+        let datDir = epsonRoot.appendingPathComponent(
+            "Machine/M.data/Contents/Resources")
+        try FileManager.default.createDirectory(
+            at: ppdDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: datDir, withIntermediateDirectories: true)
+        try """
+            *EPIJDriverBasePath: "\(epsonRoot.path)"
+            *EPIJMachineBundleName: "M.data"
+            """.write(
+                to: ppdDir.appendingPathComponent("Mock_Q.ppd"),
+                atomically: true, encoding: .utf8)
+        // Stationery forbids everything except 305/307 — including the
+        // `lpoptions` default 303.
+        try """
+            *EPIJUIConstraint: *MediaType Stationery|*EPIJ_Qual 301
+            *EPIJUIConstraint: *MediaType Stationery|*EPIJ_Qual 302
+            *EPIJUIConstraint: *MediaType Stationery|*EPIJ_Qual 303
+            *EPIJUIConstraint: *MediaType Stationery|*EPIJ_Qual 308
+            *EPIJUIConstraint: *MediaType Stationery|*EPIJ_Qual 304
+            """.write(
+                to: datDir.appendingPathComponent("PDEData.dat"),
+                atomically: true, encoding: .utf8)
+
+        var environment = env.environment
+        environment = AppEnvironment(
+            stateStore: environment.stateStore,
+            settingsStore: environment.settingsStore,
+            presetStore: environment.presetStore,
+            runner: environment.runner,
+            cupsService: CupsService(
+                processManager: ProcessManager(),
+                binaryDir: binDir, ppdDir: ppdDir),
+            historyStore: environment.historyStore,
+            mediaStore: environment.mediaStore,
+            recentProjectsStore: environment.recentProjectsStore)
+        let workflow = TargetWorkflowViewModel(environment: environment)
+        workflow.print.selectedPrinter = "Mock_Q"
+        await workflow.print.reloadSelectedCapabilities()
+
+        XCTAssertEqual(workflow.print.selectedMediaType, "Stationery")
+        XCTAssertEqual(workflow.print.printerCaps
+            .qualityIDsByMediaType["Stationery"], ["305", "307"])
+        // 303 is the driver default but invalid on Stationery → 305.
+        XCTAssertEqual(workflow.print.selectedQuality, "305")
+        XCTAssertEqual(workflow.print.availableQualities.map(\.id),
+            ["305", "307"])
+    }
+
+    /// No constraint map → every quality stays selectable on every
+    /// media (the pre-#214 behaviour, by design for unknown drivers).
+    func testUnconstrainedDriverKeepsAllQualities() async {
+        let workflow = makeWorkflow()
+        await loadCaps(workflow.print)
+        workflow.print.selectedMediaType = "Glossy"
+        XCTAssertEqual(workflow.print.availableQualities.map(\.id),
+            ["301", "302", "303", "308", "304", "305", "307"])
+        XCTAssertEqual(workflow.print.selectedQuality, "303")
+    }
+
+    /// A captured quality invalid for the captured media is dropped —
+    /// the clamped selection stands.
+    func testPanelResultInvalidQualityDropped() async throws {
+        setenv("ICCERY_UI_TESTING", "1", 1)
+        setenv("ICCERY_TEST_PRINT_PANEL", "ok", 1)
+        setenv("ICCERY_TEST_PANEL_OPTIONS", "EPIJ_Qual=305", 1)
+        defer {
+            unsetenv("ICCERY_UI_TESTING")
+            unsetenv("ICCERY_TEST_PRINT_PANEL")
+            unsetenv("ICCERY_TEST_PANEL_OPTIONS")
+        }
+
+        let workflow = makeWorkflow()
+        await loadCaps(workflow.print)
+        constrainCaps(workflow.print) // Stationery forbids 305
+        XCTAssertEqual(workflow.print.selectedQuality, "303")
+
+        workflow.print.openPrinterPreferences()
+        await waitForNotice(workflow.print, containing: "Settings captured")
+        XCTAssertEqual(workflow.print.selectedQuality, "303")
+    }
+
+    /// `makeRequest` substitutes a stale-invalid quality before the
+    /// ticket is written — the last gate before the driver (#214).
+    func testSpoolSubstitutesStaleQuality() async throws {
+        let workflow = makeWorkflow()
+        await loadCaps(workflow.print)
+        constrainCaps(workflow.print)
+        workflow.print.selectedMediaType = "Glossy"
+        workflow.print.selectedQuality = "308" // stale, invalid
+        workflow.print.spooler = RecordingTargetSpooler(
+            logURL: spoolLogURL)
+
+        let tiff = env.root.appendingPathComponent("page1.tif")
+        try Data([0x49, 0x49]).write(to: tiff)
+        let page = GalleryPage(
+            index: 0,
+            page: PrinttargPage(
+                filename: "page1.tif", patches: 10,
+                widthMm: 210, heightMm: 297),
+            fileURL: tiff, previewPNG: nil, previewError: nil)
+        workflow.print.printPage(page)
+
+        let log = await waitForFile(spoolLogURL)
+        XCTAssertTrue(log.contains("EPIJ_Qual=305"), log)
+        XCTAssertFalse(log.contains("EPIJ_Qual=308"), log)
+    }
+
     /// Poll until the panel task posts a notice whose text contains
     /// `fragment` (the Task-completion signal for `nil` results too).
     private func waitForNotice(

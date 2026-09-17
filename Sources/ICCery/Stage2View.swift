@@ -410,11 +410,13 @@ struct Stage2View: View {
         .accessibilityIdentifier("paperSizeGroup")
     }
 
-    /// Quality picker — driver tokens with PPD-enriched labels (#183).
+    /// Quality picker — driver tokens with PPD-enriched labels (#183),
+    /// filtered to what the driver accepts for the selected media
+    /// (#214).
     private var qualityGroup: some View {
         VStack(alignment: .leading, spacing: 4) {
             Picker("Quality", selection: $workflow.print.selectedQuality) {
-                ForEach(workflow.print.printerCaps.qualities, id: \.id) {
+                ForEach(workflow.print.availableQualities, id: \.id) {
                     Text($0.name).tag(Optional($0.id))
                 }
             }

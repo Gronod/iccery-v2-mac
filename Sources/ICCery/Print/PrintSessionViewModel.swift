@@ -25,7 +25,15 @@ final class PrintSessionViewModel: ObservableObject {
     }
     @Published var printerCaps = PrinterCapabilities()
     @Published var selectedTray: Int?
-    @Published var selectedMediaType: String?
+    @Published var selectedMediaType: String? {
+        didSet {
+            // A media switch can invalidate the current quality pick —
+            // re-clamp into the driver's allowed set (#214).
+            if selectedMediaType != oldValue {
+                clampQualityToMedia()
+            }
+        }
+    }
     /// `PrinterPaperSize.id` — `0` is the synthetic custom entry (#183).
     @Published var selectedPaperSize: Int?
     /// Print-quality option token, e.g. `"303"` (#183).
@@ -123,9 +131,16 @@ final class PrintSessionViewModel: ObservableObject {
             if selectedTray == nil {
                 selectedTray = printerCaps.trays.first?.id
             }
+            // Quality seeds inside the selected media's allowed set
+            // (#214): driver default when valid there, else the first
+            // allowed choice.
             if selectedQuality == nil {
-                selectedQuality = printerCaps.qualityDefault
-                    ?? printerCaps.qualities.first?.id
+                let allowed = availableQualities
+                selectedQuality = printerCaps.qualityDefault.flatMap { d in
+                    allowed.contains(where: { $0.id == d }) ? d : nil
+                } ?? allowed.first?.id
+            } else {
+                clampQualityToMedia()
             }
             // Caps reload is a re-mirror trigger for the paper picker
             // (#183 E4) — pageSize + printer changes route here too.
@@ -136,6 +151,32 @@ final class PrintSessionViewModel: ObservableObject {
     }
 
     // MARK: - Paper / quality selection (#183)
+
+    /// The quality picker's source (#214): `printerCaps.qualities`
+    /// filtered to what the driver accepts for `selectedMediaType`.
+    /// Equals the full list whenever the queue exposes no per-media
+    /// quality matrix — and never empty while `qualities` is not.
+    var availableQualities: [PrinterQuality] {
+        printerCaps.qualities(forMediaType: selectedMediaType)
+    }
+
+    /// Keep `selectedQuality` inside the allowed set for the current
+    /// media: keep the pick when still valid, else the driver default
+    /// when valid, else the first allowed choice (#214).
+    private func clampQualityToMedia() {
+        let allowed = availableQualities
+        guard !allowed.isEmpty else { return }
+        if let quality = selectedQuality,
+           allowed.contains(where: { $0.id == quality }) {
+            return
+        }
+        if let fallback = printerCaps.qualityDefault,
+           allowed.contains(where: { $0.id == fallback }) {
+            selectedQuality = fallback
+        } else {
+            selectedQuality = allowed.first?.id
+        }
+    }
 
     /// Seed `selectedPaperSize` from Stage 1's `workflow.pageSize`:
     /// a capability whose name matches `pageSize.rawValue` → its id;
@@ -230,7 +271,12 @@ final class PrintSessionViewModel: ObservableObject {
                        .first(where: { $0.name == paper }) {
                     selectedPaperSize = match.id
                 }
-                if let quality = result.properties.options.quality {
+                // A captured quality the driver rejects for the
+                // (possibly just-captured) media is dropped — keeping
+                // it would only re-create a failed print (#214).
+                if let quality = result.properties.options.quality,
+                   printerCaps.allowsQuality(
+                       quality, forMediaType: selectedMediaType) {
                     selectedQuality = quality
                 }
                 if let orientation = result.properties.options.orientation {
@@ -358,6 +404,15 @@ final class PrintSessionViewModel: ObservableObject {
         let optionKeys = (try? await environment.cupsService
             .optionKeys(for: queue)) ?? []
         attachDiagnostics()
+        // Defence-in-depth (#214): an invalid media+quality pair can
+        // never reach the ticket — substitute the first allowed
+        // quality when the pick is stale (UI already clamps; this is
+        // the last gate before the driver).
+        var quality = selectedQuality
+        if let q = quality,
+           !printerCaps.allowsQuality(q, forMediaType: selectedMediaType) {
+            quality = availableQualities.first?.id ?? q
+        }
         return TargetPrintRequest(
             queue: queue,
             displayName: printers.first { $0.name == queue }?.displayName,
@@ -373,7 +428,7 @@ final class PrintSessionViewModel: ObservableObject {
                 paperSize: selectedPaperSizeToken,
                 mediaType: selectedMediaType,
                 qualityKey: printerCaps.qualityKey,
-                quality: selectedQuality,
+                quality: quality,
                 orientation: printOrientation),
             optionKeys: optionKeys)
     }

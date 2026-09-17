@@ -251,6 +251,87 @@ final class Milestone11PrintSettingsUITests: XCTestCase {
         XCTAssertTrue(log.contains("EPIJ_Qual=305"), log)
     }
 
+    /// #214 — a fixture PPD pointing at a fixture `PDEData.dat` (via
+    /// `ICCERY_CUPS_PPD_DIR`) constrains the quality picker to the
+    /// media's allowed set; switching media re-filters and clamps the
+    /// selection.
+    func testQualityPickerFiltersByMediaConstraints() throws {
+        let ppdDir = testRoot.appendingPathComponent("ppd")
+        let epsonRoot = testRoot.appendingPathComponent("epson-driver")
+        let datDir = epsonRoot.appendingPathComponent(
+            "Machine/M.data/Contents/Resources")
+        try FileManager.default.createDirectory(
+            at: ppdDir, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: datDir, withIntermediateDirectories: true)
+        try """
+            *EPIJDriverBasePath: "\(epsonRoot.path)"
+            *EPIJMachineBundleName: "M.data"
+            """.write(
+                to: ppdDir.appendingPathComponent("Mock_Epson_7450.ppd"),
+                atomically: true, encoding: .utf8)
+        try """
+            *EPIJUIConstraint: *MediaType Stationery|*EPIJ_Qual 305
+            *EPIJUIConstraint: *MediaType Stationery|*EPIJ_Qual 307
+            *EPIJUIConstraint: *MediaType Stationery|*EPIJ_Qual 308
+            *EPIJUIConstraint: *MediaType PhotographicGlossy|*EPIJ_Qual 301
+            *EPIJUIConstraint: *MediaType PhotographicGlossy|*EPIJ_Qual 302
+            *EPIJUIConstraint: *MediaType PhotographicGlossy|*EPIJ_Qual 303
+            *EPIJUIConstraint: *MediaType PhotographicGlossy|*EPIJ_Qual 304
+            """.write(
+                to: datDir.appendingPathComponent("PDEData.dat"),
+                atomically: true, encoding: .utf8)
+        app.launchEnvironment["ICCERY_CUPS_PPD_DIR"] = ppdDir.path
+        launchAppWithDefaults()
+        reachPrintPanel()
+        _ = waitFor("printerStatusBadge")
+
+        let qualityPopup = app.popUpButtons["printerQualitySelect"]
+        XCTAssertTrue(qualityPopup.waitForExistence(timeout: 10))
+
+        // Default media Stationery → {301,302,303,304} only.
+        qualityPopup.click()
+        let stationeryExpected = ["301", "302", "303", "304"]
+        for token in stationeryExpected {
+            XCTAssertTrue(
+                app.menuItems[token].waitForExistence(timeout: 5),
+                "Missing quality menu item \(token)")
+        }
+        XCTAssertFalse(app.menuItems["307"].exists)
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+
+        // Switch to PhotographicGlossy → {305,307,308} in driver
+        // order (308 first — lpoptions order), selection clamped.
+        let mediaPopup = element("printerMediaTypeSelect")
+            .descendants(matching: .popUpButton).firstMatch
+        XCTAssertTrue(mediaPopup.waitForExistence(timeout: 5))
+        mediaPopup.click()
+        let glossyItem = app.menuItems["PhotographicGlossy"]
+        XCTAssertTrue(glossyItem.waitForExistence(timeout: 5))
+        glossyItem.click()
+
+        qualityPopup.click()
+        let glossyExpected = ["308", "305", "307"]
+        for token in glossyExpected {
+            XCTAssertTrue(
+                app.menuItems[token].waitForExistence(timeout: 5),
+                "Missing quality menu item \(token)")
+        }
+        let titles = app.menuItems.allElementsBoundByIndex
+            .map(\.title)
+            .filter { glossyExpected.contains($0) }
+        XCTAssertEqual(titles, glossyExpected)
+        app.typeKey(XCUIKeyboardKey.escape, modifierFlags: [])
+
+        // The stale pick (303) clamped to the first allowed token.
+        let deadline = Date().addingTimeInterval(5)
+        while Date() < deadline,
+              selection(of: "printerQualitySelect") != "308" {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        }
+        XCTAssertEqual(selection(of: "printerQualitySelect"), "308")
+    }
+
     /// #201 D5 — per-page mode records one line per page; the
     /// `chkSingleSpoolJob` toggle collapses the job into a single
     /// request logged once with `pages=N`.
