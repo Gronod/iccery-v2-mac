@@ -50,6 +50,27 @@ bump `project.yml` on `develop` before tagging. CI needs `fetch-depth: 0`.
 `develop` ← `milestone/mN-<name>` ← `feat/<issue#>-<slug>`.
 PRs via Gitea MCP. Every issue/PR: `Project/ICCery-v2` + `Feature/*` or `Bug/*` + `Priority/*`.
 
+## Issue ticket style
+- Title: `[Kind/Priority] short description` — e.g. `[Bug/Critical] …`, `[Feature/Medium] …`.
+- Labels: `Kind/Bug` or `Kind/Feature` (also `Kind/Testing` for test work),
+  one `Bug/<area>` or `Feature/<area>` (Architecture/Backend/UI/DevOps),
+  one `Priority/*`, plus `Project/ICCery-v2`. Set the milestone when the work
+  belongs to an active `mN` milestone.
+- Bug bodies: `## Summary` → `## Root Cause Analysis` (file:line evidence;
+  note checked-and-dismissed hypotheses) → `## Proposed Fix` (options or
+  deterministic plan) → `## Acceptance Criteria` (checkbox list) →
+  `## Dependencies` → `## References`.
+- Feature bodies: same skeleton minus Root Cause; lead with Summary and a
+  concrete implementation plan.
+- Dependencies/blockers must **always** be recorded via the gitea MCP
+  `issue_write` methods (`add_dependency`, `block_issue`; reads via
+  `issue_read` `list_dependencies` / `list_blocks` — see "Gitea issue
+  dependencies"), not just mentioned in the body. This is
+  mandatory when issues share a milestone with an implementation order:
+  wire up `add_dependency` (blocked-by) and `block_issue` (blocks) links so
+  the order is machine-readable. The `## Dependencies` body section may
+  still summarise them for readability, but the MCP links are authoritative.
+
 ## Verify
 ```
 xcodebuild test -scheme ICCery -destination 'platform=macOS' ARCHS="$(uname -m)"
