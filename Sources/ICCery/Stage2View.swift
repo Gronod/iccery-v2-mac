@@ -266,12 +266,19 @@ struct Stage2View: View {
                         .background(Theme.background)
                         .clipShape(Capsule())
                         .accessibilityIdentifier("printerStatusBadge")
+                    // AirPrint queues colour-manage the URF path —
+                    // unmanaged colour cannot be guaranteed (#202).
+                    if selected.isAirPrint {
+                        Text("AirPrint queue — unmanaged colour "
+                             + "cannot be guaranteed.")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .padding(.horizontal, 8).padding(.vertical, 3)
+                            .background(Color.orange.opacity(0.12))
+                            .clipShape(Capsule())
+                            .accessibilityIdentifier("airPrintWarningBadge")
+                    }
                 }
-                // Placeholder — Phase 5 (AirPrint detection, M12)
-                // replaces this with the live unmanaged-colour
-                // warning badge for AirPrint queues.
-                EmptyView()
-                    .accessibilityIdentifier("airPrintWarningBadge")
                 Button(action: workflow.print.refreshPrinters) {
                     Image(systemName: "arrow.clockwise")
                 }

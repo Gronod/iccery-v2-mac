@@ -22,5 +22,5 @@ if [ "$list" = "1" ]; then
   printf 'ColorModel/Output Mode: *RGB Gray\n'
   exit 0
 fi
-printf "printer-info='Mock %s' printer-type=42\n" "$queue"
+printf "printer-info='Mock %s' printer-make-and-model='EPSON XP-55 Series' printer-type=42\n" "$queue"
 exit 0

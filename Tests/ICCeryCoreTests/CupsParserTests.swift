@@ -455,4 +455,175 @@ final class CupsParserTests: XCTestCase {
             processManager: ProcessManager(),
             binaryDir: bin, ppdDir: ppdDir), root)
     }
+
+    // MARK: - #202 AirPrint detection
+
+    /// `lpstat -v` — `device for <name>: <uri>` lines; a `network`
+    /// remote stub carries no URI and is skipped.
+    private let lpstatV = """
+        device for Canon_Pro9500_II_series_XPS: usb://Canon/PRO-9500%20II%20series?serial=1234AB
+        device for Epson_XP_55_LPD: lpd://192.168.1.50/queue
+        device for EPSON_XP_55_Series: ipp://EPSON%20XP-55%20Series._universal._sub._ipp._tcp.local./
+        device for Office_IPPS: ipps://print.example.com/ipp/print
+        network Remote_Queue
+        """
+
+    func testLpstatDeviceURIs() {
+        let uris = CupsParsers.lpstatDeviceURIs(output: lpstatV)
+        XCTAssertEqual(uris.count, 4)
+        XCTAssertEqual(uris["Canon_Pro9500_II_series_XPS"],
+            "usb://Canon/PRO-9500%20II%20series?serial=1234AB")
+        XCTAssertEqual(uris["Epson_XP_55_LPD"], "lpd://192.168.1.50/queue")
+        XCTAssertEqual(uris["EPSON_XP_55_Series"],
+            "ipp://EPSON%20XP-55%20Series._universal._sub._ipp._tcp.local./")
+        XCTAssertEqual(uris["Office_IPPS"],
+            "ipps://print.example.com/ipp/print")
+        XCTAssertNil(uris["Remote_Queue"])
+        XCTAssertEqual(CupsParsers.lpstatDeviceURIs(output: ""), [:])
+    }
+
+    func testLpoptionsMakeAndModel() {
+        XCTAssertEqual(CupsParsers.lpoptionsMakeAndModel(
+            output: lpoptionsP), "EPSON EPSON XP-55 Series")
+        XCTAssertNil(CupsParsers.lpoptionsMakeAndModel(
+            output: "printer-type=42\n"))
+    }
+
+    /// Rule 1 — an `apple-airprint://` device URI is AirPrint on its
+    /// own; PPD and make-and-model are irrelevant.
+    func testAirPrintRuleAppleAirPrintScheme() {
+        XCTAssertTrue(CupsParsers.detectAirPrint(
+            deviceURI: "apple-airprint://DeskJet._ipps._tcp.local./",
+            makeAndModel: nil, ppd: ""))
+    }
+
+    /// Rule 2 — the PPD declares `*APAirPrint: True`.
+    func testAirPrintRulePPDFlag() {
+        let ppd = """
+            *PPD-Adobe: "4.3"
+            *APAirPrint: True
+            *OpenUI *PageSize/Media Size: PickOne
+            """
+        XCTAssertTrue(CupsParsers.detectAirPrint(
+            deviceURI: "socket://10.0.0.9/", makeAndModel: nil, ppd: ppd))
+    }
+
+    /// Rule 3 — make-and-model contains "Apple" and "AirPrint".
+    func testAirPrintRuleMakeAndModel() {
+        XCTAssertTrue(CupsParsers.detectAirPrint(
+            deviceURI: "socket://10.0.0.9/",
+            makeAndModel: "Apple AirPrint", ppd: ""))
+        // Both tokens are required.
+        XCTAssertFalse(CupsParsers.detectAirPrint(
+            deviceURI: "socket://10.0.0.9/",
+            makeAndModel: "Apple LaserWriter", ppd: ""))
+        XCTAssertFalse(CupsParsers.detectAirPrint(
+            deviceURI: "socket://10.0.0.9/",
+            makeAndModel: "HP AirPrint-Ready", ppd: ""))
+    }
+
+    /// Rule 4 — `ipps://` URI **and** the PPD text mentions "airprint"
+    /// case-insensitively. `ipps://` alone is not enough.
+    func testAirPrintRuleIPPSWithPPDMention() {
+        XCTAssertTrue(CupsParsers.detectAirPrint(
+            deviceURI: "ipps://print.example.com/ipp/print",
+            makeAndModel: nil,
+            ppd: "*Foo: \"AIRPRINT enabled\"\n"))
+        XCTAssertFalse(CupsParsers.detectAirPrint(
+            deviceURI: "ipps://print.example.com/ipp/print",
+            makeAndModel: nil, ppd: "*PPD-Adobe: \"4.3\"\n"))
+        // An unencrypted ipp:// URI does not satisfy rule 4.
+        XCTAssertFalse(CupsParsers.detectAirPrint(
+            deviceURI: "ipp://print.example.com/ipp/print",
+            makeAndModel: nil,
+            ppd: "*Foo: \"airprint enabled\"\n"))
+    }
+
+    /// Rule 5 — unencrypted `ipp://` resolved via the AirPrint mDNS
+    /// subtype `_universal._sub._ipp._tcp`. A plain `ipp://` mDNS name
+    /// without the subtype is not AirPrint.
+    func testAirPrintRuleMDNSSubtype() {
+        XCTAssertTrue(CupsParsers.detectAirPrint(
+            deviceURI: "ipp://EPSON%20XP-55._universal._sub._ipp._tcp.local./",
+            makeAndModel: nil, ppd: ""))
+        XCTAssertFalse(CupsParsers.detectAirPrint(
+            deviceURI: "ipp://EPSON%20XP-55._ipp._tcp.local./",
+            makeAndModel: nil, ppd: ""))
+    }
+
+    /// Rule 6 — a `*cupsFilter2` rule whose destination MIME is
+    /// `image/urf` (the AirPrint-only raster). A PWG-raster filter is
+    /// not AirPrint.
+    func testAirPrintRuleCupsFilter2URF() {
+        let ppd = """
+            *cupsFilter2: "application/pdf image/urf 0 -"
+            *cupsFilter2: "image/urf image/urf 100 -"
+            """
+        XCTAssertTrue(CupsParsers.detectAirPrint(
+            deviceURI: nil, makeAndModel: nil, ppd: ppd))
+        XCTAssertFalse(CupsParsers.detectAirPrint(
+            deviceURI: nil, makeAndModel: nil,
+            ppd: "*cupsFilter2: \"application/pdf image/pwg-raster 0 -\"\n"))
+    }
+
+    /// Negative — a standard USB raster-driver queue (Epson XP-55)
+    /// matches none of the six rules.
+    func testAirPrintNegativeUSBRaster() {
+        let ppd = """
+            *PPD-Adobe: "4.3"
+            *EPIJ_Qual 303/Normal: ""
+            *cupsFilter: "application/vnd.cups-raster 0 rastertoepson"
+            """
+        XCTAssertFalse(CupsParsers.detectAirPrint(
+            deviceURI: "usb://EPSON/XP-55%20Series?serial=ABC123",
+            makeAndModel: "EPSON XP-55 Series", ppd: ppd))
+    }
+
+    /// `listPrinters` survives a failing `lpstat -v` — the failure is
+    /// tolerated, enumeration proceeds, every queue reports
+    /// `isAirPrint == false`, and there is **no** fallback respawn
+    /// (exactly one `-v` invocation, #202).
+    func testListPrintersToleratesLpstatVFailure() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("iccery-airprint-\(UUID().uuidString)")
+        let bin = root.appendingPathComponent("bin")
+        try FileManager.default.createDirectory(
+            at: bin, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let log = root.appendingPathComponent("lpstat.log")
+
+        let lpstat = """
+            #!/bin/sh
+            printf '%s\\n' "$1" >> '\(log.path)'
+            case "$1" in
+              -e) printf 'Mock_Epson\\n' ;;
+              -p) printf 'printer Mock_Epson is idle.\\n' ;;
+              -d) printf 'no system default destination\\n' ;;
+              -v) exit 1 ;;
+            esac
+            exit 0
+            """
+        let lpoptions = """
+            #!/bin/sh
+            printf "printer-info='Mock'\\n"
+            """
+        for (name, body) in [("lpstat", lpstat), ("lpoptions", lpoptions)] {
+            let url = bin.appendingPathComponent(name)
+            try body.write(to: url, atomically: true, encoding: .utf8)
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o755], ofItemAtPath: url.path)
+        }
+
+        let service = CupsService(
+            processManager: ProcessManager(), binaryDir: bin,
+            ppdDir: root.appendingPathComponent("ppd"))
+        let printers = try await service.listPrinters()
+        XCTAssertEqual(printers.map(\.name), ["Mock_Epson"])
+        XCTAssertFalse(printers[0].isAirPrint)
+
+        let calls = ((try? String(contentsOf: log, encoding: .utf8)) ?? "")
+            .split(separator: "\n")
+        XCTAssertEqual(calls.filter { $0 == "-v" }.count, 1,
+            "lpstat -v must be spawned exactly once: \(calls)")
+    }
 }
