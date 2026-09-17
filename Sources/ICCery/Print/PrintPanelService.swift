@@ -4,13 +4,10 @@ import ICCeryCore
 
 /// Errors raised while preparing the bound print panel.
 enum PrintPanelError: LocalizedError {
-    case sessionBindingFailed(OSStatus)
     case noPrinterFound(String)
 
     var errorDescription: String? {
         switch self {
-        case .sessionBindingFailed(let status):
-            return "Could not bind the print session to the queue (OSStatus \(status))."
         case .noPrinterFound(let name):
             return "No printer found for '\(name)'."
         }
@@ -93,24 +90,17 @@ struct PrintPanelService {
         var boundViaPM = false
 
         // ① Bind the session to the selected CUPS queue (docs/11).
-        if let printer = PMPrinterCreateFromPrinterID(queue as CFString) {
+        if let printer = PMTicketBridge.makePrinter(queue: queue) {
             pmPrinter = printer
-            let session = unsafeBitCast(
-                printInfo.pmPrintSession(), to: PMPrintSession.self)
-            let settings = unsafeBitCast(
-                printInfo.pmPrintSettings(), to: PMPrintSettings.self)
-            let pageFormat = unsafeBitCast(
-                printInfo.pmPageFormat(), to: PMPageFormat.self)
+            let session = PMTicketBridge.session(printInfo)
+            let settings = PMTicketBridge.settings(printInfo)
 
-            let status = PMSessionSetCurrentPMPrinter(session, printer)
-            if status != 0 {
-                PMRelease(Self.pmObject(printer))
-                throw PrintPanelError.sessionBindingFailed(status)
+            do {
+                try PMTicketBridge.bind(printer: printer, to: printInfo)
+            } catch {
+                PMTicketBridge.release(printer)
+                throw error
             }
-            // Warn-only: defaults keep the panel consistent with the
-            // queue but are not fatal when they fail.
-            _ = PMSessionDefaultPrintSettings(session, settings)
-            _ = PMSessionDefaultPageFormat(session, pageFormat)
             // Initial selections — after `PMSessionDefault*`, before
             // ColorSync suppression ②–⑤ (locked write order,
             // #183/#186). Paper is TWO writes (E1): the `PageSize`
@@ -119,9 +109,9 @@ struct PrintPanelService {
             applyInitialSelections(
                 initialSelections, to: settings, optionKeys: optionKeys)
             if let paperToken = initialSelections.paperSize {
-                applyPaperPageFormat(
-                    paperToken, printer: printer, session: session,
-                    printInfo: printInfo)
+                PMTicketBridge.applyPaper(
+                    token: paperToken, printer: printer,
+                    session: session, printInfo: printInfo)
             }
             boundViaPM = true
         } else {
@@ -142,19 +132,17 @@ struct PrintPanelService {
         }
         defer {
             if let printer = pmPrinter {
-                PMRelease(Self.pmObject(printer))
+                PMTicketBridge.release(printer)
             }
         }
 
         // ②–⑤ ColourSync suppression — only on the PM path: the SPI
         // and PMPrintSettingsSetValue need a session with a current
         // printer to attach to.
-        var settings = unsafeBitCast(
-            printInfo.pmPrintSettings(), to: PMPrintSettings.self)
+        var settings = PMTicketBridge.settings(printInfo)
         var driverBypass: (key: String, value: String)?
         if boundViaPM {
-            let session = unsafeBitCast(
-                printInfo.pmPrintSession(), to: PMPrintSession.self)
+            let session = PMTicketBridge.session(printInfo)
             suppressor.applySPIMode(to: session)                    // ②
             suppressor.applyLockedKeys(to: settings)                // ③
             driverBypass = suppressor.applyDriverBypass(            // ④
@@ -183,8 +171,7 @@ struct PrintPanelService {
         var cupsOptions: String?
         var mediaType: String?
         if boundViaPM {
-            settings = unsafeBitCast(
-                printInfo.pmPrintSettings(), to: PMPrintSettings.self)
+            settings = PMTicketBridge.settings(printInfo)
             let captured = suppressor.captureOptions(from: settings)
             cupsOptions = captured.cupsOptions
             mediaType = captured.mediaType
@@ -192,9 +179,8 @@ struct PrintPanelService {
         let capturedOptions = cupsOptions ?? ""
         return PrintPropertiesResult(
             selectedPrinter: boundViaPM
-                ? Self.currentPrinterID(
-                    session: unsafeBitCast(
-                        printInfo.pmPrintSession(), to: PMPrintSession.self),
+                ? PMTicketBridge.currentPrinterID(
+                    session: PMTicketBridge.session(printInfo),
                     fallback: queue)
                 : nil,
             options: PrintOptions(
@@ -219,143 +205,30 @@ struct PrintPanelService {
         optionKeys: Set<String>
     ) {
         if let paperSize = selections.paperSize {
-            warnOnFailure(PMPrintSettingsSetValue(
-                settings, "PageSize" as CFString,
-                paperSize as CFString, false), key: "PageSize")
+            PMTicketBridge.setValue(
+                paperSize, forKey: "PageSize", locked: false,
+                in: settings, context: "Print panel")
         }
         if let key = selections.qualityKey, let value = selections.quality {
-            warnOnFailure(PMPrintSettingsSetValue(
-                settings, key as CFString,
-                value as CFString, false), key: key)
+            PMTicketBridge.setValue(
+                value, forKey: key, locked: false,
+                in: settings, context: "Print panel")
         }
         // Media type via the queue's detected vendor key (#186).
         if let mediaType = selections.mediaType,
            let mediaKey = CupsParsers.detectMediaTypeKey(
                optionKeys: optionKeys) {
-            warnOnFailure(PMPrintSettingsSetValue(
-                settings, mediaKey as CFString,
-                mediaType as CFString, false), key: mediaKey)
+            PMTicketBridge.setValue(
+                mediaType, forKey: mediaKey, locked: false,
+                in: settings, context: "Print panel")
         }
         // Orientation — portrait=3, landscape=4 (CUPS IPP codes).
         if let orientation = selections.orientation {
             let code = orientation == "landscape" ? "4" : "3"
-            warnOnFailure(PMPrintSettingsSetValue(
-                settings, "orientation-requested" as CFString,
-                code as CFString, false), key: "orientation-requested")
+            PMTicketBridge.setValue(
+                code, forKey: "orientation-requested", locked: false,
+                in: settings, context: "Print panel")
         }
     }
 
-    /// The `PMPageFormat` half of paper preselect (#186 E1): the
-    /// panel's paper dropdown reflects the page format's `PMPaper`,
-    /// not `PMPrintSettings`. Match the Stage 2 `PageSize` token to a
-    /// paper from `PMPrinterGetPaperList`, rebuild the page format
-    /// around it, and copy it into the printInfo's format (TN2248:
-    /// `PMCreatePageFormatWithPMPaper` → `PMSessionValidatePageFormat`
-    /// → `PMCopyPageFormat` → `updateFromPMPageFormat`).
-    /// `Custom.<w>x<h>` tokens (already points) have no `PMPaper` —
-    /// set the Cocoa `paperSize` directly. Warn-only throughout: a
-    /// missed match must not keep the panel from opening.
-    private func applyPaperPageFormat(
-        _ token: String,
-        printer: PMPrinter,
-        session: PMPrintSession,
-        printInfo: NSPrintInfo
-    ) {
-        if let custom = Self.customPaperDimensions(from: token) {
-            printInfo.paperSize = NSSize(
-                width: custom.width, height: custom.height)
-            return
-        }
-        var paperList: Unmanaged<CFArray>?
-        guard PMPrinterGetPaperList(printer, &paperList) == 0,
-              let papers = paperList?.takeUnretainedValue()
-        else {
-            AppLogger.shared.warn(
-                "Print panel: PMPrinterGetPaperList failed — "
-                    + "paper preselect skipped")
-            return
-        }
-        // The list (and its elements) is owned by the printer —
-        // borrowed, never released.
-        var match: PMPaper?
-        for index in 0..<CFArrayGetCount(papers) {
-            let paper = unsafeBitCast(
-                CFArrayGetValueAtIndex(papers, index), to: PMPaper.self)
-            var idRef: Unmanaged<CFString>?
-            guard PMPaperGetID(paper, &idRef) == 0,
-                  let paperID = idRef?.takeUnretainedValue() as String?
-            else { continue }
-            if paperID == token {
-                match = paper
-                break
-            }
-        }
-        guard let paper = match else {
-            AppLogger.shared.warn(
-                "Print panel: no PMPaper id matches '\(token)'")
-            return
-        }
-        var created: PMPageFormat?
-        guard PMCreatePageFormatWithPMPaper(&created, paper) == 0,
-              let newFormat = created
-        else {
-            AppLogger.shared.warn(
-                "Print panel: PMCreatePageFormatWithPMPaper failed "
-                    + "for '\(token)'")
-            return
-        }
-        defer { PMRelease(unsafeBitCast(newFormat, to: PMObject.self)) }
-        _ = PMSessionValidatePageFormat(session, newFormat, nil)
-        let destination = unsafeBitCast(
-            printInfo.pmPageFormat(), to: PMPageFormat.self)
-        _ = PMCopyPageFormat(newFormat, destination)
-        printInfo.updateFromPMPageFormat()
-    }
-
-    /// `Custom.<w>x<h>` → dimensions in points (the token builder
-    /// emits integer points, mm × 72/25.4). `nil` for non-custom or
-    /// malformed tokens — a malformed `Custom.*` then misses the
-    /// `PMPaper` match and logs instead of guessing a size.
-    static func customPaperDimensions(
-        from token: String
-    ) -> (width: Double, height: Double)? {
-        guard token.hasPrefix("Custom.") else { return nil }
-        let dims = token.dropFirst("Custom.".count).split(separator: "x")
-        guard dims.count == 2,
-              let width = Double(dims[0]), let height = Double(dims[1]),
-              width > 0, height > 0
-        else { return nil }
-        return (width, height)
-    }
-
-    private func warnOnFailure(_ status: OSStatus, key: String) {
-        if status != 0 {
-            AppLogger.shared.warn(
-                "Print panel: PMPrintSettingsSetValue(\(key)) "
-                    + "rejected (\(status))")
-        }
-    }
-
-    // MARK: - PM helpers
-
-    /// `PMPrinter` → `PMObject` for `PMRelease` — the Carbon API wants
-    /// `UnsafeRawPointer`, Swift imports `PMPrinter` as `OpaquePointer`.
-    static func pmObject(_ printer: PMPrinter) -> PMObject {
-        unsafeBitCast(printer, to: PMObject.self)
-    }
-
-    /// `PMSessionGetCurrentPrinter` → `PMPrinterGetID` → String.
-    private static func currentPrinterID(
-        session: PMPrintSession,
-        fallback: String
-    ) -> String {
-        var current: PMPrinter?
-        guard PMSessionGetCurrentPrinter(session, &current) == 0,
-              let printer = current
-        else { return fallback }
-        defer { PMRelease(pmObject(printer)) }
-        guard let id = PMPrinterGetID(printer)
-        else { return fallback }
-        return id.takeUnretainedValue() as String
-    }
 }
