@@ -19,7 +19,7 @@ This is the most implementation-sensitive chapter. A rewrite that opens System S
 - `NSWorkspace` open of the printer
 - `lpoptions` GUI
 
-Linux/Windows do not share this panel. Default button title is **"Use Settings"** (macos.rs:439) — this is a settings-capture dialog, not a print-now dialog. Actual spooling is a later `lp` invocation.
+Linux/Windows do not share this panel. Default button title is **"Use Settings"** (macos.rs:439) — this is a settings-capture dialog, not a print-now dialog. Actual spooling is a later, separate step — in v2.0 a headless `NSPrintOperation` (#201; v1 used `lp`).
 
 Must run on the Cocoa main thread. `show_printer_properties` (macos.rs:689-710):
 
@@ -68,34 +68,31 @@ if pm_printer was created from ID:
 
 `PMPrinter` from `PMPrinterCreateFromPrinterID` is released with `PMRelease` on all exit paths (cancel, error, success). The NSPrinter fallback path leaves `pm_printer` null so no release.
 
-### ColorSync suppression strategy — UI click to `lp`
+### ColorSync suppression strategy — UI click to `NSPrintOperation`
 
-End-to-end, **six independent layers**. All of them exist because no single Apple API is sufficient across Epson PDE / Canon PDE / `cgpdftoraster` / CUPS.
+End-to-end, **seven independent layers**. All of them exist because no single Apple API is sufficient across Epson PDE / Canon PDE / `cgpdftoraster` / CUPS. v2.0 (#201) replaced the `lp` tail with a headless `NSPrintOperation` that replays a captured `PMPrintSettings`/`PMPageFormat` ticket — layer ⑦ is new.
 
 ```
 [Preferences click]
-    show_printer_properties
-        run_on_main_thread
-            run_native_print_panel
-                ① PMSessionSetCurrentPMPrinter          bind queue
+    PrintSessionViewModel.openPrinterPreferences
+        PrintPanelService.showProperties
+            runNativePanel
+                ① PMPrinterCreateFromPrinterID + PMSessionSetCurrentPMPrinter   bind queue
                 ② set_session_color_matching_mode SPI   gray out PDE Color Matching
                 ③ PMPrintSettingsSetValue               AP_ColorMatchingMode + dotted
                 ④ detect_driver_color_bypass → SetValue pre-select Canon/Epson/Gutenprint "off"
                 ⑤ NSPrintInfo.printSettings dictionary  same keys for AppKit PDEs
-                NSPrintPanel.runModalWithPrintInfo
+                ⑤′ ColorSyncSuppressor.applyQuartzMode   PMColorMatchingMode + legacy + nested mirror
+                NSPrintPanel.runModal("Use Settings")
                 user picks media / quality (color locked)
-                ⑥ PMPrintSettingsToOptions → filter → PrintPropertiesResult
+                ⑥ PMPrintSettingsToOptions → filter → Stage 2 mirror
+                ⑦ PMTicketBridge.serialise(printInfo) → PrintTicket          ticket capture
 [frontend]
-    capturedCupsOptions[printer] = cups_options
+    capturedCupsOptions[queue] = mirror   +   capturedTickets[queue] = ticket
 [Print Target]
-    print_target_native → macos::print_target → build_lp_args
-        ALWAYS  -o AP_ColorMatchingMode=AP_ApplicationColorMatching
-        ALWAYS  -o AP.ColorMatchingMode=AP_ApplicationColorMatching
-        THEN    captured cups_options as -o k=v
-        THEN    media_type if not already present (detected key)
-        THEN    detect_driver_color_bypass if no color-bypass key yet
-        THEN    orientation / PageSize if not already present
-        lp -d <queue> -t "ICCery Target - …" … <tiff>
+    PrintSessionViewModel → TargetPrintRequest → NativeTargetSpooler.spool
+        restore ticket → Stage 2 writes → NSPrintOperation.runOperation
+        (S1–S14 below — 1:1, device colour space, panels off)
 ```
 
 Linux uses `-o raw` instead of AP_* flags. macOS **does not** use `-o raw`: a raw queue would skip the raster filter that actually understands `AP_ColorMatchingMode`. The macOS strategy is "tell the filter the application already matched color", not "skip the filter".
@@ -161,7 +158,7 @@ AGENTS.md:118, macos.rs:82-88:
 | `AP_ColorSyncMatching` | **Avoided.** ColorSync applies the printer/display profile. Patches become color-managed. |
 | `AP_VendorColorMatching` | **Avoided.** Epson/Canon driver color engine (ICM inside the PDE). Same corruption. |
 
-ICCery-CPU uses a **different** vocabulary (`APCustomColorMatching` / `APColorSync` / `APPrinterExtension` on `PMColorMatchingMode`). See the CPU section. Do not mix the two dictionaries.
+ICCery-CPU uses a **different** vocabulary (`APCustomColorMatching` / `APColorSync` / `APPrinterExtension` on `PMColorMatchingMode`). See the CPU section. v1 kept the two dictionaries on separate paths (`lp` vs Quartz); v2.0 (#201, D2) has a single native path that writes **both** vocabularies — layer ⑤′ below.
 
 ### Layer ③ — `PMPrintSettingsSetValue` (macos.rs:357-375)
 
@@ -204,6 +201,18 @@ print_settings.insert(<bypass_key>, <bypass_val>)
 
 `NSString` is transmuted to `&AnyObject` for the dictionary (`macos.rs:414-416`).
 
+### Layer ⑤′ — Quartz vocabulary (v2.0, #201 D2)
+
+With `lp` gone there is a single native path, and it carries **both**
+dictionaries. `ColorSyncSuppressor.applyQuartzMode` additionally writes the
+Quartz/`NSPrintOperation` vocabulary (docs/14 §7):
+
+- `PMColorMatchingMode` = `APCustomColorMatching`
+- `PMCustomColorMatchingProfile` = `""`
+- `com.apple.print.PrintSettings.PMColorMatchingMode` (legacy)
+- the same keys inside the nested `com.apple.print.printSettings`
+  sub-dictionary of `printInfo.dictionary()`
+
 ### Panel options (macos.rs:434-449)
 
 ```
@@ -231,9 +240,27 @@ After OK:
 
 Failure of `PMPrintSettingsToOptions` is a hard `Err`.
 
+### Layer ⑦ — ticket serialise/restore (v2.0, #201 D3)
+
+The layer-⑥ flattening is what lost the ticket (#201 root cause 1): it kept
+only a `key=value` string and `CupsOptionsFilter` drops every `com.apple.*`
+key, so `com.apple.print.PrintSettings` never survived. After the layer-⑥
+capture, `PMTicketBridge.serialise(printInfo, queue:)` now snapshots the
+whole ticket:
+
+1. `PMPrintSettingsCreateDataRepresentation(settings, &data, kPMDataFormatXMLDefault)` → `PrintTicket.printSettings`.
+2. `PMPageFormatCreateDataRepresentation` → `PrintTicket.pageFormat`.
+3. Binary-plist snapshot of `NSPrintInfo.dictionary()`, plist-filtered → `PrintTicket.printInfoPlist` — fallback only, never the primary restore path.
+
+`PrintTicket` is in-memory, session-only, keyed by queue. On spool,
+`PMTicketBridge.restore` replays it into the job's `NSPrintInfo`:
+`PM*CreateWithDataRepresentation` → `PMCopy*` → `PMSessionValidate*` →
+`updateFromPM*`. A ticket captured for queue A is never replayed onto
+queue B.
+
 ### `RELEVANT_CUPS_OPTION_KEYS` (macos.rs:142-174)
 
-Forwarded from the panel to `lp`:
+Captured from the panel into the Stage 2 mirror (v1 forwarded them to `lp`):
 
 ```
 Media:      MediaType, CNIJMediaType, EPIJ_Medi, StpMediaType
@@ -255,31 +282,38 @@ Duplex:     Duplex, sides
 - Drops `collate`, `copies`, `pserrorhandler-requested`, `job-sheets`
 - **Keeps unknown non-`com.*` keys** (permissive: unknown driver keys survive)
 
-### `build_lp_args` (macos.rs:518-643)
+### Native spool — S1–S14 (v2.0, #201)
 
-Always, even with `options=None`:
+`NativeTargetSpooler.spool(_:)` (app target, `Sources/ICCery/Print/` — `ICCeryCore` stays AppKit-free, D1). One `TargetPrintRequest` per page, or one per run when `singleJobForAllPages` is on (D5):
 
 ```
-lp -d <printer> -t "ICCery Target - <filename>"
-   -o AP_ColorMatchingMode=AP_ApplicationColorMatching
-   -o AP.ColorMatchingMode=AP_ApplicationColorMatching
-   … captured / detected options …
-   <tiff_path>
+S1  NSPrintInfo()
+S2  printInfo.printer = NSPrinter(name: queue) ?? NSPrinter(name: displayName)   [best effort]
+S3  PMTicketBridge.makePrinter(queue:) → bind(printer:to:)   ① + PMSessionDefault*
+S4  ticket != nil → PMTicketBridge.restore(ticket, into: printInfo)              ⑦′
+S5  TicketWriteResolver.resolve(...) → apply to PMPrintSettings + mirror dict    ③④⑤+D2
+S6  paper override → PMTicketBridge.applyPaper(token:…)
+S7  orientation → printInfo.orientation + orientation-requested
+S8  suppressor.applySPIMode(session)                                             ②
+S9  Cocoa geometry: margins 0, pagination .clip, scaling 1.0, centering off,
+    jobDisposition .spool (or .save + jobSavingURL under the PDF harness)
+S10 TargetRasterLoader.load(each page) → device-tagged CGImage + pointSize
+S11 TargetPageCanvasView(pages:paperSize: printInfo.paperSize)
+S12 NSPrintOperation(view:printInfo:) — panels off, jobTitle set
+S13 operation.runOperation() → false ⇒ throw TargetSpoolError.operationFailed
+S14 PMRelease the printer on every path (defer)
 ```
 
-Order after the two AP_* flags:
-
-1. Parse `opts.cups_options` into `-o k=v`, record lowercased keys in `added_keys`.
-2. If `media_type` set and none of `mediatype` / `cnijmediatype` / `epij_medi` / `stpmediatype` already added: `detect_media_type_key(lpoptions)` and add it.
-3. If no color-bypass key yet (`cnijintent2`, `cnijintent`, `epij_cmat`, `epij_ccor`, `epij_oscolmat`, `colorcorrection`, `stpcolorcorrection`, `epsoncolormode`): `detect_driver_color_bypass` and add. **Not gated on `ppd_uncorrected_passthrough`.**
-4. Orientation → `orientation-requested=4|3` unless already present.
-5. `PageSize=` unless `pagesize` already present.
-
-`ppd_uncorrected_passthrough` is stored from the panel but **does not change macOS lp flags**. There is no `-o raw` on macOS.
-
-### `print_target` (macos.rs:646-677)
-
-Exists-check, `build_lp_args`, `Command::new("lp").args(&args).output()`. Error wrapping same pattern as Unix (`"macOS CUPS print job failed: …"`).
+`TicketWriteResolver` produces the resolved write list as a pure value, in a
+locked order: both `AP_*` keys (locked) → the three Quartz keys (⑤′) →
+`PageSize` → the detected media key → the detected quality key → the driver
+colour bypass → `orientation-requested`. Stage 2 overrides **always win**
+over the rehydrated ticket (D6 — the v1 captured-wins inversion is gone);
+`raw` can never appear because there is no `lp`. Panels stay off
+(`showsPrintPanel` / `showsProgressPanel` false, `canSpawnSeparateThread`
+false); a multi-page job is one `TargetPageCanvasView` driven by
+`knowsPageRange` / `rectForPage`, drawing each page 1:1 top-left anchored
+with interpolation and antialiasing disabled (D9, docs/14 §6).
 
 ### Cancellation as `None`
 
@@ -295,18 +329,25 @@ The rewrite:
 - `display_name` fallback for `NSPrinter::printerWithName`.
 - Private SPI to lock Color Matching.
 - Dual AP_* keys (underscore + dotted).
-- Driver-specific PPD bypass pre-selected and re-applied on `lp`.
-- Capture via `PMPrintSettingsToOptions` into `capturedCupsOptions`.
+- Driver-specific PPD bypass pre-selected in the panel and re-applied on the spool ticket (v1 re-applied it on `lp`).
+- Capture via `PMPrintSettingsToOptions` into `capturedCupsOptions` (Stage 2 mirror) plus the `PrintTicket` serialise (layer ⑦, v2.0).
 
 `PMPrinter` lifetime is explicit `PMRelease` on every path. SPI is `dlsym`'d so missing symbols on old OS X do not prevent launch. Panel **must** be main-thread (`MainThreadMarker::new().ok_or("Print panel must be invoked on the main thread")`).
 
-### macOS tests (macos.rs:712-863 + tests.rs:278-318)
+### macOS tests — historical v1 (macos.rs:712-863 + tests.rs:278-318)
 
 - Filter drops `com.apple.*`, `collate`, `copies`, `AP_ColorMatchingMode`, empty `AP_D_InputSlot`; keeps `MediaType`, `EPIJ_CMat`, `PageSize`, `CNIJIntent2`, `ColorCorrection`.
 - `extract_media_type_from_options` prefers `MediaType` then `EPIJ_Medi`.
-- `build_lp_args` always contains both AP_* flags; captured options win over explicit `media_type` / orientation / auto color-bypass; last arg is the TIFF path.
+- `build_lp_args` always contains both AP_* flags; captured options win over explicit `media_type` / orientation / auto color-bypass; last arg is the TIFF path. (**Historical v1** — the captured-wins behaviour recorded here is #201 root cause 2; v2.0 inverts it: Stage 2 always wins, D6.)
 - `detect_driver_color_bypass` Canon `4`, Epson `3`, Gutenprint `Uncorrected`.
 - Missing TIFF errors.
+
+v2.0 replacements (`TicketWriteResolverTests`, `PrintTicketTests`,
+`TargetRasterTests`, `TargetCanvasGeometryTests`, `NativeSpoolPDFTests`):
+both AP_* keys locked + all three Quartz keys always present; Stage 2
+always wins (D6); `raw` never emitted; ticket serialise/restore
+round-trips bytes; 1:1 geometry and draw flags asserted against a real
+`.save`-to-PDF `NSPrintOperation`.
 
 ---
 
@@ -338,7 +379,12 @@ PMRelease
 
 AppKit: `NSPrintInfo`, `NSPrintPanel`, `NSPrinter::printerWithName`, `NSPrintPanelOptions::all` + `ShowsPageSetupAccessory`.
 
-### CUPS / lp flags
+### CUPS / lp flags — historical v1
+
+> No `lp` invocation exists on the v2.0 target-print path (#201 — `LpArgs`,
+> `CupsService.printTarget` and the `lp` fixture are deleted). This table
+> records the v1 `lp -o` contract for reference only; the live write list is
+> `TicketWriteResolver`'s locked order (§native spool above).
 
 | Flag | Platform | When |
 |------|----------|------|

@@ -29,6 +29,12 @@
 
 ## Locked product decisions
 
+> **Errata (M12, #201):** item 4's `lp` spool was replaced in v2.0 by a
+> headless `NSPrintOperation` replaying the captured `PMPrintSettings`
+> ticket, and the Quartz vocabulary of item 5 is now written **alongside**
+> AP_* on the single native path (D2). "Never mix" no longer applies inside
+> ICCery proper; it still governs the future `ICCeryPrintKit` boundary.
+
 1. **Stack:** SwiftUI (`@Observable`, `@MainActor` view models) + AppKit for printing/panels. No Tauri, no Rust, no WebView.
 2. **Floor:** macOS 14.0, universal `arm64` + `x86_64`.
 3. **AGPL:** never link Argyll. Spawn with piped stdio + `ARGYLL_NOT_INTERACTIVE=1` on **every** child (streaming and captured).
@@ -120,7 +126,7 @@ Issues 1–6.
 **Hardware:** none.  
 Issues 7–11.
 
-### M3 — macOS unmanaged printing (`lp` path)
+### M3 — macOS unmanaged printing (`lp` path) — historical v1, superseded by #201
 
 **CI/mock:** `lpstat`/`lpoptions` parsers; `build_lp_args` golden vectors (both `AP_*` always present); option filter; cancel → nil.  
 **Hardware:** Preferences opens **driver PDE** on a real Epson or Canon queue; colour matching off/grayed; printed TIFF measures unmanaged (no ColorSync transform).  
@@ -376,7 +382,7 @@ Six layers (spec [11](11-print-macos.md) roster):
 - Deps: 12, 13.
 - Test CI: injectable dlsym order; filter fixtures. Hardware: PDE colour grayed/off on Epson **and** Canon.
 
-**Issue 15 — `lp` spool path**  
+**Issue 15 — `lp` spool path — historical v1, superseded by #201 native spool**  
 Labels: `Feature/Backend`, `Priority/High`  
 Milestone: M3
 
@@ -583,7 +589,7 @@ Milestone: **Later**
 
 - Separate Swift package `ICCeryPrintKit`. **Zero** deps on wizard types.
 - Public API: `TargetJob` v1 JSON + `--job` CLI (fire-and-forget) **and** in-process `NSPrintOperation`. Preserve extractability to a standalone app.
-- ColorSync vocabulary is **not** the `lp` path: `PMColorMatchingMode=APCustomColorMatching`, `PMCustomColorMatchingProfile=""`, legacy `com.apple.print.PrintSettings.PMColorMatchingMode`. **Never mix with `AP_ApplicationColorMatching`.**
+- ColorSync vocabulary is **not** the `lp` path: `PMColorMatchingMode=APCustomColorMatching`, `PMCustomColorMatchingProfile=""`, legacy `com.apple.print.PrintSettings.PMColorMatchingMode`. **Never mix with `AP_ApplicationColorMatching`** — amended by #201 (D2): with `lp` gone, ICCery's single native path writes **both** vocabularies; this constraint now governs only the future `ICCeryPrintKit` boundary.
 - Vendor keys (separate table from issue 14): Epson `ColorModel=RGB` + `EPSONColorControls=Off`; Canon `CNColorMatching=None`; HP `ColorModel=RGB` + `HPColorControl=Off`.
 - Geometry: 72pt=1in, no `backingScaleFactor`, interpolation `.none`, antialias off, pixel-integrity seam test. Resolve SPEC contradiction: job JSON `"centered": true` vs draw “no centering” — **lock “no centering, scale 1.0” for profiling targets.**
 - AirPrint detection → persistent warning.

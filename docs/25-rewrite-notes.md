@@ -85,7 +85,7 @@ Lock these before rewriting UI:
 4. `parseProfcheckReport` JSON + legacy + empty→warning
 5. Color bypass detector: Canon/Epson/Gutenprint samples
 6. `filter_cups_options_string` drops `com.apple.*`, keeps `EPIJ_CMat`
-7. `build_lp_args` always emits both AP_* keys
+7. `build_lp_args` always emits both AP_* keys (**historical v1** — superseded by `TicketWriteResolverTests`, #201)
 8. Threshold validation `good < warning`
 9. `snapshot_ti3` 1-based and removes canonical
 10. DEVMODE round-trip size

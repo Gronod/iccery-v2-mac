@@ -53,7 +53,10 @@ First-match order:
 
 `CNIJMediaType` > `EPIJ_Medi` > `StpMediaType` > `MediaType`.
 
-### Linux `build_lp_args` / `print_target` (unix.rs:362-457)
+### Linux `build_lp_args` / `print_target` (unix.rs:362-457) — historical v1
+
+> v0.8.5 Linux spool contract, kept for reference. ICCery v2 is macOS-only
+> and its native path spools via `NSPrintOperation`, not `lp` (#201).
 
 ```
 lp -d <printer> -t "ICCery Target - <filename>"
