@@ -61,7 +61,7 @@ targets:
         INFOPLIST_KEY_LSMinimumSystemVersion: "12.0"
         INFOPLIST_KEY_NSPrincipalClass: NSApplication
         INFOPLIST_KEY_NSHumanReadableCopyright: "Copyright © 2026 Gronod. AGPLv3."
-        MARKETING_VERSION: "2.0.1"
+        MARKETING_VERSION: "2.0.2"
         CURRENT_PROJECT_VERSION: "1"
         # Stamped by scripts/version.sh at packaging/CI time (release tag or
         # `git describe` string); About shows it next to the marketing version.
