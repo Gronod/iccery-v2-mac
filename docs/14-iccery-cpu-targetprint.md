@@ -8,7 +8,7 @@ Separate native macOS AppKit app. Spec: `/tmp/ICCery-CPU/SPEC.md`. Binary name `
 
 ### Why it exists
 
-ICCery's Tauri path spools TIFF via `lp` and never goes through Quartz. That is correct for "don't let ColorSync touch the file", but:
+ICCery's Tauri path spooled TIFF via `lp` and never went through Quartz (v1; v2.0 spools via a headless `NSPrintOperation` in ICCery proper — #201). That is correct for "don't let ColorSync touch the file", but:
 
 - No 1:1 physical-size preview
 - Windows-style `StretchDIBits` scaler (macOS `lp` may still scale inside the filter)
@@ -100,7 +100,7 @@ Injected into:
 - `printInfo.dictionary()["com.apple.print.PrintSettings.PMColorMatchingMode"]` (legacy)
 - nested `com.apple.print.printSettings` dictionary, same keys
 
-**This is not `AP_ApplicationColorMatching`.** TargetPrint talks to Quartz/`NSPrintOperation`. ICCery talks to the CUPS `lp` ticket / `cgpdftoraster`. A rewrite that unifies them must keep both vocabularies or prove one is honored on both paths.
+**This is not `AP_ApplicationColorMatching`.** TargetPrint talks to Quartz/`NSPrintOperation`. v1 ICCery talked to the CUPS `lp` ticket / `cgpdftoraster`; a rewrite that unifies them must keep both vocabularies or prove one is honored on both paths. **v2.0 (#201, D2) resolved this:** the Quartz vocabulary in this section is now live in ICCery proper — `ColorSyncSuppressor.applyQuartzMode` / `TicketWriteResolver` write `PMColorMatchingMode=APCustomColorMatching`, `PMCustomColorMatchingProfile=""`, the legacy `com.apple.print.PrintSettings.PMColorMatchingMode` and the nested `com.apple.print.printSettings` mirror **alongside** the locked AP_* keys on the single native spool path.
 
 Panel policy (`ColorMatching.configurePanel`):
 
@@ -125,7 +125,7 @@ static inline const char *TPCupsGetPPD(const char *name) {
 - AirPrint (SPEC §10.2) if any of: URI `apple-airprint://`; PPD `*APAirPrint: True`; make Apple + model contains AirPrint; `ipps://` **and** PPD text contains `airprint`. Persistent warning badge; unmanaged color cannot be trusted. Tests in `AirPrintTests.swift`.
 - Vendor bypass (SPEC §10.3) — **different keys from ICCery's lpoptions detector:**
 
-| Vendor | TargetPrint keys | ICCery macOS `lp` keys |
+| Vendor | TargetPrint keys | ICCery macOS `lpoptions`-detected keys (v1: `lp -o`) |
 |--------|------------------|------------------------|
 | Epson | `ColorModel=RGB`, `EPSONColorControls=Off` | `EPIJ_CMat=3` / `EPIJ_CCor=0` / `EpsonColorMode=Off` |
 | Canon | `CNColorMatching=None` | `CNIJIntent2=4` / `CNIJIntent=4` |
@@ -176,9 +176,9 @@ Command::new("/Applications/TargetPrint.app/Contents/MacOS/TargetPrint")
 
 CI publishes `vendor-iccery.zip` with `macos-x86_64` / `macos-aarch64` / `macos-universal` app bundles to drop into `src-tauri/targetprint/`.
 
-Suggested ICCery integration:
+Suggested ICCery integration (**superseded** — v2.0 took option 2's rendering model in-process instead; #201 adopted Quartz/`NSPrintOperation` spooling inside ICCery proper and removed `lp` entirely. The `--job` companion-app contract remains the v2.1 plan for `ICCeryPrintKit`, #16):
 
-1. Keep current `lp` path as the headless/fast path (and the only path on Linux).
+1. ~~Keep current `lp` path as the headless/fast path (and the only path on Linux).~~
 2. On macOS, Preferences / Print can spawn TargetPrint with a `TargetJob` built from `PrintOptions` + TIFF list + `forceUnmanagedColor: true` + `lockColorManagement: true`.
 3. Do not `CREATE_NO_WINDOW` (macOS); do not `wait()`. Cleanup of the JSON is ICCery's job after process exit, or leave in `/tmp` as an audit trail (SPEC §13).
 
@@ -186,14 +186,14 @@ Suggested ICCery integration:
 
 | Concern | ICCery `macos.rs` | TargetPrint | Rewrite recommendation |
 |---------|-------------------|-------------|------------------------|
-| Spool | `lp` TIFF | Quartz `NSPrintOperation` | Keep `lp` for unattended; TargetPrint for preview+panel |
-| ColorSync ticket | `AP_ApplicationColorMatching` (+ dotted) | `PMColorMatchingMode=APCustomColorMatching` | Set **both** if using NSPrintOperation; keep AP_* on `lp` |
+| Spool | `lp` TIFF | Quartz `NSPrintOperation` | Quartz `NSPrintOperation` — **adopted in v2.0 via #201** (`NativeTargetSpooler`; `lp` removed from the target-print path) |
+| ColorSync ticket | `AP_ApplicationColorMatching` (+ dotted) | `PMColorMatchingMode=APCustomColorMatching` | Set **both** — **adopted in v2.0 via #201** (D2: the single native path carries AP_* and the Quartz §7 vocabulary) |
 | Lock PDE UI | private `PMSessionSetColorMatchingMode*` SPI | strip Color Matching accessories | Use SPI **and** strip; accessories API misses driver PDEs (the #188 failure mode) |
 | Canon off | `CNIJIntent2=4` | `CNColorMatching=None` | Apply both |
 | Epson off | `EPIJ_CMat=3` / `EPIJ_CCor=0` | `EPSONColorControls=Off` + `ColorModel=RGB` | Apply both; prefer captured panel values |
-| Geometry | none (filter decides) | 1:1 pt from DPI | TargetPrint (or do not scale in GDI/`lp`) |
-| Interpolation | n/a (file passthrough) | explicitly disabled | Required for patch edges |
-| AirPrint | none | detected + warned | Port detector into ICCery printer list |
+| Geometry | none (filter decides) | 1:1 pt from DPI | 1:1 pt from DPI — **adopted in v2.0 via #201** (`TargetRasterLoader`/`TargetPageCanvasView`, docs/14 §6) |
+| Interpolation | n/a (file passthrough) | explicitly disabled | Required for patch edges — **adopted in v2.0 via #201** (interpolation/antialias off in `TargetPageCanvasView.draw`) |
+| AirPrint | none | detected + warned | Ported into ICCery — **adopted in v2.0 via #201/#202** (`lpstat -v` + PPD §10.2 rules, Stage 2 `airPrintWarningBadge`) |
 | Linux | `-o raw` | n/a (macOS only) | Keep raw + PPD fallback |
 | Windows | GDI ICM_OFF | n/a | Keep GDI; do not route through TargetPrint |
 

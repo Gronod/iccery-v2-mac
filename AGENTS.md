@@ -11,8 +11,12 @@ Native macOS printer ICC/ICM profiling frontend. Drives the Gronod ArgyllCMS 3.5
 - No Tauri, no Rust host, no WKWebView, no Three.js.
 
 ## Package layout
-- `ICCery` — app target (SwiftUI shell).
-- `ICCeryCore` — wizard state, ProcessManager, argv builders, settings, CGATS, ΔE₀₀ (no AppKit print panel).
+- `ICCery` — app target (SwiftUI shell). Also owns the native print stack in
+  `Sources/ICCery/Print/`: `PMTicketBridge`, `PrintTicket`,
+  `TicketWriteResolver`, `NativeTargetSpooler` (+ `RecordingTargetSpooler`),
+  `TargetRaster`, `TargetPageCanvasView` (#201 D1 — AppKit/`NSPrintOperation`
+  lives here, never in `ICCeryCore`).
+- `ICCeryCore` — wizard state, ProcessManager, argv builders, settings, CGATS, ΔE₀₀ (no AppKit print panel; CUPS enumeration/parsers only).
 - `ICCeryPrintKit` — v2.1 only (issue 16). Zero deps on wizard types.
 
 ## AGPL boundary
@@ -38,6 +42,17 @@ Artefact gating on disk. No placeholder basenames (#60).
 Empty cwd illegal (#59). Atomic writes = `.tmp` + rename (#213).
 User-supplied strings via SwiftUI `Text` only (#114).
 TIFF never rendered directly — host-side PNG preview (#58).
+
+## Print spool — native since v2.0 (#201); v1 `lp` path eradicated
+Target printing is a headless `NSPrintOperation` via `NativeTargetSpooler`
+(#201): restore the captured `PrintTicket`, apply `TicketWriteResolver`
+(Stage 2 always wins, D6), draw 1:1 with interpolation off.
+`lp` is eradicated from the target-print path (historical v1: `LpArgs`,
+`CupsService.printTarget`, `ICCERY_TEST_LP_ARGV` all deleted).
+`CupsParsers`/`CupsOptionsFilter` stay (D4): enumeration, capabilities,
+media/quality/bypass key detection and the Stage 2 mirror.
+UI-test seam: `ICCERY_TEST_SPOOL_LOG` — DEBUG `RecordingTargetSpooler`
+appends one resolved-ticket line per page (D8).
 
 ## Versioning
 `scripts/version.sh` is the single source: tag/describe → `ICCERY_RELEASE_TAG`
@@ -81,7 +96,12 @@ Universal (`ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO`) is still required for rel
 ## Private ColorSync SPI
 2-arg `(PMPrintSession, CFStringRef) -> OSStatus`. Never pass integer `1`.
 Modes: `AP_ApplicationColorMatching` then `ApplicationColorMatching`.
-`lp` path and Quartz/`ICCeryPrintKit` path use **different** ColorSync dictionaries. Never mix.
+One spool path remains (#201 D2): write **both** vocabularies on the native
+path — locked AP_* (`AP_ColorMatchingMode` + `AP.ColorMatchingMode` =
+`AP_ApplicationColorMatching`) **and** the Quartz dictionary
+(`PMColorMatchingMode=APCustomColorMatching`, `PMCustomColorMatchingProfile=""`,
+legacy `com.apple.print.PrintSettings.PMColorMatchingMode`, nested
+`com.apple.print.printSettings` mirror).
 
 ## Gitea issue dependencies
 Use the `gitea` MCP (custom build with blocking support — verified working):
