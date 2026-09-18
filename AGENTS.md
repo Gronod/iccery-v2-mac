@@ -93,6 +93,53 @@ codesign -dvv <sidecar>
 ```
 Universal (`ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO`) is still required for release verification / packaging.
 
+## Remote test builds (runner host)
+Test builds done as part of change implementations run on the CI runner
+host, not the dev machine — the runner is a macOS 12.7.6 **x86_64** VM
+with Xcode 14.2, and CI failures there are often environmental and do not
+reproduce locally.
+
+- Host: `localadmin@192.168.0.172` (SSH, LAN). Runner daemon:
+  `gitea-runner daemon -c /opt/gitea-runner/config.yaml`.
+- Credentials: `~/Projects/build-host.env` defines `BUILD_HOST_USER` /
+  `BUILD_HOST_PASSWORD`. **Never read or print this file** — load it with
+  `set -a; source ~/Projects/build-host.env; set +a` so values stay in the
+  environment.
+- `sshpass` is installed (`/usr/local/bin/sshpass`). Feed the password via
+  the `SSHPASS` env var — never on the command line:
+  ```sh
+  SSHPASS="$BUILD_HOST_PASSWORD" sshpass -e ssh localadmin@192.168.0.172 '<cmd>'
+  SSHPASS="$BUILD_HOST_PASSWORD" sshpass -e scp <local> localadmin@192.168.0.172:<remote>
+  ```
+  First connection needs `-o StrictHostKeyChecking=accept-new`.
+- Remote checkout: `~/Projects/iccery-v2-mac` (anonymous HTTPS clone works;
+  full history needed by `scripts/version.sh`). Before testing, sync it to
+  the same base commit as the local work:
+  `git fetch origin && git checkout <local base sha>`, then `scp` each
+  locally-changed file over its remote counterpart (uncommitted work
+  transfers this way — there is no push).
+- `xcodegen` is **not** on PATH: prepend
+  `$HOME/.local/xcodegen/2.38.0/xcodegen/bin` (prebuilt 2.38.0 installed
+  by `scripts/ensure-host-tools.sh`; brew's formula needs Xcode 15.3,
+  impossible on macOS 12 — #109).
+- Mirror `.gitea/workflows/macos.yml` exactly, from the repo root with
+  `DERIVED=build/DerivedData-test`:
+  `scripts/ensure-host-tools.sh` → `xcodegen generate --spec project.yml`
+  → `eval "$(scripts/version.sh)"` → `xcodebuild build-for-testing
+  -scheme ICCery -destination 'platform=macOS' -derivedDataPath "$DERIVED"
+  -configuration Debug ARCHS="$(uname -m)" ONLY_ACTIVE_ARCH=NO
+  CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY='-' MARKETING_VERSION=…
+  CURRENT_PROJECT_VERSION=… ICCERY_RELEASE_TAG=…` → codesign every
+  `*_PackageProduct.framework` under `$DERIVED/Build/Products/Debug`
+  (#119) → `xcodebuild test-without-building -xctestrun <ICCery*.xctestrun>
+  -only-testing:ICCeryCoreTests -destination 'platform=macOS'
+  -derivedDataPath "$DERIVED"`.
+- Run **unit tests only** (`ICCeryCoreTests`). UI tests need a logged-in
+  GUI session and fail environmentally on the VM (runs 29700, 29804,
+  42183) — do not use them for verification unless asked.
+- xcodebuild takes minutes — run the ssh command in a background shell
+  and poll rather than blocking.
+
 ## Private ColorSync SPI
 2-arg `(PMPrintSession, CFStringRef) -> OSStatus`. Never pass integer `1`.
 Modes: `AP_ApplicationColorMatching` then `ApplicationColorMatching`.
