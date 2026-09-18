@@ -16,7 +16,7 @@ as AGPLv3 child processes. The GUI never `dlopen`s or links Argyll.
 |---|---|
 | Product | ICCery v2 for macOS |
 | Bundle | `com.gronod.iccery2` |
-| Version | 2.0.0 |
+| Version | 2.0.3 |
 | Floor | macOS 12.0 Monterey, universal `arm64` + `x86_64` |
 | Toolchain | Xcode 14.2 / Swift 5.7 (project `SWIFT_VERSION` is 5.0) |
 | CI | Gitea Actions `macos-12` runner |

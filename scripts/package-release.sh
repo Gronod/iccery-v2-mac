@@ -150,7 +150,7 @@ if [ ! -f "$DMG_BACKGROUND" ]; then
 fi
 
 echo "==> Building DMG"
-VERSION="$(plutil -extract CFBundleShortVersionString raw "$APP/Contents/Info.plist" 2>/dev/null || printf '2.0.0')"
+VERSION="$(plutil -extract CFBundleShortVersionString raw "$APP/Contents/Info.plist" 2>/dev/null || printf '2.0.3')"
 BUILD_NUM="$(plutil -extract CFBundleVersion raw "$APP/Contents/Info.plist" 2>/dev/null || printf '1')"
 # Tagged/described builds carry the tag in the DMG name so prerelease
 # artefacts are self-describing (ICCery-2.0.0-pre2-grok-236.dmg); a plain
