@@ -114,18 +114,18 @@ final class Milestone3UITests: XCTestCase {
         return recordedSpoolLog()
     }
 
-    /// Drags `#galleryPage-0`'s TIFF upward so `identifier`'s button
-    /// moves up, clear of the Dock collision zone at the window's
-    /// bottom edge (#132).
+    /// Scrolls `stage-2` with the synthesized scroll wheel so
+    /// `identifier`'s button moves up, clear of the Dock collision
+    /// zone at the window's bottom edge (#132).
     ///
     /// macOS overlay scrollbars are not in the AX tree — never use
-    /// `app.scrollBars` — and a synthesized scroll wheel is inert on
-    /// this LazyVGrid, so the scroll is a real drag on the gallery
-    /// cell's content. A stale/off-screen AX frame resolves to a screen
-    /// point that can be a Dock icon — a coordinate click there once
-    /// opened Calendar instead of Print. Callers must click only when
-    /// the returned element `isHittable`; never coordinate-click a
-    /// stale frame.
+    /// `app.scrollBars` — and a click-drag does not scroll a macOS
+    /// ScrollView (content-drag scrolling is iOS-only); the scroll
+    /// wheel is the mechanism the platform supports (#215). A
+    /// stale/off-screen AX frame resolves to a screen point that can
+    /// be a Dock icon — a coordinate click there once opened Calendar
+    /// instead of Print. Callers must click only when the returned
+    /// element `isHittable`; never coordinate-click a stale frame.
     @discardableResult
     private func scrollStage2UntilHittable(
         _ identifier: String,
@@ -134,6 +134,8 @@ final class Milestone3UITests: XCTestCase {
         var button = app.buttons[identifier]
         let cell = app.descendants(matching: .any)["galleryPage-0"].firstMatch
         XCTAssertTrue(cell.waitForExistence(timeout: 10), "galleryPage-0")
+        let scrollView = app.scrollViews["stage-2"]
+        XCTAssertTrue(scrollView.waitForExistence(timeout: 10), "stage-2")
 
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
@@ -142,25 +144,12 @@ final class Milestone3UITests: XCTestCase {
                button.frame.maxY < windowBottom - 80 {
                 return button
             }
-            // Grab the upper half of the cell (the TIFF, not the Print
-            // button / Dock) and drag toward the top of the window.
-            // Mouse moves UP ⇒ gallery content moves UP ⇒ Print leaves
-            // the Dock zone.
-            if cell.isHittable {
-                let start = cell.coordinate(withNormalizedOffset:
-                    CGVector(dx: 0.5, dy: 0.25))
-                let end = start.withOffset(CGVector(dx: 0, dy: -280))
-                start.press(forDuration: 0.15, thenDragTo: end)
-            } else {
-                // Cell not hit-testable: drag the stage-2 content
-                // directly — still content, still never scrollBars.
-                let scrollView = app.scrollViews["stage-2"]
-                scrollView.coordinate(withNormalizedOffset:
-                    CGVector(dx: 0.5, dy: 0.55))
-                    .press(forDuration: 0.15, thenDragTo:
-                        scrollView.coordinate(withNormalizedOffset:
-                            CGVector(dx: 0.5, dy: 0.15)))
-            }
+            // Wheel-down inside the stage-2 viewport: content moves
+            // UP ⇒ Print leaves the Dock zone. Negative deltaY scrolls
+            // toward the document bottom (#215).
+            scrollView.coordinate(withNormalizedOffset:
+                CGVector(dx: 0.5, dy: 0.5))
+                .scroll(byDeltaX: 0, deltaY: -60)
             RunLoop.current.run(until: Date().addingTimeInterval(0.4))
             button = app.buttons[identifier]
         }
